@@ -140,18 +140,18 @@ Entire repository is **GPLv3** (see repo-root `COPYING`). Rationale: the ECDSA P
 
 Contracts deploy to **Ethereum Sepolia** (chainId 11155111). Arbitrum Sepolia is a secondary target for Phase 1.1+. Admin multisig = single EOA (`ADMIN_ADDRESS` from .env) for the demo; moved to a multisig before any production use.
 
-### 4.0 Circuit artifact hosting (uploadthing)
+### 4.0 Circuit artifact hosting (Cloudflare R2)
 
-`.wasm` and `.zkey` artifacts are too large for git (zkey for a 3–5M-constraint circuit is typically 50–200 MB). They are hosted on **uploadthing** (free tier, 2 GB cap, covers Phase 1 comfortably).
+`.wasm` and `.zkey` artifacts are too large for git (ECDSA-leaf zkey is ~4–5 GB on a 7.6M-constraint circuit). They are hosted on **Cloudflare R2** (free tier: 10 GB storage, **0 egress**, covers Phase 1 comfortably).
 
-- Upload credentials live in repo-root `.env` (NEVER committed; `.env.example` is committed). Keys are provided to circuits-eng out-of-band by the team lead.
-- circuits-eng runs `ceremony/scripts/upload.sh` after `export.sh` finalizes the per-variant `.zkey` + `.wasm`. The script uses the uploadthing v6 HTTP API (`POST /v7/uploadFiles`) with `UPLOADTHING_SECRET`, receives back public CDN URLs, and writes them to `packages/circuits/build/<variant>/urls.json`.
+- R2 credentials live in repo-root `.env` (NEVER committed; `.env.example` is committed). Keys are provided to circuits-eng out-of-band by the team lead.
+- circuits-eng runs `ceremony/scripts/upload.sh` after `export.sh` finalizes the per-variant `.zkey` + `.wasm`. The script uses the aws-cli-compatible S3 API against R2 (`aws s3 cp --endpoint-url $R2_ENDPOINT ...`), then composes public URLs from `$R2_PUBLIC_BASE_URL` (custom domain bound to the bucket) and writes them to `packages/circuits/build/<variant>/urls.json`.
 - urls.json schema:
   ```json
   {
     "variant": "rsa" | "ecdsa",
-    "wasmUrl": "https://utfs.io/f/<fileKey>",
-    "zkeyUrl": "https://utfs.io/f/<fileKey>",
+    "wasmUrl": "https://prover.identityescrow.org/<key>.wasm",
+    "zkeyUrl": "https://prover.identityescrow.org/<key>.zkey",
     "wasmSha256": "0x...",
     "zkeySha256": "0x...",
     "uploadedAt": "2026-04-17T...Z"
@@ -160,6 +160,7 @@ Contracts deploy to **Ethereum Sepolia** (chainId 11155111). Arbitrum Sepolia is
 - `urls.json` IS committed — URLs and hashes are public and auditable. Consumers (web + CI nightly e2e) read it at build time.
 - web-eng fetches both files at runtime via standard `fetch()` against the URLs in `urls.json`. Integrity check: local SHA-256 must equal `wasmSha256` / `zkeySha256` before handoff to snarkjs. Mismatch → ProverError('prover.artifactMismatch').
 - Re-uploading after a new ceremony is idempotent from the user's perspective: new URLs + hashes commit to `urls.json`, SPA picks them up on next build.
+- Production consideration: for a 4 GB zkey, browser-side proving is slow + memory-heavy. If UX demands it, introduce a `/api/prove` endpoint that keeps the zkey server-side (on the Fly web machine's volume) and streams only the proof back — in that mode R2 hosts only the `.wasm`.
 
 ### 4.1 Binding B encoding locks (post-dispatch decisions)
 

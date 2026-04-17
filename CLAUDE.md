@@ -70,7 +70,7 @@ Cross-package outputs don't flow automatically — lead moves them between workt
 - `trusted-cas.json` / `qie-agents.json`: flattener worktree → web + qie worktrees.
 - Arbitrator ABIs + bytecode: contracts worktree → qie + web worktrees.
 - Sepolia deployment addresses: contracts (after live deploy) → web + qie worktrees.
-- Uploadthing URLs: circuits (after ceremony) → web worktree.
+- R2 prover URLs: circuits (after ceremony) → web worktree.
 
 Standard pump:
 
@@ -97,7 +97,7 @@ Merge commits use `--no-ff` with a summary. Tag releases at phase boundaries (`v
 ## Secrets hygiene
 
 **Never commit:**
-- `.env` (gitignored; root has admin key + uploadthing secrets).
+- `.env` (gitignored; root has admin key + R2 secrets).
 - `.p7s` files (globally gitignored; detached CAdES signatures carry a natural person's legal identity).
 - Generated agent secret-keys (`fixtures/qie/agents/agent-*.keys.json` — only `.keys.pub.json` is committed).
 
@@ -111,7 +111,7 @@ Secrets that ARE safe to include in orchestration messages to workers:
 
 Secrets that are NEVER messaged to workers:
 - Private keys of any kind.
-- Uploadthing secret token (use the public upload-URL output instead).
+- R2 secret access key (use the public URL output instead).
 - `.p7s` contents or paths on machines workers can't reach anyway.
 
 ## CI / verification
