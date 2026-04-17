@@ -602,6 +602,8 @@ holder re-registration flow and the relying-party dual-lookup pattern.
 |---|---|
 | `src/QKBVerifier.sol`                  | 14-signal layout, new Inputs fields. |
 | `src/QKBRegistry.sol`                  | Dual verifier dispatch, nullifier, escrow surface. |
+| `src/verifiers/QKBGroth16VerifierStubEcdsa.sol` | Pumped 14-signal ECDSA stub verifier (circuits e576b08). |
+| `src/verifiers/QKBGroth16VerifierStubRsa.sol`   | Pumped 14-signal RSA stub verifier (circuits e576b08). |
 | `src/arbitrators/IArbitrator.sol`      | Frozen `Unlock` event. |
 | `src/arbitrators/AuthorityArbitrator.sol` | ecrecover unlock. |
 | `src/arbitrators/TimelockArbitrator.sol`  | dead-man switch unlock. |
@@ -614,16 +616,26 @@ holder re-registration flow and the relying-party dual-lookup pattern.
 | `test/TimelockArbitrator.t.sol`        | 9 tests. |
 | `test/QKBRegistry.nullifier.t.sol`     | 9 tests. |
 | `test/QKBRegistry.escrow.t.sol`        | 13 tests. |
+| `test/QKBGroth16VerifierStub.integration.t.sol` | 10 tests — real-verifier round-trip + cross-variant rejection. |
+| `test/fixtures/integration/{ecdsa,rsa}/{proof,public}.json` | Stub proof fixtures pumped from circuits. |
 
 ### 13.10 Open pre-main-merge gates
 
-- **S0.5 — real RSA + ECDSA proof integration.** Blocked on circuits-eng
-  pumping `QKBGroth16VerifierStubEcdsa.sol` + `QKBGroth16VerifierStubRsa.sol`
-  with a public-signal count that matches this package's
-  `IGroth16Verifier.verifyProof(… uint256[14] …)` ABI. Current stub
-  Sprint 0 file on the circuits worktree exposes `uint[15]` (an extra
-  `stubCommit` output signal). Flagged back to coordinator.
+- **S0.5 — real RSA + ECDSA proof integration.** DONE. Stubs pumped
+  from circuits-eng commit `e576b08`
+  (`src/verifiers/QKBGroth16VerifierStub{Ecdsa,Rsa}.sol`, both
+  `verifyProof(…, uint[14])`, `stubCommit` output removed). Fixtures
+  under `test/fixtures/integration/{ecdsa,rsa}/{proof,public}.json`.
+  `test/QKBGroth16VerifierStub.integration.t.sol` asserts
+  accept-pumped-proof, reject-tampered-proof, reject-tampered-public-
+  signals, IGroth16Verifier-interface round-trip, and cross-variant
+  rejection (ECDSA proof rejected by RSA verifier + symmetric case) for
+  both variants.
 - **Real (non-stub) verifiers.** Arrive post-ceremony (circuits Tasks
-  6–7). Lead pumps into `src/verifier/`; `setRsaVerifier` + `setEcdsaVerifier`
-  rotate live without touching the registry proxy.
-- **Sepolia v2 deploy.** Awaits all of the above + lead sign-off.
+  6–7). Lead pumps into `src/verifiers/`; `setRsaVerifier` +
+  `setEcdsaVerifier` rotate live without touching the registry storage.
+  Once real verifiers land, the registry-level integration test (real
+  ceremony proof submitted through `register()` with canonical declHash
+  + LOTL root) can be written on top of the same fixture-loading
+  scaffolding in `QKBGroth16VerifierStub.integration.t.sol`.
+- **Sepolia v2 deploy.** Awaits real verifiers + lead sign-off.
