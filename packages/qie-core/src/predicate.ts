@@ -1,6 +1,7 @@
 import { keccak_256 } from "@noble/hashes/sha3";
 import type { Evidence, EscrowConfig, PredicateResult } from "./types.js";
 import { computeEscrowId } from "./config.js";
+import { buildUnlockMessage } from "./messages.js";
 
 const UNLOCK_TOPIC = "0x" + Array.from(keccak_256(new TextEncoder().encode("Unlock(bytes32,bytes)")))
   .map(x => x.toString(16).padStart(2, "0")).join("");
@@ -35,8 +36,8 @@ export async function evaluatePredicate(
     }
     return { ok: true };
   }
-  // C-path
-  const msg = new TextEncoder().encode(escrowId + "|unlock|");
+  // C-path: bind to recipient_hybrid_pk via canonical unlock message
+  const msg = buildUnlockMessage(escrowId, cfg.recipient_hybrid_pk);
   const ok = await opts.qesVerify(evidence.countersig.p7s, evidence.countersig.cert, msg);
   if (!ok) return { ok: false, code: "EVIDENCE_SIG_INVALID", message: "QES verify failed" };
   return { ok: true };
