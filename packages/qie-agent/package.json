@@ -5,15 +5,15 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "bin": { "qie-agent": "dist/cli.js" },
+  "bin": { "qie-agent": "dist/bin/qie-agent.js" },
   "exports": {
     ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "start": "node dist/cli.js"
+    "start": "node dist/bin/qie-agent.js"
   },
   "dependencies": {
     "@qkb/qie-core": "workspace:*",
