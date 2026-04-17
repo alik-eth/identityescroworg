@@ -1,8 +1,11 @@
-export interface FlattenedCA {
+export interface ExtractedCA {
   certDer: Uint8Array;
   issuerDN: string;
   validFrom: number;
   validTo: number;
+}
+
+export interface FlattenedCA extends ExtractedCA {
   poseidonHash: bigint;
 }
 
