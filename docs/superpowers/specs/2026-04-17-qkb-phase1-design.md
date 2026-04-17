@@ -32,7 +32,7 @@ The user flow Phase 1 must deliver:
 | Decision | Value |
 |---|---|
 | Container format | CAdES (detached CMS, `.p7s`) |
-| QES signature algorithm | RSA-PKCS#1 v1.5, 2048-bit |
+| QES signature algorithms | RSA-PKCS#1 v1.5 2048 **+** ECDSA P-256 (two circuit variants; see orchestration §2.0) |
 | Bound key scheme | secp256k1 |
 | Trust anchoring | Full chain in-circuit (2× RSA verify, leaf + intermediate) |
 | Trusted list | EU LOTL, flattened to a Merkle set of eligible CA certs |

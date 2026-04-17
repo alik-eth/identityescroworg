@@ -95,8 +95,21 @@ Written to `packages/lotl-flattener/dist/output/`:
 [9]     rTL         (Poseidon Merkle root from root.json)
 [10]    declHash    (SHA-256 of declaration text, either EN or UK)
 [11]    timestamp   (unix seconds, unsigned)
-[12]    reserved    (= 0 in Phase 1; tag for future scheme extension)
+[12]    algorithmTag (QES signature algorithm — 0 = RSA_PKCS1V15_2048, 1 = ECDSA_P256; hard-coded per circuit variant)
 ```
+
+### 2.0 Dual QES algorithms (Phase 1)
+
+Phase 1 supports TWO QES signature algorithms, compiled as separate circuit variants:
+
+- **`QKBPresentationRsa.circom`** — QES is RSA-PKCS#1 v1.5 2048-bit. `algorithmTag = 0`. Covers majority of legacy EU QTSP certificates.
+- **`QKBPresentationEcdsa.circom`** — QES is ECDSA over NIST P-256. `algorithmTag = 1`. Required for Ukrainian Diia QES and modern EU ID cards. DSTU-4145 (Ukraine national curve) is NOT in scope for Phase 1 — explicitly deferred.
+
+Each variant produces its own `.zkey` + `Verifier.sol` + `.wasm`. Public-signal layout is identical across both.
+
+**Contracts:** `QKBRegistry` holds two `IGroth16Verifier` addresses (`rsaVerifier`, `ecdsaVerifier`). `register()` reads `i.algorithmTag` (bit 12 of the public input array) and dispatches to the matching verifier. Both verifier addresses are admin-settable.
+
+**Web:** on CAdES parse, detect leaf-cert signature algorithm OID; pick the matching `.wasm`/`.zkey` pair. Off-circuit QES verification via `pkijs` handles both natively.
 
 ### 3. Solidity `QKBVerifier.Inputs` layout
 
