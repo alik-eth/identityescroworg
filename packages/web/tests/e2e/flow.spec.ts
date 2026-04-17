@@ -203,3 +203,45 @@ test('upload — parse → verify (stubbed) → mock-prove → /register handoff
   await page.getByTestId('upload-next').click();
   await expect(page).toHaveURL(/\/register$/);
 });
+
+test('register — missing-bundle fallback when session has no proof', async ({ page }) => {
+  await page.goto('/register');
+  await expect(page.getByTestId('register-missing')).toBeVisible();
+});
+
+test('register — connect wallet + submit register() via mocked EIP-1193', async ({ page }) => {
+  // Seed session with a mock proof/publicSignals so /register renders the
+  // connect/submit surface, then inject a stub EIP-1193 provider + submit
+  // callback so the assertion chain doesn't depend on a real chain.
+  const mockAddress = '0x00000000000000000000000000000000000000aa';
+  const mockTx = '0xdeadbeef'.padEnd(66, '0');
+  await page.addInitScript(
+    ({ addr, tx }) => {
+      sessionStorage.setItem(
+        'qkb.session.v1',
+        JSON.stringify({
+          proof: { pi_a: ['0x1'], pi_b: [['0x2']], pi_c: ['0x3'] },
+          publicSignals: ['1', '2', '3'],
+        }),
+      );
+      (window as unknown as { __QKB_ETHEREUM__: unknown }).__QKB_ETHEREUM__ = {
+        request: async (args: { method: string }) => {
+          if (args.method === 'eth_requestAccounts') return [addr];
+          if (args.method === 'eth_sendTransaction') return tx;
+          return null;
+        },
+      };
+      (window as unknown as { __QKB_SUBMIT_TX__: unknown }).__QKB_SUBMIT_TX__ =
+        async (input: { from: string }) => ({ txHash: tx, pkAddr: input.from });
+    },
+    { addr: mockAddress, tx: mockTx },
+  );
+
+  await page.goto('/register');
+  await page.getByTestId('connect-wallet').click();
+  await expect(page.getByTestId('wallet-address')).toHaveText(mockAddress);
+  await page.getByTestId('submit-register').click();
+  await expect(page.getByTestId('register-success')).toBeVisible();
+  await expect(page.getByTestId('tx-hash')).toHaveText(mockTx);
+  await expect(page.getByTestId('pk-addr')).toHaveText(mockAddress);
+});
