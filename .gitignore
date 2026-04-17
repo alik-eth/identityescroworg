@@ -59,3 +59,8 @@ pnpm-lock.yaml
 # (no PII) may be committed under fixtures/qes/.
 *.p7s
 fixtures/qes/*.p7s
+
+# QIE mock-agent secret keys. Only the .keys.pub.json variants are
+# committed; the sk-bearing .keys.json files stay local.
+fixtures/qie/agents/*.keys.json
+!fixtures/qie/agents/*.keys.pub.json
