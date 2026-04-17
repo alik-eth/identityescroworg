@@ -39,3 +39,7 @@ pnpm-lock.yaml
 .env
 .env.local
 !.env.example
+
+# Signed QES objects — tied to a real natural person's legal identity, never commit
+*.p7s
+fixtures/qes/*.p7s
