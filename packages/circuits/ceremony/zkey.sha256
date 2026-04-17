@@ -1,0 +1,4 @@
+015e61e0737eaa4d5e5de1db5c2cc86c9dcca8504a9a3b480f7d67a2bf9358fe  /data/qkb.zkey
+e1186b92cb5fd4711a893862ea36509bf0673d737be9bd89f0bc46cae67430f9  /data/verification_key.json
+06c67c51856a96dbb5e378da7baef3c7f0e67e15c5c022d0493ad88c2771e7e8  /data/QKBGroth16Verifier.sol
+5c612d624f9114fb5187a20a5ab848af50c9e639b67d32d76ff14edafcb66c4b  /data/circuit.r1cs
