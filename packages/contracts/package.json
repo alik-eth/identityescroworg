@@ -1,0 +1,15 @@
+{
+  "name": "@qkb/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "description": "QKB Phase 1 Solidity contracts (verifier library + registry).",
+  "scripts": {
+    "build": "forge build --root ../..",
+    "test": "forge test --root ../..",
+    "test:ci": "FOUNDRY_PROFILE=ci forge test --root ../..",
+    "snapshot": "forge snapshot --root ../.. --snap packages/contracts/snapshots/gas-snapshot.txt",
+    "snapshot:check": "forge snapshot --root ../.. --check --snap packages/contracts/snapshots/gas-snapshot.txt",
+    "fmt": "forge fmt --root ../..",
+    "fmt:check": "forge fmt --root ../.. --check"
+  }
+}
