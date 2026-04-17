@@ -4,9 +4,14 @@ pragma solidity 0.8.24;
 import { QKBVerifier, IGroth16Verifier } from "./QKBVerifier.sol";
 
 /// @notice Reference register-then-authenticate registry for QKB-bound
-///         secp256k1 keys. State + admin only at this stage; register/expire/
-///         isActiveAt arrive in Tasks 6–9.
+///         secp256k1 keys. Bindings are created via `register` (proof-gated)
+///         and torn down via `expire` (signed by the bound key).
 contract QKBRegistry {
+    /// @dev Domain string for the `expire` signature digest. Must stay in
+    ///      lock-step with `test/helpers/SignatureHelpers.sol::EXPIRE_DOMAIN`.
+    string private constant EXPIRE_DOMAIN = "QKB_EXPIRE_V1";
+
+
     enum Status {
         NONE,
         ACTIVE,
@@ -78,6 +83,36 @@ contract QKBRegistry {
             declHash: i.declHash
         });
         emit BindingRegistered(pkAddr, i.ctxHash, i.declHash);
+    }
+
+    /// @notice Tear down a binding. `sig` must be a secp256k1 signature by
+    ///         the bound key over `keccak256(abi.encode(EXPIRE_DOMAIN,
+    ///         pkAddr, block.chainid, boundAt))`. Already-expired and never-
+    ///         bound entries both revert with `NotBound`.
+    function expire(address pkAddr, bytes calldata sig) external {
+        Binding storage b = bindings[pkAddr];
+        if (b.status != Status.ACTIVE) revert NotBound();
+
+        bytes32 digest = keccak256(abi.encode(EXPIRE_DOMAIN, pkAddr, block.chainid, b.boundAt));
+        address recovered = _recover(digest, sig);
+        if (recovered != pkAddr) revert BadExpireSig();
+
+        b.status = Status.EXPIRED;
+        b.expiredAt = uint64(block.timestamp);
+        emit BindingExpired(pkAddr);
+    }
+
+    function _recover(bytes32 digest, bytes calldata sig) private pure returns (address) {
+        if (sig.length != 65) return address(0);
+        bytes32 r;
+        bytes32 s;
+        uint8 v;
+        assembly {
+            r := calldataload(sig.offset)
+            s := calldataload(add(sig.offset, 0x20))
+            v := byte(0, calldataload(add(sig.offset, 0x40)))
+        }
+        return ecrecover(digest, v, r, s);
     }
 
     function updateTrustedListRoot(bytes32 newRoot) external onlyAdmin {
