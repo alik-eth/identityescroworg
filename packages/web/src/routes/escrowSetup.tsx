@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useEscrowSetup } from '../features/qie/use-escrow-setup';
 
 /**
  * QIE `/escrow/setup` — 4-step wizard to split Phase 1 recovery material
@@ -20,6 +21,7 @@ export function EscrowSetupScreen() {
   const [threshold, setThreshold] = useState(2);
   const [recipientPk, setRecipientPk] = useState('');
   const [expiryDays, setExpiryDays] = useState(365);
+  const { state: setupState, submit } = useEscrowSetup();
 
   return (
     <section className="space-y-8">
@@ -143,10 +145,32 @@ export function EscrowSetupScreen() {
             >
               {t('escrow.setup.back')}
             </button>
-            <button className="bg-emerald-500/10 border border-emerald-500/30 px-4 py-2 rounded">
-              {t('escrow.setup.submit')}
+            <button
+              disabled={setupState.phase === 'submitting'}
+              onClick={() =>
+                submit({
+                  escrowId: '0x00' as `0x${string}`,
+                  agents: [],
+                  bodiesByAgentId: {},
+                })
+              }
+              className="bg-emerald-500/10 border border-emerald-500/30 px-4 py-2 rounded disabled:opacity-50"
+            >
+              {setupState.phase === 'submitting'
+                ? t('escrow.setup.submitting')
+                : t('escrow.setup.submit')}
             </button>
           </div>
+          {setupState.phase === 'done' && (
+            <p className="text-emerald-300 text-sm" data-testid="submit-status">
+              {t('escrow.setup.submitted')}
+            </p>
+          )}
+          {setupState.phase === 'error' && (
+            <p className="text-red-400 text-sm" data-testid="submit-error">
+              {setupState.error}
+            </p>
+          )}
         </div>
       )}
     </section>
