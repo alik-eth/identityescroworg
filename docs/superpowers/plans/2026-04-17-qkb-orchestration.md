@@ -119,6 +119,19 @@ Produced by web, verifiable offline by anyone:
 }
 ```
 
+### 4.1 Binding B encoding locks (post-dispatch decisions)
+
+Decided 2026-04-17 after web Task 3 to keep circuit cost low:
+
+- **pk**: uncompressed SEC1, 65 bytes, `0x04 || x(32) || y(32)`, serialized in JCS as `"pk":"0x04…"`. Circuit extracts x = bytes 1..33, y = bytes 33..65 by direct slice. No in-circuit curve point math, no y-recovery.
+- **context**: ALWAYS present in B. When caller supplies no context, the field is serialized as `"context":"0x"` (empty hex). Circuit always scans for `"context":"` literal. `ctxHash = Poseidon(ctxBytes)`; for empty bytes this is a fixed canonical constant that web and circuit compute identically.
+- **nonce**: exactly 32 random bytes, serialized as `"nonce":"0x<64-hex>"`.
+- **timestamp**: Unix seconds as JSON number (not string).
+- **scheme**: string literal `"secp256k1"`.
+- **escrow_commitment**: JSON `null` in Phase 1 (Phase 2 hook).
+- **declaration**: the exact bytes of `fixtures/declarations/en.txt` OR `fixtures/declarations/uk.txt` with LF line endings and no trailing newline, embedded in JCS as a JSON string. JCS escapes non-ASCII with `\uXXXX` — the circuit's declHash is computed over the **original UTF-8 bytes** (pre-JCS-escape), which is what `fixtures/declarations/digests.json` records. Web computes `declHash = SHA256(ReadRawFile)`, not `SHA256(JcsValue)`.
+- **Field order in JCS**: after JCS sort, keys appear alphabetically. Logical ordering is irrelevant; on-wire ordering is alphabetical. Workers must NOT rely on any particular logical order; they must scan for key literals.
+
 ### 5. Error codes (shared taxonomy)
 
 Web enforces, contracts mirror where relevant:
