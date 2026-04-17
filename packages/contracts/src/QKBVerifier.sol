@@ -27,14 +27,14 @@ library QKBVerifier {
         uint256[2] c;
     }
 
-    /// @dev Public-signal layout (orchestration §2.2):
+    /// @dev Public-signal layout (orchestration §2.2 + §2.0):
     ///   [0..3]   pkX limbs (uint64, little-endian: limb[0] = lowest order)
     ///   [4..7]   pkY limbs
     ///   [8]      ctxHash
     ///   [9]      rTL
     ///   [10]     declHash
     ///   [11]     timestamp
-    ///   [12]     reserved (== 0)
+    ///   [12]     algorithmTag (0 = RSA-PKCS#1 v1.5 2048, 1 = ECDSA P-256)
     struct Inputs {
         uint256[4] pkX;
         uint256[4] pkY;
@@ -42,6 +42,7 @@ library QKBVerifier {
         bytes32 rTL;
         bytes32 declHash;
         uint64 timestamp;
+        uint8 algorithmTag;
     }
 
     /// @notice Returns true iff the proof verifies AND `declHash` is one of the
@@ -63,7 +64,7 @@ library QKBVerifier {
         arr[9] = uint256(i.rTL);
         arr[10] = uint256(i.declHash);
         arr[11] = uint256(i.timestamp);
-        arr[12] = 0; // reserved
+        arr[12] = uint256(i.algorithmTag);
         return v.verifyProof(p.a, p.b, p.c, arr);
     }
 

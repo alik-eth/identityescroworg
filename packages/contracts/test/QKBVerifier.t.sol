@@ -36,6 +36,7 @@ contract QKBVerifierTest is Test {
         i.rTL = bytes32(uint256(0xB2));
         i.declHash = DeclarationHashes.EN;
         i.timestamp = 1_700_000_000;
+        i.algorithmTag = 0;
     }
 
     function test_verify_packsInputsAndReturnsTrue() public {

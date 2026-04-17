@@ -8,7 +8,8 @@ import { StubGroth16Verifier } from "../src/verifier/StubGroth16Verifier.sol";
 
 contract QKBRegistryAdminTest is Test {
     QKBRegistry internal registry;
-    StubGroth16Verifier internal stub;
+    StubGroth16Verifier internal rsa;
+    StubGroth16Verifier internal ecdsa;
 
     address internal constant ADMIN = address(0xA11CE);
     address internal constant ALICE = address(0xB0B);
@@ -16,26 +17,44 @@ contract QKBRegistryAdminTest is Test {
 
     event TrustedListRootUpdated(bytes32 oldRoot, bytes32 newRoot);
     event AdminTransferred(address indexed oldAdmin, address indexed newAdmin);
+    event VerifierUpdated(uint8 indexed algorithmTag, address oldVerifier, address newVerifier);
 
     function setUp() public {
-        stub = new StubGroth16Verifier();
-        registry = new QKBRegistry(IGroth16Verifier(address(stub)), INITIAL_ROOT, ADMIN);
+        rsa = new StubGroth16Verifier();
+        ecdsa = new StubGroth16Verifier();
+        registry = new QKBRegistry(
+            IGroth16Verifier(address(rsa)),
+            IGroth16Verifier(address(ecdsa)),
+            INITIAL_ROOT,
+            ADMIN
+        );
     }
 
     function test_constructor_initialState() public view {
         assertEq(registry.admin(), ADMIN);
         assertEq(registry.trustedListRoot(), INITIAL_ROOT);
-        assertEq(address(registry.verifier()), address(stub));
+        assertEq(address(registry.rsaVerifier()), address(rsa));
+        assertEq(address(registry.ecdsaVerifier()), address(ecdsa));
     }
 
     function test_constructor_revertsOnZeroAdmin() public {
         vm.expectRevert(QKBRegistry.ZeroAddress.selector);
-        new QKBRegistry(IGroth16Verifier(address(stub)), INITIAL_ROOT, address(0));
+        new QKBRegistry(
+            IGroth16Verifier(address(rsa)),
+            IGroth16Verifier(address(ecdsa)),
+            INITIAL_ROOT,
+            address(0)
+        );
     }
 
-    function test_constructor_revertsOnZeroVerifier() public {
+    function test_constructor_revertsOnZeroRsaVerifier() public {
         vm.expectRevert(QKBRegistry.ZeroAddress.selector);
-        new QKBRegistry(IGroth16Verifier(address(0)), INITIAL_ROOT, ADMIN);
+        new QKBRegistry(IGroth16Verifier(address(0)), IGroth16Verifier(address(ecdsa)), INITIAL_ROOT, ADMIN);
+    }
+
+    function test_constructor_revertsOnZeroEcdsaVerifier() public {
+        vm.expectRevert(QKBRegistry.ZeroAddress.selector);
+        new QKBRegistry(IGroth16Verifier(address(rsa)), IGroth16Verifier(address(0)), INITIAL_ROOT, ADMIN);
     }
 
     function test_updateTrustedListRoot_onlyAdmin() public {
@@ -72,14 +91,56 @@ contract QKBRegistryAdminTest is Test {
         registry.setAdmin(ALICE);
         assertEq(registry.admin(), ALICE);
 
-        // Old admin can no longer rotate root.
         vm.prank(ADMIN);
         vm.expectRevert(QKBRegistry.NotAdmin.selector);
         registry.updateTrustedListRoot(bytes32(uint256(2)));
 
-        // New admin can.
         vm.prank(ALICE);
         registry.updateTrustedListRoot(bytes32(uint256(3)));
         assertEq(registry.trustedListRoot(), bytes32(uint256(3)));
+    }
+
+    function test_setRsaVerifier_onlyAdmin() public {
+        StubGroth16Verifier newRsa = new StubGroth16Verifier();
+        vm.prank(ALICE);
+        vm.expectRevert(QKBRegistry.NotAdmin.selector);
+        registry.setRsaVerifier(IGroth16Verifier(address(newRsa)));
+    }
+
+    function test_setRsaVerifier_revertsOnZero() public {
+        vm.prank(ADMIN);
+        vm.expectRevert(QKBRegistry.ZeroAddress.selector);
+        registry.setRsaVerifier(IGroth16Verifier(address(0)));
+    }
+
+    function test_setRsaVerifier_rotatesAndEmits() public {
+        StubGroth16Verifier newRsa = new StubGroth16Verifier();
+        vm.expectEmit(true, false, false, true, address(registry));
+        emit VerifierUpdated(0, address(rsa), address(newRsa));
+        vm.prank(ADMIN);
+        registry.setRsaVerifier(IGroth16Verifier(address(newRsa)));
+        assertEq(address(registry.rsaVerifier()), address(newRsa));
+    }
+
+    function test_setEcdsaVerifier_onlyAdmin() public {
+        StubGroth16Verifier newEcdsa = new StubGroth16Verifier();
+        vm.prank(ALICE);
+        vm.expectRevert(QKBRegistry.NotAdmin.selector);
+        registry.setEcdsaVerifier(IGroth16Verifier(address(newEcdsa)));
+    }
+
+    function test_setEcdsaVerifier_revertsOnZero() public {
+        vm.prank(ADMIN);
+        vm.expectRevert(QKBRegistry.ZeroAddress.selector);
+        registry.setEcdsaVerifier(IGroth16Verifier(address(0)));
+    }
+
+    function test_setEcdsaVerifier_rotatesAndEmits() public {
+        StubGroth16Verifier newEcdsa = new StubGroth16Verifier();
+        vm.expectEmit(true, false, false, true, address(registry));
+        emit VerifierUpdated(1, address(ecdsa), address(newEcdsa));
+        vm.prank(ADMIN);
+        registry.setEcdsaVerifier(IGroth16Verifier(address(newEcdsa)));
+        assertEq(address(registry.ecdsaVerifier()), address(newEcdsa));
     }
 }

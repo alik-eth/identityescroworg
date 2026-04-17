@@ -10,7 +10,8 @@ import { SignatureHelpers } from "./helpers/SignatureHelpers.sol";
 
 contract QKBRegistryExpireTest is Test {
     QKBRegistry internal registry;
-    StubGroth16Verifier internal stub;
+    StubGroth16Verifier internal rsa;
+    StubGroth16Verifier internal ecdsa;
 
     address internal constant ADMIN = address(0xA11CE);
     bytes32 internal constant INITIAL_ROOT = bytes32(uint256(0xC0FFEE));
@@ -22,8 +23,14 @@ contract QKBRegistryExpireTest is Test {
     event BindingExpired(address indexed pkAddr);
 
     function setUp() public {
-        stub = new StubGroth16Verifier();
-        registry = new QKBRegistry(IGroth16Verifier(address(stub)), INITIAL_ROOT, ADMIN);
+        rsa = new StubGroth16Verifier();
+        ecdsa = new StubGroth16Verifier();
+        registry = new QKBRegistry(
+            IGroth16Verifier(address(rsa)),
+            IGroth16Verifier(address(ecdsa)),
+            INITIAL_ROOT,
+            ADMIN
+        );
         vm.warp(1_700_000_000);
     }
 
@@ -35,7 +42,7 @@ contract QKBRegistryExpireTest is Test {
     }
 
     function _registerG() internal returns (address pkAddr) {
-        stub.setAccept(true);
+        rsa.setAccept(true);
         QKBVerifier.Inputs memory i;
         i.pkX = _splitToLimbsLE(GX);
         i.pkY = _splitToLimbsLE(GY);
@@ -43,9 +50,14 @@ contract QKBRegistryExpireTest is Test {
         i.rTL = INITIAL_ROOT;
         i.declHash = DeclarationHashes.EN;
         i.timestamp = uint64(block.timestamp);
+        i.algorithmTag = 0;
         QKBVerifier.Proof memory p;
         registry.register(p, i);
         return vm.addr(BOUND_PRIV);
+    }
+
+    function _boundAt(address pkAddr) internal view returns (uint64 boundAt) {
+        (, boundAt,,,,) = registry.bindings(pkAddr);
     }
 
     function _signExpire(uint256 priv, address pkAddr, uint64 boundAt) internal view returns (bytes memory) {
@@ -56,7 +68,7 @@ contract QKBRegistryExpireTest is Test {
 
     function test_expire_happyPath_marksExpiredAndEmits() public {
         address pkAddr = _registerG();
-        (, uint64 boundAt,,,) = registry.bindings(pkAddr);
+        uint64 boundAt = _boundAt(pkAddr);
 
         bytes memory sig = _signExpire(BOUND_PRIV, pkAddr, boundAt);
 
@@ -64,38 +76,28 @@ contract QKBRegistryExpireTest is Test {
         emit BindingExpired(pkAddr);
         registry.expire(pkAddr, sig);
 
-        (QKBRegistry.Status status,, uint64 expiredAt,,) = registry.bindings(pkAddr);
+        (QKBRegistry.Status status,, uint64 expiredAt,,,) = registry.bindings(pkAddr);
         assertEq(uint8(status), uint8(QKBRegistry.Status.EXPIRED));
         assertEq(expiredAt, uint64(block.timestamp));
     }
 
     function test_expire_revertsOnWrongSigner() public {
         address pkAddr = _registerG();
-        (, uint64 boundAt,,,) = registry.bindings(pkAddr);
-
-        // Sign with a different privkey.
-        bytes memory sig = _signExpire(2, pkAddr, boundAt);
-
+        bytes memory sig = _signExpire(2, pkAddr, _boundAt(pkAddr));
         vm.expectRevert(QKBRegistry.BadExpireSig.selector);
         registry.expire(pkAddr, sig);
     }
 
     function test_expire_revertsOnWrongBoundAtInDigest() public {
         address pkAddr = _registerG();
-        (, uint64 boundAt,,,) = registry.bindings(pkAddr);
-        // Tamper with boundAt in the digest — recovers the right key but a
-        // different message, so address mismatch surfaces as BadExpireSig.
-        bytes memory sig = _signExpire(BOUND_PRIV, pkAddr, boundAt + 1);
-
+        bytes memory sig = _signExpire(BOUND_PRIV, pkAddr, _boundAt(pkAddr) + 1);
         vm.expectRevert(QKBRegistry.BadExpireSig.selector);
         registry.expire(pkAddr, sig);
     }
 
     function test_expire_revertsOnNotBound() public {
-        // Never registered.
         address pkAddr = vm.addr(BOUND_PRIV);
         bytes memory sig = _signExpire(BOUND_PRIV, pkAddr, uint64(block.timestamp));
-
         vm.expectRevert(QKBRegistry.NotBound.selector);
         registry.expire(pkAddr, sig);
     }
@@ -107,11 +109,8 @@ contract QKBRegistryExpireTest is Test {
     ///      "only ACTIVE bindings can be expired".
     function test_expire_revertsOnAlreadyExpired() public {
         address pkAddr = _registerG();
-        (, uint64 boundAt,,,) = registry.bindings(pkAddr);
-
-        bytes memory sig = _signExpire(BOUND_PRIV, pkAddr, boundAt);
+        bytes memory sig = _signExpire(BOUND_PRIV, pkAddr, _boundAt(pkAddr));
         registry.expire(pkAddr, sig);
-
         vm.expectRevert(QKBRegistry.NotBound.selector);
         registry.expire(pkAddr, sig);
     }
