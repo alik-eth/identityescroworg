@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": ".",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "lib": ["ES2022"],
+    "types": ["node", "mocha"],
+    "verbatimModuleSyntax": false,
+    "isolatedModules": false,
+    "noEmit": true
+  },
+  "ts-node": {
+    "transpileOnly": true,
+    "compilerOptions": {
+      "module": "CommonJS",
+      "moduleResolution": "Node"
+    }
+  },
+  "include": ["test/**/*.ts", "inputs/**/*.ts"]
+}

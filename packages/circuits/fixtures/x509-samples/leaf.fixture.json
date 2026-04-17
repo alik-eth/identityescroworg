@@ -1,0 +1,22 @@
+{
+  "derPath": "leaf.der",
+  "derLength": 859,
+  "generalizedTimes": [
+    {
+      "contentOffset": 113,
+      "ascii": "20510101000000Z"
+    },
+    {
+      "contentOffset": 130,
+      "ascii": "20690101000000Z"
+    }
+  ],
+  "notBefore": {
+    "contentOffset": 113,
+    "ascii": "20510101000000Z"
+  },
+  "notAfter": {
+    "contentOffset": 130,
+    "ascii": "20690101000000Z"
+  }
+}
