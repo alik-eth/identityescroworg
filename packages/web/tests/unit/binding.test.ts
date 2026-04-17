@@ -6,14 +6,16 @@ import {
   buildBinding,
   canonicalizeBinding,
   declarationDigestHex,
+  PK_UNCOMPRESSED_LENGTH,
 } from '../../src/lib/binding';
 import digests from '../../../../fixtures/declarations/digests.json';
 import enText from '../../../../fixtures/declarations/en.txt?raw';
 import ukText from '../../../../fixtures/declarations/uk.txt?raw';
 
-const VALID_PK_HEX =
-  '02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5';
-const VALID_PK = hexToBytes(VALID_PK_HEX);
+const VALID_SK = hexToBytes(
+  '0000000000000000000000000000000000000000000000000000000000000001',
+);
+const VALID_PK = secp.getPublicKey(VALID_SK, false);
 const NONCE = new Uint8Array(32).map((_, i) => i + 1);
 const TIMESTAMP = 1_750_000_000;
 
@@ -75,9 +77,26 @@ describe('binding', () => {
     }
   });
 
+  it('uses uncompressed SEC1 (65 bytes, 0x04 || x || y) for pk', () => {
+    expect(VALID_PK.length).toBe(PK_UNCOMPRESSED_LENGTH);
+    expect(VALID_PK[0]).toBe(0x04);
+    const b = buildBinding({ pk: VALID_PK, timestamp: TIMESTAMP, nonce: NONCE, locale: 'en' });
+    expect(b.pk).toBe(`0x${bytesToHex(VALID_PK)}`);
+    expect(b.pk.startsWith('0x04')).toBe(true);
+    expect(b.pk.length).toBe(2 + 2 * PK_UNCOMPRESSED_LENGTH);
+  });
+
+  it('rejects compressed pk (33 bytes) with binding.field', () => {
+    const compressed = secp.getPublicKey(VALID_SK, true);
+    expect(compressed.length).toBe(33);
+    expect(() =>
+      buildBinding({ pk: compressed, timestamp: TIMESTAMP, nonce: NONCE, locale: 'en' }),
+    ).toThrowError(expect.objectContaining({ code: 'binding.field' }) as unknown as Error);
+  });
+
   it('rejects pk not on the secp256k1 curve with binding.field', () => {
-    const bad = new Uint8Array(33);
-    bad[0] = 0x02;
+    const bad = new Uint8Array(PK_UNCOMPRESSED_LENGTH);
+    bad[0] = 0x04;
     expect(() =>
       buildBinding({ pk: bad, timestamp: TIMESTAMP, nonce: NONCE, locale: 'en' }),
     ).toThrowError(
@@ -86,7 +105,7 @@ describe('binding', () => {
   });
 
   it('rejects pk with an unsupported prefix byte', () => {
-    const bad = new Uint8Array(33);
+    const bad = new Uint8Array(PK_UNCOMPRESSED_LENGTH);
     bad[0] = 0x05;
     expect(() =>
       buildBinding({ pk: bad, timestamp: TIMESTAMP, nonce: NONCE, locale: 'en' }),
@@ -104,9 +123,9 @@ describe('binding', () => {
     ).toThrowError(expect.objectContaining({ code: 'binding.field' }) as unknown as Error);
   });
 
-  it('accepts a freshly generated pk (round-trip)', () => {
+  it('accepts a freshly generated uncompressed pk (round-trip)', () => {
     const sk = secp.utils.randomPrivateKey();
-    const pk = secp.getPublicKey(sk, true);
+    const pk = secp.getPublicKey(sk, false);
     const b = buildBinding({ pk, timestamp: TIMESTAMP, nonce: NONCE, locale: 'en' });
     expect(b.pk).toBe(`0x${bytesToHex(pk)}`);
     expect(b.scheme).toBe('secp256k1');
@@ -114,14 +133,14 @@ describe('binding', () => {
     expect(b.version).toBe('QKB/1.0');
   });
 
-  it('omits optional context when not provided; includes it when provided', () => {
+  it('always serializes context: empty caller → "context":"0x"; non-empty preserved', () => {
     const without = buildBinding({
       pk: VALID_PK,
       timestamp: TIMESTAMP,
       nonce: NONCE,
       locale: 'en',
     });
-    expect(without.context).toBeUndefined();
+    expect(without.context).toBe('0x');
     const ctx = new TextEncoder().encode('hello');
     const withCtx = buildBinding({
       pk: VALID_PK,
@@ -131,6 +150,8 @@ describe('binding', () => {
       context: ctx,
     });
     expect(withCtx.context).toBe(`0x${bytesToHex(ctx)}`);
+    const jcs = new TextDecoder().decode(canonicalizeBinding(without));
+    expect(jcs).toContain('"context":"0x"');
   });
 });
 

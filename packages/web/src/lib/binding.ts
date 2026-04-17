@@ -1,18 +1,25 @@
 /**
  * Binding statement B (QKB/1.0).
  *
- * Field order is FROZEN (interface contract). Circuits-eng's BindingParse
- * circuit scans the canonical JCS bytes assuming this order:
+ * Encoding locks are frozen in orchestration §4.1 (commit 4784a95). Read that
+ * section before changing anything here; the circuit and contracts both
+ * depend on the exact byte layout produced by canonicalizeBinding.
  *
- *   version, pk, scheme, declaration, timestamp, context, nonce, escrow_commitment
+ * Highlights:
+ * - `pk`: uncompressed SEC1, 65 bytes, `0x04 || x(32) || y(32)`. The circuit
+ *   slices x and y directly out of the JCS string — no compressed point.
+ * - `context`: ALWAYS present. Empty → `"context":"0x"` (empty hex). Circuit
+ *   always scans for the `"context":"` literal.
+ * - `declHash`: SHA-256 over the RAW UTF-8 declaration file bytes (LF, no
+ *   trailing newline) — the value recorded in
+ *   fixtures/declarations/digests.json. NOT over the JCS-escaped form.
+ * - `nonce`: exactly 32 random bytes, hex-prefixed.
+ * - `timestamp`: unix seconds as JSON number.
+ * - `escrow_commitment`: JSON null in Phase 1.
+ * - `version`/`scheme`: string literals "QKB/1.0" / "secp256k1".
  *
- * RFC 8785 JCS sorts keys lexicographically anyway, so the canonical bytes
- * always end up in alphabetical order. We still build the object in the
- * documented logical order for readability; do not rely on JS insertion order
- * to drive byte layout — the canonicalizer does.
- *
- * `escrow_commitment` is `null` in Phase 1 (QIE comes in Phase 2).
- * `context` is omitted when absent (becomes a missing key, not `null`).
+ * Field order in the on-wire JCS bytes is alphabetical (RFC 8785 sorts keys).
+ * Workers must scan for key literals, not assume logical order.
  */
 import canonicalize from 'canonicalize';
 import { sha256 } from '@noble/hashes/sha256';
@@ -25,16 +32,18 @@ export type Locale = 'en' | 'uk';
 
 export const BINDING_VERSION = 'QKB/1.0' as const;
 export const BINDING_SCHEME = 'secp256k1' as const;
+export const PK_UNCOMPRESSED_LENGTH = 65;
+export const NONCE_LENGTH = 32;
 
 export const BINDING_FIELD_ORDER = [
-  'version',
+  'context',
+  'declaration',
+  'escrow_commitment',
+  'nonce',
   'pk',
   'scheme',
-  'declaration',
   'timestamp',
-  'context',
-  'nonce',
-  'escrow_commitment',
+  'version',
 ] as const;
 
 const DECLARATIONS: Record<Locale, string> = { en: enText, uk: ukText };
@@ -45,7 +54,7 @@ export interface Binding {
   scheme: typeof BINDING_SCHEME;
   declaration: string;
   timestamp: number;
-  context?: string;
+  context: string;
   nonce: string;
   escrow_commitment: null;
 }
@@ -60,25 +69,22 @@ export interface BuildBindingInput {
 
 export function buildBinding(input: BuildBindingInput): Binding {
   validatePk(input.pk);
-  if (input.nonce.length !== 32) {
+  if (input.nonce.length !== NONCE_LENGTH) {
     throw new QkbError('binding.field', { field: 'nonce', got: input.nonce.length });
   }
   if (!Number.isInteger(input.timestamp) || input.timestamp < 0) {
     throw new QkbError('binding.field', { field: 'timestamp' });
   }
-  const b: Binding = {
+  return {
     version: BINDING_VERSION,
     pk: `0x${hex(input.pk)}`,
     scheme: BINDING_SCHEME,
     declaration: DECLARATIONS[input.locale],
     timestamp: input.timestamp,
+    context: input.context === undefined ? '0x' : `0x${hex(input.context)}`,
     nonce: `0x${hex(input.nonce)}`,
     escrow_commitment: null,
   };
-  if (input.context !== undefined) {
-    b.context = `0x${hex(input.context)}`;
-  }
-  return b;
 }
 
 export function canonicalizeBinding(b: Binding): Uint8Array {
@@ -102,10 +108,10 @@ export function declarationDigestHex(text: string): string {
 }
 
 function validatePk(pk: Uint8Array): void {
-  if (pk.length !== 33) {
+  if (pk.length !== PK_UNCOMPRESSED_LENGTH) {
     throw new QkbError('binding.field', { field: 'pk', reason: 'length', got: pk.length });
   }
-  if (pk[0] !== 0x02 && pk[0] !== 0x03) {
+  if (pk[0] !== 0x04) {
     throw new QkbError('binding.field', { field: 'pk', reason: 'prefix' });
   }
   try {
