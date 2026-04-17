@@ -163,7 +163,8 @@ Decided 2026-04-17 after web Task 3 to keep circuit cost low:
 - **timestamp**: Unix seconds as JSON number (not string).
 - **scheme**: string literal `"secp256k1"`.
 - **escrow_commitment**: JSON `null` in Phase 1 (Phase 2 hook).
-- **declaration**: the exact bytes of `fixtures/declarations/en.txt` OR `fixtures/declarations/uk.txt` with LF line endings and no trailing newline, embedded in JCS as a JSON string. JCS escapes non-ASCII with `\uXXXX` — the circuit's declHash is computed over the **original UTF-8 bytes** (pre-JCS-escape), which is what `fixtures/declarations/digests.json` records. Web computes `declHash = SHA256(ReadRawFile)`, not `SHA256(JcsValue)`.
+- **declaration**: the exact bytes of `fixtures/declarations/en.txt` OR `fixtures/declarations/uk.txt` with LF line endings and no trailing newline, embedded in JCS as a JSON string. **RFC 8785 §3.2.2.2 keeps printable non-ASCII raw** (this is the correction to an earlier, incorrect note that JCS \uXXXX-escapes non-ASCII). Therefore `declHash = SHA256(raw declaration bytes)` equals `SHA256(declaration bytes as they appear verbatim inside the JCS JSON string)`. Web, circuits, and contracts all agree on the digest.
+- **MAX_B (canonical binding cap)**: **2048 bytes**. UK declaration (905 B) plus the JSON envelope (~350 B) plus padding headroom exceeds 1024; 2048 comfortably covers both languages with context. Circuit instantiates BindingParse/Sha256Var at MAX_B=2048. Raising this further requires re-ceremony.
 - **Field order in JCS**: after JCS sort, keys appear alphabetically. Logical ordering is irrelevant; on-wire ordering is alphabetical. Workers must NOT rely on any particular logical order; they must scan for key literals.
 
 ### 5. Error codes (shared taxonomy)
