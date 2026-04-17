@@ -9,7 +9,7 @@ import { registerStatusRoutes } from "./routes/status.js";
 import { registerWellKnownRoutes } from "./routes/wellknown.js";
 import { startRevocationWatcher, type RevocationLog } from "./watcher.js";
 import { qesVerifyNode } from "./qes-verify.js";
-import type { RpcFactory, ServerCtx } from "./context.js";
+import type { EscrowStateReader, NotaryVerify, RpcFactory, ServerCtx } from "./context.js";
 
 export interface ServerOpts {
   agentId: string;
@@ -24,6 +24,10 @@ export interface ServerOpts {
   bodyLimit?: number;
   registryAddr?: string;
   revocationSubscribe?: (onLog: (log: RevocationLog) => void) => () => void;
+  /** MVP §0.4 — verify notary CAdES against LOTL. Defaults to "untrusted" stub. */
+  notaryVerify?: NotaryVerify;
+  /** MVP §0.3/Q3 — read on-chain escrow state to gate share release. */
+  escrowStateReader?: EscrowStateReader;
 }
 
 export async function buildServer(opts: ServerOpts): Promise<FastifyInstance> {
@@ -43,6 +47,8 @@ export async function buildServer(opts: ServerOpts): Promise<FastifyInstance> {
     ackPub: ackPublicKey(opts.ackSeed),
     chainRpc: opts.chainRpcByChainId,
     qesVerify: opts.qesVerify ?? qesVerifyNode,
+    ...(opts.notaryVerify ? { notaryVerify: opts.notaryVerify } : {}),
+    ...(opts.escrowStateReader ? { escrowStateReader: opts.escrowStateReader } : {}),
     ...(opts.hybridPk ? { hybridPk: opts.hybridPk } : {}),
     ...(opts.lotlInclusionProof ? { lotlInclusionProof: opts.lotlInclusionProof } : {}),
   };
