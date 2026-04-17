@@ -25,6 +25,11 @@ broadcast/
 packages/web/dist/
 packages/web/playwright-report/
 packages/web/test-results/
+# Playwright MCP visual-verification PNGs — regeneratable, not source of truth.
+packages/web/screenshots/
+# Claude/Playwright MCP scratch dirs
+.claude/
+.playwright-mcp/
 
 # pnpm lockfile — team lead owns it on main; workers do not commit
 pnpm-lock.yaml
