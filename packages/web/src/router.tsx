@@ -16,6 +16,12 @@ import { RegisterScreen } from './routes/register';
 import { EscrowSetupScreen } from './routes/escrowSetup';
 import { EscrowRecoverScreen } from './routes/escrowRecover';
 import { EscrowNotaryScreen } from './routes/escrowNotary';
+import { CustodianLayout } from './routes/custodian';
+import { CustodianIndex } from './routes/custodian.index';
+import { CustodianAgentLayout } from './routes/custodian.$agentId';
+import { CustodianInbox } from './routes/custodian.$agentId.inbox';
+import { CustodianReleases } from './routes/custodian.$agentId.releases';
+import { CustodianKeys } from './routes/custodian.$agentId.keys';
 
 const STEPS = [
   { to: '/generate', key: 'nav.generate' },
@@ -130,6 +136,48 @@ const escrowNotaryRoute = createRoute({
   component: EscrowNotaryScreen,
 });
 
+const custodianRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/custodian',
+  component: CustodianLayout,
+});
+
+const custodianIndexRoute = createRoute({
+  getParentRoute: () => custodianRoute,
+  path: '/',
+  component: CustodianIndex,
+});
+
+const custodianAgentRoute = createRoute({
+  getParentRoute: () => custodianRoute,
+  path: '$agentId',
+  component: CustodianAgentLayout,
+});
+
+const custodianAgentIndexRoute = createRoute({
+  getParentRoute: () => custodianAgentRoute,
+  path: '/',
+  component: CustodianInbox,
+});
+
+const custodianInboxRoute = createRoute({
+  getParentRoute: () => custodianAgentRoute,
+  path: 'inbox',
+  component: CustodianInbox,
+});
+
+const custodianReleasesRoute = createRoute({
+  getParentRoute: () => custodianAgentRoute,
+  path: 'releases',
+  component: CustodianReleases,
+});
+
+const custodianKeysRoute = createRoute({
+  getParentRoute: () => custodianAgentRoute,
+  path: 'keys',
+  component: CustodianKeys,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   generateRoute,
@@ -139,6 +187,15 @@ const routeTree = rootRoute.addChildren([
   escrowSetupRoute,
   escrowRecoverRoute,
   escrowNotaryRoute,
+  custodianRoute.addChildren([
+    custodianIndexRoute,
+    custodianAgentRoute.addChildren([
+      custodianAgentIndexRoute,
+      custodianInboxRoute,
+      custodianReleasesRoute,
+      custodianKeysRoute,
+    ]),
+  ]),
 ]);
 
 export const router = createRouter({ routeTree });

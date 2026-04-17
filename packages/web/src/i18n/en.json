@@ -185,5 +185,44 @@
       "ageExceeded": "The binding timestamp is too old to register.",
       "nullifierUsed": "This identity has already been registered for this context. Use a different context to register again."
     }
+  },
+  "custodian": {
+    "layout": {
+      "title": "Custodian console",
+      "subtitle": "Operate one of the three demo custodians. State is local to this browser."
+    },
+    "index": {
+      "pseudoAgent": "Pseudo-agent",
+      "enter": "Open inbox →"
+    },
+    "agent": {
+      "activeAs": "Active as {{id}}",
+      "switch": "Switch agent",
+      "unknown": "Unknown agent id: {{id}}"
+    },
+    "tabs": {
+      "inbox": "Inbox",
+      "releases": "Releases",
+      "keys": "Keys"
+    },
+    "inbox": {
+      "empty": "No escrows received yet.",
+      "state": "state: {{state}}",
+      "detailEscrowId": "Escrow id",
+      "detailState": "State",
+      "detailEvidence": "Evidence",
+      "selectPrompt": "Select an escrow to inspect its stored ciphertext and evidence envelope."
+    },
+    "releases": {
+      "empty": "No arbitrator unlocks observed yet.",
+      "recipient": "recipient",
+      "release": "Release"
+    },
+    "keys": {
+      "hybridHeading": "Hybrid public key",
+      "ackHeading": "Ack-signing public key",
+      "loading": "Loading agent keys…",
+      "demoWarning": "Demo-only — real QTSP deployments would hold these keys in an HSM."
+    }
   }
 }
