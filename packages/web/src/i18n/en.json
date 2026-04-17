@@ -22,17 +22,67 @@
     "subheading": "Bind a secp256k1 key to your qualified electronic identity.",
     "start": "Start a new binding"
   },
+  "common": {
+    "next": "Next",
+    "back": "Back",
+    "download": "Download",
+    "copy": "Copy",
+    "cancel": "Cancel",
+    "continue": "Continue"
+  },
   "generate": {
-    "heading": "Generate binding"
+    "heading": "Generate binding",
+    "intro": "Generate a fresh secp256k1 keypair inside your browser. The private key never leaves this page.",
+    "generateButton": "Generate new keypair",
+    "pubkeyLabel": "Public key (uncompressed, SEC1)",
+    "contextLabel": "Optional context (hex, Phase 2)",
+    "timestampLabel": "Binding timestamp",
+    "localeLabel": "Declaration language",
+    "createBinding": "Create binding statement",
+    "missingKey": "Please generate a keypair first."
   },
   "sign": {
-    "heading": "Sign binding"
+    "heading": "Sign binding",
+    "intro": "Download the canonical binding statement, sign it with your national QES tool, and return to upload the detached signature.",
+    "downloadButton": "Download binding.qkb.json",
+    "previewLabel": "Canonical JCS bytes",
+    "hashLabel": "SHA-256 digest",
+    "toolsHeading": "QES tools by jurisdiction",
+    "toolsUaDiia": "Ukraine — Diia app",
+    "toolsUaDiiaDesc": "Use the \"Signature\" feature in Diia with the downloaded file to produce a detached CAdES-BES .p7s.",
+    "toolsEeSk": "Estonia — SK ID",
+    "toolsEeSkDesc": "Sign with ID-card or Mobile-ID via DigiDoc4 and export the .p7s container.",
+    "toolsPl": "Poland — Szafir",
+    "toolsPlDesc": "Use Szafir SDK to emit a detached CAdES-BES signature.",
+    "missingBinding": "No binding to sign. Return to Generate."
   },
   "upload": {
-    "heading": "Upload signed binding"
+    "heading": "Upload signed binding",
+    "intro": "Drop the .p7s emitted by your QES tool. The browser re-verifies the signature off-circuit and then builds a zero-knowledge proof locally.",
+    "dropP7s": "Drop .p7s here or click to select",
+    "verifying": "Verifying signature off-circuit…",
+    "proving": "Generating proof (may take several minutes)…",
+    "stageWitness": "Building witness",
+    "stageProve": "Groth16 prove",
+    "stageFinalize": "Finalising",
+    "elapsed": "Elapsed",
+    "cancelProof": "Cancel",
+    "restart": "Start over",
+    "missingBinding": "No binding to verify. Return to Generate.",
+    "proofReady": "Proof generated. Continue to Register."
   },
   "register": {
-    "heading": "Register on-chain"
+    "heading": "Register on-chain",
+    "intro": "Connect a wallet and submit the Groth16 proof to the QKBRegistry. Gas on Sepolia is ≈340k.",
+    "connect": "Connect wallet",
+    "connected": "Connected",
+    "submit": "Submit register()",
+    "submitting": "Submitting…",
+    "txHash": "Transaction hash",
+    "pkAddr": "Bound address",
+    "noBundle": "No bundle in session. Complete Upload first.",
+    "noWallet": "No EIP-1193 wallet detected. Install MetaMask or equivalent.",
+    "success": "Binding registered successfully."
   },
   "errors": {
     "binding": {

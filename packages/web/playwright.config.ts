@@ -22,6 +22,10 @@ export default defineConfig({
       testMatch: /smoke\.spec\.ts/,
     },
     {
+      name: 'flow',
+      testMatch: /flow\.spec\.ts/,
+    },
+    {
       name: 'real-prover',
       testMatch: /happy-path\.spec\.ts/,
     },
