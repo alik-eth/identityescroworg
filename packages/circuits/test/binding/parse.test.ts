@@ -10,7 +10,7 @@ interface JcsFixture {
 }
 
 const fixturesDir = resolve(__dirname, '..', '..', 'fixtures', 'jcs-bindings');
-const MAX_B = 1024;
+const MAX_B = 2048;
 
 function loadFixture(name: string): JcsFixture {
   return JSON.parse(readFileSync(resolve(fixturesDir, `${name}.json`), 'utf8')) as JcsFixture;
@@ -24,7 +24,7 @@ function paddedBytes(hex: string, max: number): number[] {
   return out;
 }
 
-describe('BindingParse (MAX_B = 1024)', function () {
+describe('BindingParse (MAX_B = 2048)', function () {
   this.timeout(600000);
 
   let circuit: CompiledCircuit;

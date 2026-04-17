@@ -28,7 +28,8 @@ pragma circom 2.1.9;
 //   - Connecting `pkBytes` to `Secp256k1PkMatch` and `declarationHash` to
 //     `DeclarationWhitelist` (the main circuit wires those).
 //
-// MAX_B is fixed at 1024 bytes per spec §5.1.
+// MAX_B is fixed at 2048 bytes per spec §5.1 (raised from 1024 in the
+// b800521 spec amendment to fit the UK declaration plus envelope).
 
 include "circomlib/circuits/multiplexer.circom";
 include "circomlib/circuits/comparators.circom";
@@ -96,7 +97,7 @@ template BindingParse(MAX_B) {
 
     // === pk value: "0x04" + 128 hex chars → 65 bytes ===
     // Slice 132 ASCII bytes starting at pkValueOffset.
-    var PK_HEX_LEN = 132; // 2 (= "0x") + 130 = 132? No: "0x" + 130 hex chars (= 65 bytes). 2 + 130 = 132. ✓
+    var PK_HEX_LEN = 132; // "0x" + 130 hex chars (= 65 bytes)
     component pkSlice = BindingSlice(MAX_B, PK_HEX_LEN);
     for (var i = 0; i < MAX_B; i++) pkSlice.bytes[i] <== bytes[i];
     pkSlice.offset <== pkValueOffset;
