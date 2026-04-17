@@ -12,6 +12,7 @@ export type ErrorCode =
   | 'witness.fieldTooLong'
   | 'prover.wasmOOM'
   | 'prover.cancelled'
+  | 'prover.artifactMismatch'
   | 'bundle.malformed'
   | 'registry.rootMismatch'
   | 'registry.alreadyBound'
@@ -55,6 +56,7 @@ export const ALL_ERROR_CODES: readonly ErrorCode[] = [
   'witness.fieldTooLong',
   'prover.wasmOOM',
   'prover.cancelled',
+  'prover.artifactMismatch',
   'bundle.malformed',
   'registry.rootMismatch',
   'registry.alreadyBound',

@@ -54,7 +54,8 @@
     },
     "prover": {
       "wasmOOM": "The in-browser prover ran out of memory.",
-      "cancelled": "Proof generation was cancelled."
+      "cancelled": "Proof generation was cancelled.",
+      "artifactMismatch": "Downloaded circuit artifact does not match the expected hash."
     },
     "bundle": {
       "malformed": "The QKB bundle file is malformed."
