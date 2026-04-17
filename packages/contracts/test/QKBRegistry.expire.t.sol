@@ -10,8 +10,7 @@ import { SignatureHelpers } from "./helpers/SignatureHelpers.sol";
 
 contract QKBRegistryExpireTest is Test {
     QKBRegistry internal registry;
-    StubGroth16Verifier internal rsa;
-    StubGroth16Verifier internal ecdsa;
+    StubGroth16Verifier internal verifier;
 
     address internal constant ADMIN = address(0xA11CE);
     bytes32 internal constant INITIAL_ROOT = bytes32(uint256(0xC0FFEE));
@@ -23,14 +22,8 @@ contract QKBRegistryExpireTest is Test {
     event BindingExpired(address indexed pkAddr);
 
     function setUp() public {
-        rsa = new StubGroth16Verifier();
-        ecdsa = new StubGroth16Verifier();
-        registry = new QKBRegistry(
-            IGroth16Verifier(address(rsa)),
-            IGroth16Verifier(address(ecdsa)),
-            INITIAL_ROOT,
-            ADMIN
-        );
+        verifier = new StubGroth16Verifier();
+        registry = new QKBRegistry(IGroth16Verifier(address(verifier)), INITIAL_ROOT, ADMIN);
         vm.warp(1_700_000_000);
     }
 
@@ -42,22 +35,21 @@ contract QKBRegistryExpireTest is Test {
     }
 
     function _registerG() internal returns (address pkAddr) {
-        rsa.setAccept(true);
+        verifier.setAccept(true);
         QKBVerifier.Inputs memory i;
+        i.leafSpkiCommit = uint256(keccak256("stub-leaf-commit"));
         i.pkX = _splitToLimbsLE(GX);
         i.pkY = _splitToLimbsLE(GY);
         i.ctxHash = bytes32(uint256(0xA1));
-        i.rTL = INITIAL_ROOT;
         i.declHash = DeclarationHashes.EN;
         i.timestamp = uint64(block.timestamp);
-        i.algorithmTag = 0;
         QKBVerifier.Proof memory p;
         registry.register(p, i);
         return vm.addr(BOUND_PRIV);
     }
 
     function _boundAt(address pkAddr) internal view returns (uint64 boundAt) {
-        (, boundAt,,,,) = registry.bindings(pkAddr);
+        (, boundAt,,,) = registry.bindings(pkAddr);
     }
 
     function _signExpire(uint256 priv, address pkAddr, uint64 boundAt) internal view returns (bytes memory) {
@@ -76,7 +68,7 @@ contract QKBRegistryExpireTest is Test {
         emit BindingExpired(pkAddr);
         registry.expire(pkAddr, sig);
 
-        (QKBRegistry.Status status,, uint64 expiredAt,,,) = registry.bindings(pkAddr);
+        (QKBRegistry.Status status,, uint64 expiredAt,,) = registry.bindings(pkAddr);
         assertEq(uint8(status), uint8(QKBRegistry.Status.EXPIRED));
         assertEq(expiredAt, uint64(block.timestamp));
     }

@@ -10,8 +10,7 @@ import { SignatureHelpers } from "./helpers/SignatureHelpers.sol";
 
 contract QKBRegistryIsActiveAtTest is Test {
     QKBRegistry internal registry;
-    StubGroth16Verifier internal rsa;
-    StubGroth16Verifier internal ecdsa;
+    StubGroth16Verifier internal verifier;
 
     address internal constant ADMIN = address(0xA11CE);
     bytes32 internal constant INITIAL_ROOT = bytes32(uint256(0xC0FFEE));
@@ -21,14 +20,8 @@ contract QKBRegistryIsActiveAtTest is Test {
     uint256 internal constant GY = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8;
 
     function setUp() public {
-        rsa = new StubGroth16Verifier();
-        ecdsa = new StubGroth16Verifier();
-        registry = new QKBRegistry(
-            IGroth16Verifier(address(rsa)),
-            IGroth16Verifier(address(ecdsa)),
-            INITIAL_ROOT,
-            ADMIN
-        );
+        verifier = new StubGroth16Verifier();
+        registry = new QKBRegistry(IGroth16Verifier(address(verifier)), INITIAL_ROOT, ADMIN);
         vm.warp(1_700_000_000);
     }
 
@@ -40,22 +33,21 @@ contract QKBRegistryIsActiveAtTest is Test {
     }
 
     function _registerG() internal returns (address pkAddr) {
-        rsa.setAccept(true);
+        verifier.setAccept(true);
         QKBVerifier.Inputs memory i;
+        i.leafSpkiCommit = uint256(keccak256("stub-leaf-commit"));
         i.pkX = _splitToLimbsLE(GX);
         i.pkY = _splitToLimbsLE(GY);
         i.ctxHash = bytes32(uint256(0xA1));
-        i.rTL = INITIAL_ROOT;
         i.declHash = DeclarationHashes.EN;
         i.timestamp = uint64(block.timestamp);
-        i.algorithmTag = 0;
         QKBVerifier.Proof memory p;
         registry.register(p, i);
         return vm.addr(BOUND_PRIV);
     }
 
     function _expire(address pkAddr) internal {
-        (, uint64 boundAt,,,,) = registry.bindings(pkAddr);
+        (, uint64 boundAt,,,) = registry.bindings(pkAddr);
         bytes32 digest = SignatureHelpers.expireDigest(pkAddr, block.chainid, boundAt);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(BOUND_PRIV, digest);
         registry.expire(pkAddr, abi.encodePacked(r, s, v));
@@ -72,13 +64,13 @@ contract QKBRegistryIsActiveAtTest is Test {
 
     function test_isActiveAt_active_beforeBoundAt_returnsFalse() public {
         address pkAddr = _registerG();
-        (, uint64 boundAt,,,,) = registry.bindings(pkAddr);
+        (, uint64 boundAt,,,) = registry.bindings(pkAddr);
         assertFalse(registry.isActiveAt(pkAddr, boundAt - 1));
     }
 
     function test_isActiveAt_active_atBoundAt_returnsTrue() public {
         address pkAddr = _registerG();
-        (, uint64 boundAt,,,,) = registry.bindings(pkAddr);
+        (, uint64 boundAt,,,) = registry.bindings(pkAddr);
         assertTrue(registry.isActiveAt(pkAddr, boundAt));
     }
 
@@ -92,7 +84,7 @@ contract QKBRegistryIsActiveAtTest is Test {
         address pkAddr = _registerG();
         vm.warp(block.timestamp + 100);
         _expire(pkAddr);
-        (,, uint64 expiredAt,,,) = registry.bindings(pkAddr);
+        (,, uint64 expiredAt,,) = registry.bindings(pkAddr);
         assertTrue(registry.isActiveAt(pkAddr, expiredAt - 1));
     }
 
@@ -100,7 +92,7 @@ contract QKBRegistryIsActiveAtTest is Test {
         address pkAddr = _registerG();
         vm.warp(block.timestamp + 100);
         _expire(pkAddr);
-        (,, uint64 expiredAt,,,) = registry.bindings(pkAddr);
+        (,, uint64 expiredAt,,) = registry.bindings(pkAddr);
         assertFalse(registry.isActiveAt(pkAddr, expiredAt));
     }
 
@@ -108,13 +100,13 @@ contract QKBRegistryIsActiveAtTest is Test {
         address pkAddr = _registerG();
         vm.warp(block.timestamp + 100);
         _expire(pkAddr);
-        (,, uint64 expiredAt,,,) = registry.bindings(pkAddr);
+        (,, uint64 expiredAt,,) = registry.bindings(pkAddr);
         assertFalse(registry.isActiveAt(pkAddr, expiredAt + 1));
     }
 
     function test_isActiveAt_expired_beforeBoundAt_returnsFalse() public {
         address pkAddr = _registerG();
-        (, uint64 boundAt,,,,) = registry.bindings(pkAddr);
+        (, uint64 boundAt,,,) = registry.bindings(pkAddr);
         vm.warp(block.timestamp + 100);
         _expire(pkAddr);
         assertFalse(registry.isActiveAt(pkAddr, boundAt - 1));

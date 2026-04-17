@@ -9,8 +9,7 @@ import { StubGroth16Verifier } from "../src/verifier/StubGroth16Verifier.sol";
 
 contract QKBRegistryRegisterTest is Test {
     QKBRegistry internal registry;
-    StubGroth16Verifier internal rsa;
-    StubGroth16Verifier internal ecdsa;
+    StubGroth16Verifier internal verifier;
 
     address internal constant ADMIN = address(0xA11CE);
     bytes32 internal constant INITIAL_ROOT = bytes32(uint256(0xC0FFEE));
@@ -21,17 +20,11 @@ contract QKBRegistryRegisterTest is Test {
 
     bytes32 internal constant CTX_HASH = bytes32(uint256(0xA1));
 
-    event BindingRegistered(address indexed pkAddr, bytes32 ctxHash, bytes32 declHash, uint8 algorithmTag);
+    event BindingRegistered(address indexed pkAddr, bytes32 ctxHash, bytes32 declHash);
 
     function setUp() public {
-        rsa = new StubGroth16Verifier();
-        ecdsa = new StubGroth16Verifier();
-        registry = new QKBRegistry(
-            IGroth16Verifier(address(rsa)),
-            IGroth16Verifier(address(ecdsa)),
-            INITIAL_ROOT,
-            ADMIN
-        );
+        verifier = new StubGroth16Verifier();
+        registry = new QKBRegistry(IGroth16Verifier(address(verifier)), INITIAL_ROOT, ADMIN);
         vm.warp(1_700_000_000);
     }
 
@@ -42,36 +35,26 @@ contract QKBRegistryRegisterTest is Test {
         out[3] = (v >> 192) & type(uint64).max;
     }
 
-    /// @dev Defaults to algorithmTag=0 (RSA). Tests override for ECDSA paths.
     function _validInputs() internal view returns (QKBVerifier.Inputs memory i) {
+        i.leafSpkiCommit = uint256(keccak256("stub-leaf-commit"));
         i.pkX = _splitToLimbsLE(GX);
         i.pkY = _splitToLimbsLE(GY);
         i.ctxHash = CTX_HASH;
-        i.rTL = INITIAL_ROOT;
         i.declHash = DeclarationHashes.EN;
         i.timestamp = uint64(block.timestamp);
-        i.algorithmTag = 0; // RSA
     }
 
     function _zeroProof() internal pure returns (QKBVerifier.Proof memory p) {}
 
     function test_register_revertsOnInvalidProof() public {
-        rsa.setAccept(false);
+        verifier.setAccept(false);
         QKBVerifier.Inputs memory i = _validInputs();
         vm.expectRevert(QKBRegistry.InvalidProof.selector);
         registry.register(_zeroProof(), i);
     }
 
-    function test_register_revertsOnRootMismatch() public {
-        rsa.setAccept(true);
-        QKBVerifier.Inputs memory i = _validInputs();
-        i.rTL = bytes32(uint256(0xBADBAD));
-        vm.expectRevert(QKBRegistry.RootMismatch.selector);
-        registry.register(_zeroProof(), i);
-    }
-
     function test_register_revertsOnFutureTimestamp() public {
-        rsa.setAccept(true);
+        verifier.setAccept(true);
         QKBVerifier.Inputs memory i = _validInputs();
         i.timestamp = uint64(block.timestamp + 1);
         vm.expectRevert(QKBRegistry.BindingFromFuture.selector);
@@ -79,7 +62,7 @@ contract QKBRegistryRegisterTest is Test {
     }
 
     function test_register_revertsOnTooOldBinding() public {
-        rsa.setAccept(true);
+        verifier.setAccept(true);
         QKBVerifier.Inputs memory i = _validInputs();
         vm.warp(uint256(i.timestamp) + uint256(registry.MAX_AGE()) + 1);
         vm.expectRevert(QKBRegistry.BindingTooOld.selector);
@@ -87,7 +70,7 @@ contract QKBRegistryRegisterTest is Test {
     }
 
     function test_register_revertsOnAlreadyBound() public {
-        rsa.setAccept(true);
+        verifier.setAccept(true);
         QKBVerifier.Inputs memory i = _validInputs();
         registry.register(_zeroProof(), i);
         QKBVerifier.Inputs memory i2 = _validInputs();
@@ -97,82 +80,31 @@ contract QKBRegistryRegisterTest is Test {
 
     /// @dev declHash whitelist is enforced inside QKBVerifier.verify(), so an
     ///      unknown declHash short-circuits to verify()==false before register
-    ///      reaches its own checks. The user-visible error is therefore
-    ///      InvalidProof — same defence-in-depth story, one fewer custom
-    ///      error in the ABI.
+    ///      reaches its own checks. User-visible error is InvalidProof.
     function test_register_revertsOnBadDeclHash() public {
-        rsa.setAccept(true);
+        verifier.setAccept(true);
         QKBVerifier.Inputs memory i = _validInputs();
         i.declHash = keccak256("not-EN-not-UK");
         vm.expectRevert(QKBRegistry.InvalidProof.selector);
         registry.register(_zeroProof(), i);
     }
 
-    function test_register_revertsOnUnknownAlgorithm() public {
-        rsa.setAccept(true);
-        ecdsa.setAccept(true);
+    function test_register_happyPath_writesBindingAndEmits() public {
+        verifier.setAccept(true);
         QKBVerifier.Inputs memory i = _validInputs();
-        i.algorithmTag = 2;
-        vm.expectRevert(QKBRegistry.UnknownAlgorithm.selector);
-        registry.register(_zeroProof(), i);
-    }
-
-    function test_register_rsa_happyPath_writesBindingAndEmits() public {
-        rsa.setAccept(true);
-        ecdsa.setAccept(false); // proves dispatch picks the right one
-        QKBVerifier.Inputs memory i = _validInputs(); // algorithmTag = 0
         address pkAddr = QKBVerifier.toPkAddress(i.pkX, i.pkY);
         assertEq(pkAddr, vm.addr(1));
 
         vm.expectEmit(true, false, false, true, address(registry));
-        emit BindingRegistered(pkAddr, CTX_HASH, DeclarationHashes.EN, 0);
+        emit BindingRegistered(pkAddr, CTX_HASH, DeclarationHashes.EN);
         registry.register(_zeroProof(), i);
 
-        (
-            QKBRegistry.Status status,
-            uint64 boundAt,
-            uint64 expiredAt,
-            uint8 algorithmTag,
-            bytes32 ctxHash,
-            bytes32 declHash
-        ) = registry.bindings(pkAddr);
+        (QKBRegistry.Status status, uint64 boundAt, uint64 expiredAt, bytes32 ctxHash, bytes32 declHash) =
+            registry.bindings(pkAddr);
         assertEq(uint8(status), uint8(QKBRegistry.Status.ACTIVE));
         assertEq(boundAt, uint64(block.timestamp));
         assertEq(expiredAt, uint64(0));
-        assertEq(algorithmTag, uint8(0));
         assertEq(ctxHash, CTX_HASH);
         assertEq(declHash, DeclarationHashes.EN);
-    }
-
-    function test_register_ecdsa_happyPath_writesBindingAndEmits() public {
-        rsa.setAccept(false); // proves dispatch picks the right one
-        ecdsa.setAccept(true);
-        QKBVerifier.Inputs memory i = _validInputs();
-        i.algorithmTag = 1;
-        address pkAddr = QKBVerifier.toPkAddress(i.pkX, i.pkY);
-
-        vm.expectEmit(true, false, false, true, address(registry));
-        emit BindingRegistered(pkAddr, CTX_HASH, DeclarationHashes.EN, 1);
-        registry.register(_zeroProof(), i);
-
-        (,,, uint8 algorithmTag,,) = registry.bindings(pkAddr);
-        assertEq(algorithmTag, uint8(1));
-    }
-
-    function test_register_rsa_revertsWhenRsaStubRejects_evenIfEcdsaAccepts() public {
-        rsa.setAccept(false);
-        ecdsa.setAccept(true);
-        QKBVerifier.Inputs memory i = _validInputs(); // tag=0 → RSA
-        vm.expectRevert(QKBRegistry.InvalidProof.selector);
-        registry.register(_zeroProof(), i);
-    }
-
-    function test_register_ecdsa_revertsWhenEcdsaStubRejects_evenIfRsaAccepts() public {
-        rsa.setAccept(true);
-        ecdsa.setAccept(false);
-        QKBVerifier.Inputs memory i = _validInputs();
-        i.algorithmTag = 1;
-        vm.expectRevert(QKBRegistry.InvalidProof.selector);
-        registry.register(_zeroProof(), i);
     }
 }

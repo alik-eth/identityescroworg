@@ -16,7 +16,7 @@ contract StubGroth16Verifier {
         uint256[2] calldata,
         uint256[2][2] calldata,
         uint256[2] calldata,
-        uint256[13] calldata
+        uint256[12] calldata
     ) external view returns (bool) {
         return accept;
     }

@@ -30,13 +30,12 @@ contract QKBVerifierTest is Test {
     }
 
     function _baseInputs() internal pure returns (QKBVerifier.Inputs memory i) {
+        i.leafSpkiCommit = uint256(keccak256("stub-leaf-commit"));
         i.pkX = _splitToLimbsLE(GX);
         i.pkY = _splitToLimbsLE(GY);
         i.ctxHash = bytes32(uint256(0xA1));
-        i.rTL = bytes32(uint256(0xB2));
         i.declHash = DeclarationHashes.EN;
         i.timestamp = 1_700_000_000;
-        i.algorithmTag = 0;
     }
 
     function test_verify_packsInputsAndReturnsTrue() public {

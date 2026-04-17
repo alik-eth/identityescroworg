@@ -4,17 +4,19 @@ pragma solidity 0.8.24;
 import { QKBVerifier, IGroth16Verifier } from "./QKBVerifier.sol";
 
 /// @notice Reference register-then-authenticate registry for QKB-bound
-///         secp256k1 keys. Bindings are created via `register` (proof-gated,
-///         dispatched to either the RSA-PKCS#1 v1.5 or ECDSA P-256 Groth16
-///         verifier per `i.algorithmTag` — orchestration §2.0) and torn down
-///         via `expire` (signed by the bound key).
+///         secp256k1 keys. Phase 1 ships the ECDSA-leaf variant only; both
+///         the RSA variant and the chain-side proof (which would pin rTL
+///         on-chain) are deferred to Phase 2 per spec §5.4.
+///
+///         `trustedListRoot` is still held as admin-rotatable state so
+///         downstream consumers have a single source of truth, but the
+///         `register` flow does NOT check it against the proof in Phase 1
+///         — the leaf proof does not expose rTL. Admins vet the LOTL
+///         freshness off-chain until the chain proof lands.
 contract QKBRegistry {
     /// @dev Domain string for the `expire` signature digest. Must stay in
     ///      lock-step with `test/helpers/SignatureHelpers.sol::EXPIRE_DOMAIN`.
     string private constant EXPIRE_DOMAIN = "QKB_EXPIRE_V1";
-
-    uint8 internal constant ALG_RSA = 0;
-    uint8 internal constant ALG_ECDSA = 1;
 
     enum Status {
         NONE,
@@ -26,7 +28,6 @@ contract QKBRegistry {
         Status status;
         uint64 boundAt;
         uint64 expiredAt;
-        uint8 algorithmTag;
         bytes32 ctxHash;
         bytes32 declHash;
     }
@@ -35,19 +36,17 @@ contract QKBRegistry {
     ///      `register` time. Per spec §6.2.
     uint64 public constant MAX_AGE = 90 days;
 
-    IGroth16Verifier public rsaVerifier;
-    IGroth16Verifier public ecdsaVerifier;
+    IGroth16Verifier public verifier;
     bytes32 public trustedListRoot;
     address public admin;
     mapping(address => Binding) public bindings;
 
-    event BindingRegistered(address indexed pkAddr, bytes32 ctxHash, bytes32 declHash, uint8 algorithmTag);
+    event BindingRegistered(address indexed pkAddr, bytes32 ctxHash, bytes32 declHash);
     event BindingExpired(address indexed pkAddr);
     event TrustedListRootUpdated(bytes32 oldRoot, bytes32 newRoot);
     event AdminTransferred(address indexed oldAdmin, address indexed newAdmin);
-    event VerifierUpdated(uint8 indexed algorithmTag, address oldVerifier, address newVerifier);
+    event VerifierUpdated(address oldVerifier, address newVerifier);
 
-    error RootMismatch();
     error AlreadyBound();
     error BindingTooOld();
     error BindingFromFuture();
@@ -56,46 +55,29 @@ contract QKBRegistry {
     error BadExpireSig();
     error NotAdmin();
     error ZeroAddress();
-    error UnknownAlgorithm();
 
     modifier onlyAdmin() {
         if (msg.sender != admin) revert NotAdmin();
         _;
     }
 
-    constructor(
-        IGroth16Verifier rsa_,
-        IGroth16Verifier ecdsa_,
-        bytes32 initialRoot,
-        address initialAdmin
-    ) {
-        if (address(rsa_) == address(0)) revert ZeroAddress();
-        if (address(ecdsa_) == address(0)) revert ZeroAddress();
+    constructor(IGroth16Verifier verifier_, bytes32 initialRoot, address initialAdmin) {
+        if (address(verifier_) == address(0)) revert ZeroAddress();
         if (initialAdmin == address(0)) revert ZeroAddress();
-        rsaVerifier = rsa_;
-        ecdsaVerifier = ecdsa_;
+        verifier = verifier_;
         trustedListRoot = initialRoot;
         admin = initialAdmin;
         emit AdminTransferred(address(0), initialAdmin);
         emit TrustedListRootUpdated(bytes32(0), initialRoot);
-        emit VerifierUpdated(ALG_RSA, address(0), address(rsa_));
-        emit VerifierUpdated(ALG_ECDSA, address(0), address(ecdsa_));
+        emit VerifierUpdated(address(0), address(verifier_));
     }
 
-    /// @notice Register a fresh QKB binding. See spec §6.2 steps 1–7;
-    ///         dispatch added per orchestration §2.0.
+    /// @notice Register a fresh QKB binding. See spec §6.2 steps 1–7.
+    ///         Phase 1 deviation: no on-chain rTL equality check (the leaf
+    ///         proof doesn't carry rTL). admin multisig enforces trusted-list
+    ///         freshness off-chain until the chain proof lands.
     function register(QKBVerifier.Proof calldata p, QKBVerifier.Inputs calldata i) external {
-        IGroth16Verifier v;
-        if (i.algorithmTag == ALG_RSA) {
-            v = rsaVerifier;
-        } else if (i.algorithmTag == ALG_ECDSA) {
-            v = ecdsaVerifier;
-        } else {
-            revert UnknownAlgorithm();
-        }
-
-        if (!QKBVerifier.verify(v, p, i)) revert InvalidProof();
-        if (i.rTL != trustedListRoot) revert RootMismatch();
+        if (!QKBVerifier.verify(verifier, p, i)) revert InvalidProof();
         if (i.timestamp > block.timestamp) revert BindingFromFuture();
         if (block.timestamp > uint256(i.timestamp) + MAX_AGE) revert BindingTooOld();
 
@@ -106,11 +88,10 @@ contract QKBRegistry {
             status: Status.ACTIVE,
             boundAt: uint64(block.timestamp),
             expiredAt: 0,
-            algorithmTag: i.algorithmTag,
             ctxHash: i.ctxHash,
             declHash: i.declHash
         });
-        emit BindingRegistered(pkAddr, i.ctxHash, i.declHash, i.algorithmTag);
+        emit BindingRegistered(pkAddr, i.ctxHash, i.declHash);
     }
 
     /// @notice Tear down a binding. `sig` must be a secp256k1 signature by
@@ -167,17 +148,10 @@ contract QKBRegistry {
         return t < b.expiredAt;
     }
 
-    function setRsaVerifier(IGroth16Verifier newVerifier) external onlyAdmin {
+    function setVerifier(IGroth16Verifier newVerifier) external onlyAdmin {
         if (address(newVerifier) == address(0)) revert ZeroAddress();
-        address old = address(rsaVerifier);
-        rsaVerifier = newVerifier;
-        emit VerifierUpdated(ALG_RSA, old, address(newVerifier));
-    }
-
-    function setEcdsaVerifier(IGroth16Verifier newVerifier) external onlyAdmin {
-        if (address(newVerifier) == address(0)) revert ZeroAddress();
-        address old = address(ecdsaVerifier);
-        ecdsaVerifier = newVerifier;
-        emit VerifierUpdated(ALG_ECDSA, old, address(newVerifier));
+        address old = address(verifier);
+        verifier = newVerifier;
+        emit VerifierUpdated(old, address(newVerifier));
     }
 }
