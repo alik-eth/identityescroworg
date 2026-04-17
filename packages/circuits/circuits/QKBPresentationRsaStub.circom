@@ -22,12 +22,12 @@ template QKBPresentationRsaStub() {
     // Literal: this circuit is the RSA path.
     algorithmTag === 0;
 
-    signal output stubCommit;
-    var acc = ctxHash + rTL + declHash + timestamp + algorithmTag + nullifier;
-    for (var i = 0; i < 4; i++) {
-        acc += pkX[i] + pkY[i];
-    }
-    stubCommit <== acc;
+    // Non-linear binding so snarkjs has ≥ 1 quadratic constraint to run
+    // a ceremony against. Kept INTERNAL — NOT a public output — so the
+    // compiled verifier is verifyProof(..., uint[14]), matching the frozen
+    // Phase-2 ABI.
+    signal dummyQuad;
+    dummyQuad <== nullifier * nullifier;
 }
 
 component main {public [pkX, pkY, ctxHash, rTL, declHash, timestamp, algorithmTag, nullifier]}

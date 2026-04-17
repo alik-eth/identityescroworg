@@ -16,9 +16,10 @@ pragma circom 2.1.9;
 //   [12]     algorithmTag    LITERAL 1 in this circuit (ECDSA variant)
 //   [13]     nullifier       Poseidon(Poseidon(serial‖issuer), ctxHash)
 //
-// This circuit asserts NOTHING about the inputs beyond a trivial linear
-// combination plus the algorithmTag literal constraint. DO NOT DEPLOY TO
-// PRODUCTION.
+// This circuit asserts NOTHING about the inputs beyond the algorithmTag
+// literal + a trivial quadratic binding kept as an internal signal. The
+// compiled verifier is verifyProof(..., uint[14]) — matching the frozen
+// Phase-2 ABI. DO NOT DEPLOY TO PRODUCTION.
 
 template QKBPresentationEcdsaStub() {
     signal input pkX[4];
@@ -34,14 +35,12 @@ template QKBPresentationEcdsaStub() {
     // swapping the tag at witness time.
     algorithmTag === 1;
 
-    // Trivial non-zero binding so the R1CS has ≥ 1 non-literal constraint
-    // (snarkjs refuses ceremonies on zero-constraint systems).
-    signal output stubCommit;
-    var acc = ctxHash + rTL + declHash + timestamp + algorithmTag + nullifier;
-    for (var i = 0; i < 4; i++) {
-        acc += pkX[i] + pkY[i];
-    }
-    stubCommit <== acc;
+    // Non-linear binding so snarkjs has ≥ 1 quadratic constraint to run
+    // a ceremony against (zero-constraint systems are rejected). Kept as
+    // an INTERNAL signal — NOT a public output — so the compiled verifier
+    // is verifyProof(..., uint[14]), matching the frozen Phase-2 ABI.
+    signal dummyQuad;
+    dummyQuad <== nullifier * nullifier;
 }
 
 component main {public [pkX, pkY, ctxHash, rTL, declHash, timestamp, algorithmTag, nullifier]}
