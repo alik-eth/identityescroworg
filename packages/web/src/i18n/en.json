@@ -1,6 +1,9 @@
 {
   "app": {
-    "title": "QKB"
+    "title": "QKB",
+    "logoMark": "ZK",
+    "tagline": "zk · QES · secp256k1",
+    "footer": "QKB · Phase 1 · static SPA · runs from file://"
   },
   "nav": {
     "home": "Home",

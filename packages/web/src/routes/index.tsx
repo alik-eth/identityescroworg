@@ -6,7 +6,7 @@ export function IndexScreen() {
   return (
     <section className="hero-mesh animate-fade-in rounded-2xl border border-slate-800/80 px-8 py-16 text-center">
       <p className="font-mono text-[11px] tracking-widest text-emerald-400/90 uppercase mb-6">
-        zk · QES · secp256k1
+        {t('app.tagline')}
       </p>
       <h2 className="font-serif italic text-5xl md:text-6xl text-slate-100 leading-tight">
         {t('index.heading')}

@@ -28,7 +28,7 @@ function RootLayout() {
         <div className="mx-auto max-w-5xl px-6 py-4 flex items-center justify-between gap-6">
           <Link to="/" className="flex items-center gap-3 group">
             <span className="font-mono text-[11px] tracking-widest text-emerald-400/90 uppercase">
-              ZK
+              {t('app.logoMark')}
             </span>
             <h1 className="text-xl font-serif italic text-slate-100 group-hover:text-emerald-300 transition-colors">
               {t('app.title')}
@@ -59,7 +59,7 @@ function RootLayout() {
         <Outlet />
       </main>
       <footer className="border-t border-slate-800/80 py-4 text-center font-mono text-[10px] tracking-widest text-slate-600 uppercase">
-        QKB · Phase 1 · static SPA · runs from file://
+        {t('app.footer')}
       </footer>
     </div>
   );
