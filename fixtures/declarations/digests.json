@@ -1,0 +1,19 @@
+{
+  "algorithm": "sha256",
+  "encoding": "utf-8",
+  "lineEndings": "lf",
+  "trailingNewline": false,
+  "note": "Digests of the canonical declaration texts. Workers must pin these constants into circuits/binding/DeclarationWhitelist.circom and contracts/src/constants/DeclarationHashes.sol and web i18n declaration strings. Any drift is a breaking change and requires coordinated update across all three packages.",
+  "declarations": {
+    "en": {
+      "path": "fixtures/declarations/en.txt",
+      "bytes": 510,
+      "sha256": "0xf83a393242585b93dea1474fbfc92a06dd90629f3e159b0d230548274315c89b"
+    },
+    "uk": {
+      "path": "fixtures/declarations/uk.txt",
+      "bytes": 905,
+      "sha256": "0x692d0666a14c9e70ebadbfb864a18e152a70be061924902423e52b4ae21492b7"
+    }
+  }
+}
