@@ -30,6 +30,7 @@ jobs:
 
   test-flattener:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v3
@@ -37,6 +38,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: "${{ env.NODE_VERSION }}", cache: "pnpm" }
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @qkb/lotl-flattener build
       - run: pnpm --filter @qkb/lotl-flattener test
 
   test-circuits:
