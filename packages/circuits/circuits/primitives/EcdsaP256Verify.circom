@@ -48,5 +48,3 @@ template EcdsaP256Verify() {
     }
     v.result === 1;
 }
-
-component main = EcdsaP256Verify();

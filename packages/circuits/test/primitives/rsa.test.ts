@@ -25,7 +25,7 @@ describe('RsaPkcs1V15Verify (2048-bit, e=65537)', function () {
   let circuit: CompiledCircuit;
 
   before(async () => {
-    circuit = await compile('primitives/RsaPkcs1V15Verify.circom');
+    circuit = await compile('primitives/RsaPkcs1V15VerifyTest.circom');
   });
 
   it('accepts a valid signature', async () => {

@@ -32,7 +32,7 @@ describe('EcdsaP256Verify (P-256, n=43 k=6)', function () {
   let circuit: CompiledCircuit;
 
   before(async () => {
-    circuit = await compile('primitives/EcdsaP256Verify.circom');
+    circuit = await compile('primitives/EcdsaP256VerifyTest.circom');
   });
 
   it('accepts a valid signature', async () => {

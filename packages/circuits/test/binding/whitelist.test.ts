@@ -23,7 +23,7 @@ describe('DeclarationWhitelist', function () {
   let circuit: CompiledCircuit;
 
   before(async () => {
-    circuit = await compile('binding/DeclarationWhitelist.circom');
+    circuit = await compile('binding/DeclarationWhitelistTest.circom');
   });
 
   it('accepts the EN canonical declaration digest', async () => {

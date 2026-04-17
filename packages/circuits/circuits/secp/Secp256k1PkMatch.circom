@@ -60,5 +60,3 @@ template Secp256k1PkMatch() {
         pkY[l] === acc;
     }
 }
-
-component main = Secp256k1PkMatch();

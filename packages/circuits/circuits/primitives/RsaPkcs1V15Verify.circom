@@ -33,5 +33,3 @@ template RsaPkcs1V15Verify2048() {
         v.modulus[i] <== modulus[i];
     }
 }
-
-component main = RsaPkcs1V15Verify2048();

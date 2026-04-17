@@ -74,5 +74,3 @@ template DeclarationWhitelist() {
     isUk <== ukChain[255];
     isEn + isUk - isEn * isUk === 1;
 }
-
-component main = DeclarationWhitelist();

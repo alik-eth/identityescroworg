@@ -72,7 +72,7 @@ describe('MerkleProofPoseidon (depth 16)', function () {
   let circuit: CompiledCircuit;
 
   before(async () => {
-    circuit = await compile('primitives/MerkleProofPoseidon.circom');
+    circuit = await compile('primitives/MerkleProofPoseidonTest.circom');
   });
 
   it('verifies inclusion of leaf at merkleIndex 0', async () => {

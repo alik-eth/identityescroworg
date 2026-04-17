@@ -38,7 +38,7 @@ describe('Secp256k1PkMatch', function () {
   let circuit: CompiledCircuit;
 
   before(async () => {
-    circuit = await compile('secp/Secp256k1PkMatch.circom');
+    circuit = await compile('secp/Secp256k1PkMatchTest.circom');
   });
 
   it('accepts a well-formed uncompressed pubkey with matching limbs', async () => {

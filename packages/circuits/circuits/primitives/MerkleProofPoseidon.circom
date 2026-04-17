@@ -58,5 +58,3 @@ template MerkleProofPoseidon(DEPTH) {
 
     cur[DEPTH] === root;
 }
-
-component main = MerkleProofPoseidon(16);
