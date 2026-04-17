@@ -23,13 +23,25 @@
 // cert validity). Constraints 3 + 4 (intermediate signs leaf, intermediate
 // in trusted list) are deferred until the Diia CA DER is available.
 
-import { Certificate, CryptoEngine, setEngine, SignedData, ContentInfo } from 'pkijs';
-import { fromBER } from 'asn1js';
+import {
+  Certificate,
+  AttributeTypeAndValue,
+  BasicConstraints,
+  Extension,
+  CryptoEngine,
+  setEngine,
+  SignedData,
+  ContentInfo,
+} from 'pkijs';
+import { fromBER, Integer, Utf8String } from 'asn1js';
 import { webcrypto } from 'node:crypto';
 import { createHash } from 'node:crypto';
 import { writeFileSync, mkdirSync, readFileSync, copyFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Buffer } from 'node:buffer';
+// circomlibjs has no types.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { buildPoseidon } = require('circomlibjs');
 
 const crypto = (webcrypto as unknown) as Crypto;
 setEngine(
@@ -135,6 +147,59 @@ function decodeEcdsaSigSequence(seqDer: Uint8Array): { r: Uint8Array; s: Uint8Ar
   return { r, s };
 }
 
+// Mirror of flattener canonicalizeCertHash. See
+// @qkb/lotl-flattener/src/ca/canonicalize.ts for the normative definition.
+async function canonicalizeCertHash(data: Uint8Array): Promise<bigint> {
+  const poseidon = await buildPoseidon();
+  const F = poseidon.F;
+  const CHUNK = 31;
+  const RATE = 15;
+  const chunks: bigint[] = [];
+  for (let i = 0; i < data.length; i += CHUNK) {
+    const end = Math.min(i + CHUNK, data.length);
+    let v = 0n;
+    for (let j = i; j < end; j++) v = (v << 8n) | BigInt(data[j]!);
+    chunks.push(v);
+  }
+  chunks.push(BigInt(data.length));
+  let state: unknown = F.e(0n);
+  for (let i = 0; i < chunks.length; i += RATE) {
+    const w: unknown[] = new Array(RATE + 1);
+    w[0] = state;
+    for (let j = 0; j < RATE; j++) {
+      const c = chunks[i + j];
+      w[j + 1] = F.e(c === undefined ? 0n : c);
+    }
+    state = poseidon(w);
+  }
+  return F.toObject(state);
+}
+
+// Depth-16 Poseidon Merkle tree with a single real leaf at index 0; siblings
+// at every level are the corresponding empty-subtree hashes.
+async function buildMerkleDepth16(
+  leaf: bigint,
+): Promise<{ root: bigint; path: bigint[]; indices: number[] }> {
+  const poseidon = await buildPoseidon();
+  const F = poseidon.F;
+  const empty: bigint[] = new Array(17).fill(0n);
+  empty[0] = 0n;
+  for (let d = 1; d <= 16; d++) {
+    const h = poseidon([F.e(empty[d - 1]), F.e(empty[d - 1])]);
+    empty[d] = F.toObject(h);
+  }
+  const path: bigint[] = [];
+  const indices: number[] = [];
+  let node = leaf;
+  for (let d = 0; d < 16; d++) {
+    path.push(empty[d]);
+    indices.push(0);
+    const h = poseidon([F.e(node), F.e(empty[d])]);
+    node = F.toObject(h);
+  }
+  return { root: node, path, indices };
+}
+
 function findOffset(haystack: Uint8Array, needle: number[]): number {
   outer: for (let i = 0; i + needle.length <= haystack.length; i++) {
     for (let j = 0; j < needle.length; j++) if (haystack[i + j] !== needle[j]) continue outer;
@@ -222,7 +287,77 @@ async function main(): Promise<void> {
   while (textOf[declEnd] !== '"') declEnd++;
   const declarationBytesLength = declEnd - bindingOffsets.declaration;
 
-  // 5. Emit.
+  // 5. Synthesize a stand-in "intermediate" that actually signs the real
+  //    leaf TBS. Real Diia CA DER is not vendored yet (flattener T10).
+  //    We generate an ECDSA-P256 keypair, sign the leaf's TBS bytes with it,
+  //    wrap the pubkey in a minimal self-signed cert shell, include that
+  //    cert's canonical Poseidon hash in a depth-16 Merkle tree at index 0,
+  //    and expose the synth signature + cert bytes. The MAIN CIRCUIT is
+  //    unaware this is synthetic — the constraints it checks (Ecdsa verify
+  //    over sha256(leafTBS), Merkle inclusion under rTL) are satisfied by
+  //    the witness values just the same.
+  const synthKp = (await crypto.subtle.generateKey(
+    {
+      name: 'ECDSA',
+      namedCurve: 'P-256',
+    } as EcKeyGenParams,
+    true,
+    ['sign', 'verify'],
+  )) as CryptoKeyPair;
+
+  // Minimal self-signed cert wrapping the synth pubkey.
+  function cnAttr(cn: string): AttributeTypeAndValue {
+    return new AttributeTypeAndValue({
+      type: '2.5.4.3',
+      value: new Utf8String({ value: cn }),
+    });
+  }
+  const synthCert = new Certificate();
+  synthCert.version = 2;
+  synthCert.serialNumber = new Integer({ value: 1 });
+  synthCert.issuer.typesAndValues.push(
+    cnAttr('QKB Stand-in Intermediate (NOT a real QTSP)'),
+  );
+  synthCert.subject.typesAndValues.push(
+    cnAttr('QKB Stand-in Intermediate (NOT a real QTSP)'),
+  );
+  synthCert.notBefore.value = new Date('2025-01-01T00:00:00Z');
+  synthCert.notAfter.value = new Date('2030-01-01T00:00:00Z');
+  await synthCert.subjectPublicKeyInfo.importKey(synthKp.publicKey);
+  const bc = new BasicConstraints({ cA: true, pathLenConstraint: 0 });
+  synthCert.extensions = [
+    new Extension({
+      extnID: '2.5.29.19',
+      critical: true,
+      extnValue: bc.toSchema().toBER(false),
+      parsedValue: bc,
+    }),
+  ];
+  await synthCert.sign(synthKp.privateKey, 'SHA-256');
+  const synthDer = new Uint8Array(synthCert.toSchema(true).toBER(false));
+  const synthSpki = extractEcP256SpkiXy(synthDer);
+
+  // Sign real leaf TBS with synth private key.
+  const leafTbsBytes = leafDer.slice(leafTbs.offset, leafTbs.offset + leafTbs.length);
+  const sigRaw = new Uint8Array(
+    await crypto.subtle.sign(
+      { name: 'ECDSA', hash: { name: 'SHA-256' } },
+      synthKp.privateKey,
+      leafTbsBytes,
+    ),
+  );
+  // WebCrypto returns raw r||s (32+32). Already the shape we want.
+  if (sigRaw.length !== 64) throw new Error('unexpected synth sig length');
+  const synthR = sigRaw.slice(0, 32);
+  const synthS = sigRaw.slice(32, 64);
+
+  // Canonicalize synth cert → Poseidon leaf; depth-16 Merkle tree.
+  const synthHash = await canonicalizeCertHash(synthDer);
+  const merkle = await buildMerkleDepth16(synthHash);
+
+  writeFileSync(resolve(outDir, 'synth-intermediate.der'), synthDer);
+
+  // 6. Emit.
   copyFileSync(
     resolve(qesDir, 'admin-binding.qkb.json'),
     resolve(outDir, 'binding.qkb.json'),
@@ -267,9 +402,23 @@ async function main(): Promise<void> {
       leafSigR: Buffer.from(r).toString('hex'),
       leafSigS: Buffer.from(s).toString('hex'),
     },
-    notes: {
-      intermediate:
-        'OMITTED — Diia intermediate CA not yet vendored. Constraints 3 + 4 of the main circuit will require it (flattener T10 LOTL pump or offline fetch).',
+    synthIntermediate: {
+      note:
+        'Stand-in CA. Real Diia intermediate is not yet vendored (flattener T10). This synth cert actually re-signs the real leaf TBS with a fresh ECDSA-P256 key, so constraints 3 and 4 of the main circuit verify — but the chain is synth, not a provenance of the real QTSP.',
+      derLength: synthDer.length,
+      derPath: 'synth-intermediate.der',
+      spkiXOffset: synthSpki.xOffset,
+      spkiYOffset: synthSpki.yOffset,
+      sigROverRealLeafTbsHex: Buffer.from(synthR).toString('hex'),
+      sigSOverRealLeafTbsHex: Buffer.from(synthS).toString('hex'),
+      poseidonHash: synthHash.toString(),
+    },
+    merkle: {
+      depth: 16,
+      root: merkle.root.toString(),
+      path: merkle.path.map((v) => v.toString()),
+      indices: merkle.indices,
+      leafIndex: 0,
     },
   };
   writeFileSync(
