@@ -149,7 +149,17 @@ export function UploadScreen() {
       setStatus('done');
     } catch (err) {
       setStatus('error');
-      setError(localizeError(err, { t }));
+      // Surface the raw error object + details to the browser console so
+      // parse failures can be diagnosed (QkbError stores the specific
+      // reason in .details which the localized banner swallows).
+      console.error('[qkb] upload failure:', err);
+      const base = localizeError(err, { t });
+      const details =
+        err && typeof err === 'object' && 'details' in err
+          ? (err as { details?: Record<string, unknown> }).details
+          : undefined;
+      const reason = details && typeof details.reason === 'string' ? details.reason : undefined;
+      setError(reason ? `${base} [${reason}]` : base);
     } finally {
       abortRef.current = null;
     }
