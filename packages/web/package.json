@@ -18,6 +18,7 @@
     "@noble/ciphers": "^1.0.0",
     "@noble/hashes": "^1.4.0",
     "@noble/secp256k1": "^2.1.0",
+    "@qkb/qie-agent": "workspace:*",
     "@qkb/qie-core": "workspace:*",
     "@tailwindcss/vite": "^4.2.2",
     "@tanstack/react-query": "^5.51.0",
@@ -30,7 +31,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-i18next": "^14.1.2",
-    "tailwindcss": "^4.2.2"
+    "tailwindcss": "^4.2.2",
+    "viem": "^2.21.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.45.0",
