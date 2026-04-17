@@ -537,6 +537,96 @@ git commit -m "feat(contracts): wire Phase 1 Groth16 auth into escrow register/r
 
 ---
 
+## Task 5b: QKBRegistry v2 redeploy + migration documentation
+
+**Problem:** Phase 1 already deployed `QKBRegistry` to Sepolia at a fixed address. The contract is non-upgradeable. Phase 2 extends its storage layout and ABI. The existing Phase 1 deployment cannot absorb these extensions.
+
+**Strategy:** Deploy a fresh `QKBRegistryV2` to Sepolia as a *new* address. Phase 1 holders opting into Phase 2 re-register their binding against v2 (same Groth1 proof, different contract). The Phase 1 registry remains live for audit purposes but is marked legacy in the UI.
+
+**Files:**
+- Create: `packages/contracts/script/DeployRegistryV2.s.sol`
+- Update: `packages/contracts/MIGRATION.md`
+
+- [ ] **Step 1: Write the deploy script**
+
+```solidity
+// script/DeployRegistryV2.s.sol
+// SPDX-License-Identifier: GPL-3.0-only
+pragma solidity 0.8.24;
+import "forge-std/Script.sol";
+import "../src/QKBRegistry.sol";
+
+contract DeployRegistryV2 is Script {
+    function run() external returns (address reg) {
+        address rsaVerifier = vm.envAddress("RSA_VERIFIER_ADDR");
+        address ecdsaVerifier = vm.envAddress("ECDSA_VERIFIER_ADDR");
+        address admin = vm.envAddress("ADMIN_ADDRESS");
+        vm.startBroadcast();
+        reg = address(new QKBRegistry(rsaVerifier, ecdsaVerifier, admin));
+        vm.stopBroadcast();
+        console2.log("QKBRegistryV2:", reg);
+        console2.log("  rsaVerifier :", rsaVerifier);
+        console2.log("  ecdsaVerifier:", ecdsaVerifier);
+        console2.log("  admin       :", admin);
+    }
+}
+```
+
+- [ ] **Step 2: Write MIGRATION.md**
+
+```md
+# Phase 1 → Phase 2 Registry Migration
+
+Phase 2 requires a fresh deployment of QKBRegistry because Solidity contracts
+are non-upgradeable and Phase 2 extends the storage layout with escrow state.
+
+## For Holders
+
+1. You keep your existing Phase 1 binding `(B, σ_QES, cert_QES)` and Groth16 proof.
+2. Re-submit `register(pk, proof, publicSignals)` against the v2 contract address
+   (see fixtures/qie/arbitrators/sepolia.json → `registry_v2`).
+3. The Phase 1 registration remains valid at the v1 address for historical audit,
+   but only v2 participates in Phase 2 escrow flows.
+
+## For relying parties
+
+Check both v1 (`fixtures/contracts/sepolia.json → registry`) and v2 addresses when
+confirming a binding exists; treat either as authoritative for the QKB claim.
+Only v2 carries `isEscrowActive(pk)` information.
+```
+
+- [ ] **Step 3: Anvil dry-run**
+
+```bash
+anvil --chain-id 31337 &
+# Deploy stub verifiers first if env unset, then:
+RSA_VERIFIER_ADDR=0x… ECDSA_VERIFIER_ADDR=0x… ADMIN_ADDRESS=0xB8d121CD0B2D0AB3df2aFF0B45B2fD354FF4c1f7 \
+  forge script script/DeployRegistryV2.s.sol --rpc-url http://127.0.0.1:8545 --broadcast \
+  --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 -vv
+```
+
+- [ ] **Step 4: Lead-triggered Sepolia deploy** (not by worker). Expected addresses land in `fixtures/qie/arbitrators/sepolia.json`:
+
+```json
+{
+  "chain_id": 11155111,
+  "registry_v2": "0x…",
+  "authority": "0x…",
+  "timelock": "0x…"
+}
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages/contracts/script/DeployRegistryV2.s.sol packages/contracts/MIGRATION.md
+git commit -m "feat(contracts): v2 registry deploy script + Phase 1→2 migration doc"
+```
+
+**Note on `revokeEscrow` auth path:** Phase 1 public signals authenticate pk ownership only — no escrow-specific signals are required. The contract relies on "valid Phase 1 proof for this pk ⇒ Holder ⇒ authorized to revoke own escrow." Do NOT add escrowId as a public signal in any circuit; that would force re-proving for every revoke and bloat the witness. This is intentional and documented in orchestration §2.3.
+
+---
+
 ## Task 6: Deployment script — arbitrators to Sepolia
 
 **Files:**

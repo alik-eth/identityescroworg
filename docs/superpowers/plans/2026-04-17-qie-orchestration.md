@@ -424,9 +424,13 @@ git add packages/qie-{core,agent,cli} deploy/mock-qtsps fixtures/qie pnpm-worksp
 git commit -m "chore(qie): scaffold packages + fixtures for Phase 2"
 ```
 
-- [ ] **Step S7: Spawn all four workers in one message**
+- [ ] **Step S6b: Compact existing workers if context > 100k tokens**
 
-Using the Agent tool with `subagent_type: general-purpose`, run four concurrent agents, each briefed with its plan path. Team lead then goes into review loop.
+Three of the five workers (`contracts-eng`, `flattener-eng`, `web-eng`) are reused from Phase 1 and already carry substantial context. Before handing off their Phase 2 plan, check each one's context size. If any worker exceeds ~100k tokens, issue a compaction instruction via SendMessage ("please compact your context before we begin Phase 2") and wait for confirmation. The fresh `qie-eng` agent needs no compaction. Do not skip this step — bloated context degrades task quality and risks losing Phase 1 invariants they need to preserve.
+
+- [ ] **Step S7: Spawn/resume the five workers in one message**
+
+Fresh agent: `qie-eng` (new). Reused agents: `contracts-eng`, `flattener-eng`, `web-eng` (resumed via SendMessage with the Phase 2 plan path — NOT respawned). Team lead then goes into review loop.
 
 ---
 
