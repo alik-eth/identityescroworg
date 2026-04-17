@@ -6,6 +6,19 @@ Guidance for the **team-lead** role coordinating the worker agents in this repo.
 
 Long-lived agents, one per subsystem, reused across phases. Never respawn; compact instead when context grows.
 
+### Spawning vs resuming — tooling distinction
+
+There is **one** `Agent` tool with two usage patterns. The `subagent_type` parameter picks the persona (general-purpose, Explore, code-reviewer, …) and is orthogonal to persistence. Persistence is controlled by `name`:
+
+- `Agent({subagent_type: "general-purpose", prompt: "..."})` — **ephemeral subagent**. Runs, returns a result, terminates. Context is gone. Use for one-shot research/exploration only.
+- `Agent({subagent_type: "general-purpose", name: "web-eng", prompt: "..."})` — **named persistent agent**. Stays addressable after returning, resumable with full prior context.
+
+The worker team (flattener-eng, circuits-eng, contracts-eng, web-eng, qie-eng) is **always** the second form. **Call `Agent` with `name` exactly once per worker role, at the very first dispatch.** Every subsequent interaction — next task, greenlight, question, phase transition — goes through `SendMessage({to: "<name>", ...})`. Calling `Agent` a second time with the same `name` (or without a name for a role that already exists) spawns a *new* ephemeral agent alongside, losing the original's context and splitting the team.
+
+Verification pattern: to probe whether a worker is still addressable, just `SendMessage({to: "<name>", ...})`. A live agent replies; a never-spawned name errors. No need to re-`Agent` "just to be safe" — doing so alongside an already-named agent spawns a second instance and splits the role.
+
+Red flag — if you find yourself writing a multi-paragraph "Phase N summary" into a dispatch prompt, you're probably about to re-`Agent` a worker that's already alive. Stop and `SendMessage` instead; the context is still there.
+
 | Agent           | Owns                                         | Phase 1 branch              | Phase 2 branch        |
 |-----------------|----------------------------------------------|-----------------------------|-----------------------|
 | `flattener-eng` | `packages/lotl-flattener`                    | `feat/flattener`            | `feat/qie-flattener`  |
