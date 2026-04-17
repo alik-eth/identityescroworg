@@ -42,6 +42,19 @@ export function registerReleaseRoutes(app: FastifyInstance, ctx: ServerCtx): voi
     if (!rec) return reply.code(404).send({ error: { code: QIE_ERRORS.ESCROW_NOT_FOUND, message: "no such escrow" } });
     if (rec.state === "revoked") return reply.code(409).send({ error: { code: QIE_ERRORS.ESCROW_REVOKED, message: "revoked" } });
 
+    // MVP §0.3 / Q3 — gate share release on on-chain escrow state.
+    // Valid states: RELEASE_PENDING (unlock in flight) or RELEASED (finalized).
+    // When no escrowStateReader is wired, we fall back to legacy behavior
+    // so Phase 1 deployments continue to work unchanged.
+    if (ctx.escrowStateReader) {
+      const onChain = await ctx.escrowStateReader(id);
+      if (onChain !== "RELEASE_PENDING" && onChain !== "RELEASED") {
+        return reply.code(409).send({
+          error: { code: QIE_ERRORS.ESCROW_WRONG_STATE, message: `on-chain state is ${onChain}` },
+        });
+      }
+    }
+
     // MVP §0.4 — optional notary-assisted heir attestation. Verified BEFORE
     // predicate evaluation so a malformed attestation never triggers an
     // RPC fetch or any cryptographic work on the escrow config.
