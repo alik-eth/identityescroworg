@@ -8,6 +8,7 @@ const circomTester = require('circom_tester');
 
 const repoCircuitsDir = resolve(__dirname, '..', '..', 'circuits');
 const cacheRoot = resolve(__dirname, '..', '..', 'build', 'test-cache');
+const nodeModulesDir = resolve(__dirname, '..', '..', 'node_modules');
 
 export interface CompileOptions {
   recompile?: boolean;
@@ -41,6 +42,6 @@ export async function compile(
     output: outDir,
     recompile: options.recompile ?? true,
     prime: 'bn128',
-    include: [repoCircuitsDir],
+    include: [repoCircuitsDir, nodeModulesDir],
   });
 }
