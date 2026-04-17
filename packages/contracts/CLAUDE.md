@@ -1,4 +1,10 @@
-# `@qkb/contracts` — Solidity for Qualified Key Binding (Phase 1)
+# `@qkb/contracts` — Solidity for Qualified Key Binding + Qualified Identity Escrow
+
+> **Phase 1 (QKB) + Phase 2 (QIE) combined.** The Phase-1 sections below
+> document the register-then-authenticate binding registry and its verifier
+> wrapper. Section 13 (appended) covers the Phase-2 QIE additions: the
+> 14-signal public layout, dual-verifier dispatch, nullifier primitive,
+> escrow surface, and arbitrator event contract.
 
 This file is the orientation doc for any future contributor (human or
 agent) working inside `packages/contracts/`. It is intentionally
@@ -431,3 +437,205 @@ Phase 2 or later, NOT lurking bugs:
 - **Account abstraction integration.** `register` requires an EOA-style
   caller (anyone can submit, but the proof contents identify the bound
   key). Smart-contract-account wrapper helpers are Phase 2.
+
+## 13. QIE Phase 2 additions
+
+Phase 2 extends this package in three ways. None of the Phase 1 invariants
+above relax; they compose.
+
+### 13.1 14-signal public layout (restored from Phase-1 drop)
+
+Phase 1 shipped a 12-signal split-proof fallback (spec §5.4) because the
+unified ceremony hit 28 GB RAM on a dev box. Phase 2 runs the unified
+ceremony on `performance-12x` Fly machines (48 GB) and restores the
+original layout per QIE spec §14.3:
+
+```
+[0..3]   pkX limbs (4 × uint64 LE)
+[4..7]   pkY limbs (4 × uint64 LE)
+[8]      ctxHash
+[9]      rTL                  — restored from Phase-1 drop
+[10]     declHash
+[11]     timestamp
+[12]     algorithmTag         — restored; 0 = RSA, 1 = ECDSA
+[13]     nullifier            — new §14.4 primitive
+```
+
+`QKBVerifier.Inputs` gains `rTL`, `algorithmTag`, `nullifier`; loses
+`leafSpkiCommit` (the glue-only field from the split proof). The
+`IGroth16Verifier.verifyProof` input widens to `uint256[14]`.
+
+### 13.2 Dual-verifier dispatch (restored)
+
+`QKBRegistry` holds two settable verifier slots — `rsaVerifier` and
+`ecdsaVerifier`. `register` (and the new `_authorizeBinding` gate used by
+the escrow surface) dispatches on `i.algorithmTag`:
+
+- `0` → `rsaVerifier`,
+- `1` → `ecdsaVerifier`,
+- anything else → `revert UnknownAlgorithm()`.
+
+Admin setters are split: `setRsaVerifier`, `setEcdsaVerifier`. The single
+Phase-1 `setVerifier` is gone. `VerifierUpdated` event now carries
+`uint8 indexed algorithmTag` so indexers can tell the two rotation streams
+apart.
+
+### 13.3 On-chain `rTL` equality check (restored)
+
+`register` reverts `RootMismatch` when `i.rTL != trustedListRoot`. Phase 1
+couldn't do this (the leaf proof didn't carry rTL); Phase 2's unified
+proof does, so the admin's LOTL-freshness duty is now enforced on-chain
+rather than solely off-chain.
+
+### 13.4 Nullifier primitive (§14.4)
+
+Construction (off-chain, in the circuit):
+```
+secret    = Poseidon(subject_serial_limbs, issuer_cert_hash)
+nullifier = Poseidon(secret, ctxHash)
+```
+
+On-chain storage:
+- `mapping(bytes32 => bool) public usedNullifiers` — uniqueness guard.
+- `mapping(bytes32 => address) public nullifierToPk` — reverse lookup
+  used by the Sedelmeir DB-CRL revocation event payload.
+- `mapping(bytes32 => bytes32) public revokedNullifiers` — non-zero value
+  = CRL-revoked with that `reasonHash`.
+
+`register`:
+- reverts `NullifierUsed` when `usedNullifiers[i.nullifier]` is set,
+- on success writes both `usedNullifiers` and `nullifierToPk`,
+- emits `BindingRegistered(pkAddr indexed, algorithmTag indexed, ctxHash,
+  declHash, nullifier)`.
+
+`revokeNullifier(nullifier, reasonHash)`:
+- admin-only,
+- `reasonHash` must be non-zero (reuses `ZeroAddress` for zero-reason
+  revert),
+- reverts `UnknownNullifier` if the nullifier was never registered,
+- reverts `NullifierAlreadyRevoked` on double-revoke,
+- emits `NullifierRevoked(nullifier indexed, pkAddr indexed, reasonHash)`.
+
+`isActiveAt` extension: returns `false` when the mapped binding's
+nullifier has a non-zero entry in `revokedNullifiers`, regardless of
+`status` or `expiredAt`.
+
+### 13.5 Escrow surface
+
+State:
+```solidity
+struct EscrowEntry {
+    bytes32 escrowId;    // commitment = sha256(Econfig)
+    address arbitrator;  // contract implementing IArbitrator
+    uint64 expiry;
+    bool revoked;
+}
+mapping(address => EscrowEntry) public escrows;  // keyed by pkAddr
+```
+
+Escrows are keyed by `pkAddr` (the derived Ethereum address), same key
+space as the Phase-1 binding table. This avoids ambiguity about which
+serialisation of the raw pk bytes is canonical.
+
+Functions:
+- `registerEscrow(escrowId, arbitrator, expiry, proof, inputs)`:
+    * `arbitrator != 0`, `expiry > block.timestamp`, no prior escrow;
+    * runs `_authorizeBinding` (dispatch + rTL + verify + pk derivation +
+      `bindings[pkAddr].status == ACTIVE`);
+    * emits `EscrowRegistered(pkAddr indexed, escrowId indexed, arbitrator, expiry)`.
+- `revokeEscrow(reasonHash, proof, inputs)`:
+    * same auth gate;
+    * requires `e.escrowId != 0` and `!e.revoked`;
+    * sets `e.revoked = true`;
+    * emits `EscrowRevoked(pkAddr indexed, escrowId indexed, reasonHash)`.
+- `escrowCommitment(pkAddr)` view — returns the escrowId iff active, else
+  `bytes32(0)`.
+- `isEscrowActive(pkAddr)` view — boolean.
+
+Error set added: `EscrowExists`, `NoEscrow`, `EscrowAlreadyRevoked`,
+`EscrowExpiryInPast`, plus `NullifierUsed`, `NullifierAlreadyRevoked`,
+`UnknownNullifier`, `UnknownAlgorithm`, `RootMismatch` (the latter three
+restore Phase-1-era semantics that the split-proof fallback had dropped).
+
+### 13.6 Design note — no circuit-level escrowId
+
+We deliberately do NOT add `escrowId` as a public signal. The Phase-1
+pk-ownership proof is sufficient authentication: "valid proof for pkAddr
+⇒ Holder, ⇒ authorised to touch the Holder's own escrow". Threading
+escrowId through any circuit would force a fresh witness (and possibly a
+new ceremony if the circuit spec widens) per escrow operation. Spec §14
++ orchestration §2.3 both commit to this.
+
+### 13.7 Arbitrator event contract
+
+`src/arbitrators/IArbitrator.sol` freezes:
+
+```solidity
+event Unlock(bytes32 indexed escrowId, bytes recipientHybridPk);
+```
+
+The off-chain QIE unlock evaluator subscribes to this event across all
+registered arbitrator contracts. `test/ArbitratorEvent.t.sol` asserts
+`keccak256("Unlock(bytes32,bytes)") == IArbitrator.Unlock.selector` so
+any drift in the event shape breaks the build before shipping.
+
+Two concrete arbitrators:
+- `AuthorityArbitrator(authority)` — ecrecover-gated, one-shot per
+  `evidenceHash`. Digest: `keccak256(abi.encode(escrowId,
+  recipientHybridPk, evidenceHash))`.
+- `TimelockArbitrator(holderPing, timeoutSeconds)` — dead-man switch.
+  `ping()` from `holderPing` resets the timer. Anyone may call
+  `requestUnlock(escrowId, recipientHybridPk)` once
+  `block.timestamp >= lastPing + timeoutSeconds`. Per-`escrowId` one-shot.
+
+### 13.8 Storage layout warning
+
+Phase-2 storage additions are NON-upgradeable. The Phase-1 Sepolia
+deployment at `0x7F36aF783538Ae8f981053F2b0E45421a1BF4815` cannot absorb
+the new maps + escrow surface + extended `Binding` struct. Use
+`DeployRegistryV2.s.sol` for a fresh address; see `MIGRATION.md` for the
+holder re-registration flow and the relying-party dual-lookup pattern.
+
+### 13.9 Sprint 0 → main-phase file map
+
+| Added / modified | Role |
+|---|---|
+| `src/QKBVerifier.sol`                  | 14-signal layout, new Inputs fields. |
+| `src/QKBRegistry.sol`                  | Dual verifier dispatch, nullifier, escrow surface. |
+| `src/verifiers/QKBGroth16VerifierStubEcdsa.sol` | Pumped 14-signal ECDSA stub verifier (circuits e576b08). |
+| `src/verifiers/QKBGroth16VerifierStubRsa.sol`   | Pumped 14-signal RSA stub verifier (circuits e576b08). |
+| `src/arbitrators/IArbitrator.sol`      | Frozen `Unlock` event. |
+| `src/arbitrators/AuthorityArbitrator.sol` | ecrecover unlock. |
+| `src/arbitrators/TimelockArbitrator.sol`  | dead-man switch unlock. |
+| `script/Deploy.s.sol`                  | Dual-verifier args (RSA + ECDSA). |
+| `script/DeployRegistryV2.s.sol`        | Phase 2 fresh registry deploy. |
+| `script/DeployArbitrators.s.sol`       | Authority + Timelock pair. |
+| `MIGRATION.md`                         | Phase 1 → Phase 2 migration doc. |
+| `test/ArbitratorEvent.t.sol`           | Unlock-selector sanity. |
+| `test/AuthorityArbitrator.t.sol`       | 6 tests. |
+| `test/TimelockArbitrator.t.sol`        | 9 tests. |
+| `test/QKBRegistry.nullifier.t.sol`     | 9 tests. |
+| `test/QKBRegistry.escrow.t.sol`        | 13 tests. |
+| `test/QKBGroth16VerifierStub.integration.t.sol` | 10 tests — real-verifier round-trip + cross-variant rejection. |
+| `test/fixtures/integration/{ecdsa,rsa}/{proof,public}.json` | Stub proof fixtures pumped from circuits. |
+
+### 13.10 Open pre-main-merge gates
+
+- **S0.5 — real RSA + ECDSA proof integration.** DONE. Stubs pumped
+  from circuits-eng commit `e576b08`
+  (`src/verifiers/QKBGroth16VerifierStub{Ecdsa,Rsa}.sol`, both
+  `verifyProof(…, uint[14])`, `stubCommit` output removed). Fixtures
+  under `test/fixtures/integration/{ecdsa,rsa}/{proof,public}.json`.
+  `test/QKBGroth16VerifierStub.integration.t.sol` asserts
+  accept-pumped-proof, reject-tampered-proof, reject-tampered-public-
+  signals, IGroth16Verifier-interface round-trip, and cross-variant
+  rejection (ECDSA proof rejected by RSA verifier + symmetric case) for
+  both variants.
+- **Real (non-stub) verifiers.** Arrive post-ceremony (circuits Tasks
+  6–7). Lead pumps into `src/verifiers/`; `setRsaVerifier` +
+  `setEcdsaVerifier` rotate live without touching the registry storage.
+  Once real verifiers land, the registry-level integration test (real
+  ceremony proof submitted through `register()` with canonical declHash
+  + LOTL root) can be written on top of the same fixture-loading
+  scaffolding in `QKBGroth16VerifierStub.integration.t.sol`.
+- **Sepolia v2 deploy.** Awaits real verifiers + lead sign-off.

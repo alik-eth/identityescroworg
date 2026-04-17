@@ -9,6 +9,9 @@ import { StubGroth16Verifier } from "../src/verifier/StubGroth16Verifier.sol";
 
 contract QKBRegistryRegisterTest is Test {
     QKBRegistry internal registry;
+    StubGroth16Verifier internal rsaVerifier;
+    StubGroth16Verifier internal ecdsaVerifier;
+    // Back-compat alias used by existing tests (ECDSA path).
     StubGroth16Verifier internal verifier;
 
     address internal constant ADMIN = address(0xA11CE);
@@ -20,11 +23,24 @@ contract QKBRegistryRegisterTest is Test {
 
     bytes32 internal constant CTX_HASH = bytes32(uint256(0xA1));
 
-    event BindingRegistered(address indexed pkAddr, bytes32 ctxHash, bytes32 declHash);
+    event BindingRegistered(
+        address indexed pkAddr,
+        uint8 indexed algorithmTag,
+        bytes32 ctxHash,
+        bytes32 declHash,
+        bytes32 nullifier
+    );
 
     function setUp() public {
-        verifier = new StubGroth16Verifier();
-        registry = new QKBRegistry(IGroth16Verifier(address(verifier)), INITIAL_ROOT, ADMIN);
+        rsaVerifier = new StubGroth16Verifier();
+        ecdsaVerifier = new StubGroth16Verifier();
+        verifier = ecdsaVerifier; // default test path is ECDSA (tag=1)
+        registry = new QKBRegistry(
+            IGroth16Verifier(address(rsaVerifier)),
+            IGroth16Verifier(address(ecdsaVerifier)),
+            INITIAL_ROOT,
+            ADMIN
+        );
         vm.warp(1_700_000_000);
     }
 
@@ -36,12 +52,14 @@ contract QKBRegistryRegisterTest is Test {
     }
 
     function _validInputs() internal view returns (QKBVerifier.Inputs memory i) {
-        i.leafSpkiCommit = uint256(keccak256("stub-leaf-commit"));
         i.pkX = _splitToLimbsLE(GX);
         i.pkY = _splitToLimbsLE(GY);
         i.ctxHash = CTX_HASH;
+        i.rTL = INITIAL_ROOT;
         i.declHash = DeclarationHashes.EN;
         i.timestamp = uint64(block.timestamp);
+        i.algorithmTag = 1; // ECDSA
+        i.nullifier = bytes32(uint256(0xBEEF));
     }
 
     function _zeroProof() internal pure returns (QKBVerifier.Proof memory p) {}
@@ -74,6 +92,9 @@ contract QKBRegistryRegisterTest is Test {
         QKBVerifier.Inputs memory i = _validInputs();
         registry.register(_zeroProof(), i);
         QKBVerifier.Inputs memory i2 = _validInputs();
+        // Distinct nullifier so the uniqueness guard doesn't fire first;
+        // here we're exercising the pk-uniqueness path.
+        i2.nullifier = bytes32(uint256(i.nullifier) ^ 1);
         vm.expectRevert(QKBRegistry.AlreadyBound.selector);
         registry.register(_zeroProof(), i2);
     }
@@ -95,16 +116,70 @@ contract QKBRegistryRegisterTest is Test {
         address pkAddr = QKBVerifier.toPkAddress(i.pkX, i.pkY);
         assertEq(pkAddr, vm.addr(1));
 
-        vm.expectEmit(true, false, false, true, address(registry));
-        emit BindingRegistered(pkAddr, CTX_HASH, DeclarationHashes.EN);
+        vm.expectEmit(true, true, false, true, address(registry));
+        emit BindingRegistered(pkAddr, 1, CTX_HASH, DeclarationHashes.EN, i.nullifier);
         registry.register(_zeroProof(), i);
 
-        (QKBRegistry.Status status, uint64 boundAt, uint64 expiredAt, bytes32 ctxHash, bytes32 declHash) =
-            registry.bindings(pkAddr);
+        (
+            QKBRegistry.Status status,
+            uint8 algorithmTag,
+            uint64 boundAt,
+            uint64 expiredAt,
+            bytes32 ctxHash,
+            bytes32 declHash,
+            bytes32 nullifier
+        ) = registry.bindings(pkAddr);
         assertEq(uint8(status), uint8(QKBRegistry.Status.ACTIVE));
+        assertEq(algorithmTag, 1);
         assertEq(boundAt, uint64(block.timestamp));
         assertEq(expiredAt, uint64(0));
         assertEq(ctxHash, CTX_HASH);
         assertEq(declHash, DeclarationHashes.EN);
+        assertEq(nullifier, i.nullifier);
+    }
+
+    function test_register_rsaPath_routesThroughRsaVerifier() public {
+        // ECDSA verifier rejects everything; RSA accepts → proof routed by tag.
+        rsaVerifier.setAccept(true);
+        ecdsaVerifier.setAccept(false);
+        QKBVerifier.Inputs memory i = _validInputs();
+        i.algorithmTag = 0; // RSA
+        address pkAddr = QKBVerifier.toPkAddress(i.pkX, i.pkY);
+
+        vm.expectEmit(true, true, false, true, address(registry));
+        emit BindingRegistered(pkAddr, 0, CTX_HASH, DeclarationHashes.EN, i.nullifier);
+        registry.register(_zeroProof(), i);
+
+        (, uint8 algorithmTag,,,,,) = registry.bindings(pkAddr);
+        assertEq(algorithmTag, 0);
+    }
+
+    function test_register_crossDispatch_rsaAcceptsButEcdsaTagFails() public {
+        // RSA accepts, ECDSA rejects. Submit with ECDSA tag → route goes to
+        // ecdsaVerifier and reverts InvalidProof.
+        rsaVerifier.setAccept(true);
+        ecdsaVerifier.setAccept(false);
+        QKBVerifier.Inputs memory i = _validInputs();
+        i.algorithmTag = 1;
+        vm.expectRevert(QKBRegistry.InvalidProof.selector);
+        registry.register(_zeroProof(), i);
+    }
+
+    function test_register_crossDispatch_ecdsaAcceptsButRsaTagFails() public {
+        rsaVerifier.setAccept(false);
+        ecdsaVerifier.setAccept(true);
+        QKBVerifier.Inputs memory i = _validInputs();
+        i.algorithmTag = 0;
+        vm.expectRevert(QKBRegistry.InvalidProof.selector);
+        registry.register(_zeroProof(), i);
+    }
+
+    function test_register_revertsOnUnknownAlgorithm() public {
+        rsaVerifier.setAccept(true);
+        ecdsaVerifier.setAccept(true);
+        QKBVerifier.Inputs memory i = _validInputs();
+        i.algorithmTag = 2;
+        vm.expectRevert(QKBRegistry.UnknownAlgorithm.selector);
+        registry.register(_zeroProof(), i);
     }
 }
