@@ -156,6 +156,17 @@ contract QKBRegistry {
         emit AdminTransferred(old, newAdmin);
     }
 
+    /// @notice True iff the binding for `pkAddr` was active at time `t`.
+    ///         Pre-bind (`t < boundAt`) and post-expire (`t >= expiredAt`)
+    ///         both return false. Unknown bindings return false.
+    function isActiveAt(address pkAddr, uint64 t) external view returns (bool) {
+        Binding storage b = bindings[pkAddr];
+        if (b.status == Status.NONE) return false;
+        if (t < b.boundAt) return false;
+        if (b.status == Status.ACTIVE) return true;
+        return t < b.expiredAt;
+    }
+
     function setRsaVerifier(IGroth16Verifier newVerifier) external onlyAdmin {
         if (address(newVerifier) == address(0)) revert ZeroAddress();
         address old = address(rsaVerifier);
