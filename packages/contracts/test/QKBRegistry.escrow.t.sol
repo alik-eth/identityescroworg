@@ -37,6 +37,8 @@ contract QKBRegistryEscrowTest is Test {
         uint64 expiry
     );
     event EscrowRevoked(address indexed pkAddr, bytes32 indexed escrowId, bytes32 reasonHash);
+    event EscrowReleasePendingRequested(bytes32 indexed escrowId, address indexed arbitrator, uint64 at);
+    event EscrowReleased(bytes32 indexed escrowId, address indexed arbitrator);
 
     function setUp() public {
         rsa = new StubGroth16Verifier();
@@ -236,5 +238,119 @@ contract QKBRegistryEscrowTest is Test {
         registry.revokeEscrow(REASON, _proof(), _inputs(NULLIFIER));
         (,,,, QKBRegistry.EscrowState state) = registry.escrows(pk);
         assertEq(uint8(state), uint8(QKBRegistry.EscrowState.REVOKED));
+    }
+
+    // ---- C2: notifyReleasePending + finalizeRelease -------------------------
+
+    /// @dev Helper — register the default escrow so the state-machine tests
+    ///      can hop straight into the interesting transitions.
+    function _registerDefaultEscrow() internal returns (address pk, uint64 expiry) {
+        expiry = uint64(block.timestamp + 365 days);
+        pk = _pkAddr();
+        registry.registerEscrow(ESCROW_ID, ARBITRATOR, expiry, _proof(), _inputs(NULLIFIER));
+    }
+
+    /// @notice Only the escrow's bound arbitrator may drive the release
+    ///         state machine — anyone else reverts `NotArbitrator`.
+    function test_NotifyReleasePending_OnlyArbitrator() public {
+        _registerDefaultEscrow();
+        vm.expectRevert(QKBRegistry.NotArbitrator.selector);
+        vm.prank(address(0xBAD));
+        registry.notifyReleasePending(ESCROW_ID);
+    }
+
+    /// @notice notifyReleasePending flips ACTIVE -> RELEASE_PENDING and
+    ///         stamps `releasePendingAt` with `block.timestamp`.
+    function test_NotifyReleasePending_TransitionsActiveToPending() public {
+        (address pk,) = _registerDefaultEscrow();
+        vm.expectEmit(true, true, false, true, address(registry));
+        emit EscrowReleasePendingRequested(ESCROW_ID, ARBITRATOR, uint64(block.timestamp));
+        vm.prank(ARBITRATOR);
+        registry.notifyReleasePending(ESCROW_ID);
+        (,,, uint64 pendingAt, QKBRegistry.EscrowState state) = registry.escrows(pk);
+        assertEq(uint8(state), uint8(QKBRegistry.EscrowState.RELEASE_PENDING));
+        assertEq(pendingAt, uint64(block.timestamp));
+    }
+
+    /// @notice Once pending, revoke is blocked with `EscrowReleasePending`.
+    function test_NotifyReleasePending_BlocksRevoke() public {
+        _registerDefaultEscrow();
+        vm.prank(ARBITRATOR);
+        registry.notifyReleasePending(ESCROW_ID);
+        vm.expectRevert(QKBRegistry.EscrowReleasePending.selector);
+        registry.revokeEscrow(REASON, _proof(), _inputs(NULLIFIER));
+    }
+
+    /// @notice Unknown escrowId reverts `UnknownEscrowId`.
+    function test_NotifyReleasePending_UnknownEscrowIdReverts() public {
+        vm.expectRevert(QKBRegistry.UnknownEscrowId.selector);
+        vm.prank(ARBITRATOR);
+        registry.notifyReleasePending(bytes32(uint256(0xDEADBEEF)));
+    }
+
+    /// @notice Cannot notify twice — state must be ACTIVE.
+    function test_NotifyReleasePending_RevertsFromNonActiveState() public {
+        _registerDefaultEscrow();
+        vm.prank(ARBITRATOR);
+        registry.notifyReleasePending(ESCROW_ID);
+        vm.expectRevert(QKBRegistry.WrongState.selector);
+        vm.prank(ARBITRATOR);
+        registry.notifyReleasePending(ESCROW_ID);
+    }
+
+    /// @notice finalizeRelease only callable by the arbitrator.
+    function test_FinalizeRelease_OnlyArbitrator() public {
+        _registerDefaultEscrow();
+        vm.prank(ARBITRATOR);
+        registry.notifyReleasePending(ESCROW_ID);
+        vm.warp(block.timestamp + 48 hours);
+        vm.expectRevert(QKBRegistry.NotArbitrator.selector);
+        vm.prank(address(0xBAD));
+        registry.finalizeRelease(ESCROW_ID);
+    }
+
+    /// @notice finalizeRelease reverts if called before RELEASE_TIMEOUT elapses.
+    function test_FinalizeRelease_RevertsBeforeTimeout() public {
+        _registerDefaultEscrow();
+        vm.prank(ARBITRATOR);
+        registry.notifyReleasePending(ESCROW_ID);
+        vm.warp(block.timestamp + 48 hours - 1);
+        vm.expectRevert(QKBRegistry.WrongState.selector);
+        vm.prank(ARBITRATOR);
+        registry.finalizeRelease(ESCROW_ID);
+    }
+
+    /// @notice finalizeRelease transitions RELEASE_PENDING -> RELEASED after
+    ///         the Holder cancellation window elapses and emits the event.
+    function test_FinalizeRelease_TransitionsPendingToReleased() public {
+        (address pk,) = _registerDefaultEscrow();
+        vm.prank(ARBITRATOR);
+        registry.notifyReleasePending(ESCROW_ID);
+        vm.warp(block.timestamp + 48 hours);
+        vm.expectEmit(true, true, false, true, address(registry));
+        emit EscrowReleased(ESCROW_ID, ARBITRATOR);
+        vm.prank(ARBITRATOR);
+        registry.finalizeRelease(ESCROW_ID);
+        (,,,, QKBRegistry.EscrowState state) = registry.escrows(pk);
+        assertEq(uint8(state), uint8(QKBRegistry.EscrowState.RELEASED));
+    }
+
+    /// @notice Once RELEASED, revoke reverts `EscrowAlreadyReleased`.
+    function test_FinalizeRelease_BlocksRevoke() public {
+        _registerDefaultEscrow();
+        vm.prank(ARBITRATOR);
+        registry.notifyReleasePending(ESCROW_ID);
+        vm.warp(block.timestamp + 48 hours);
+        vm.prank(ARBITRATOR);
+        registry.finalizeRelease(ESCROW_ID);
+        vm.expectRevert(QKBRegistry.EscrowAlreadyReleased.selector);
+        registry.revokeEscrow(REASON, _proof(), _inputs(NULLIFIER));
+    }
+
+    /// @notice finalizeRelease on an unknown escrowId reverts `UnknownEscrowId`.
+    function test_FinalizeRelease_UnknownEscrowIdReverts() public {
+        vm.expectRevert(QKBRegistry.UnknownEscrowId.selector);
+        vm.prank(ARBITRATOR);
+        registry.finalizeRelease(bytes32(uint256(0xDEADBEEF)));
     }
 }

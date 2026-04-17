@@ -2,6 +2,7 @@
 pragma solidity 0.8.24;
 
 import { QKBVerifier, IGroth16Verifier } from "./QKBVerifier.sol";
+import { IRegistryGate } from "./arbitrators/IRegistryGate.sol";
 
 /// @notice Reference register-then-authenticate registry for QKB-bound
 ///         secp256k1 keys. Phase 2 (Sprint 0) restores the dual-verifier
@@ -16,7 +17,7 @@ import { QKBVerifier, IGroth16Verifier } from "./QKBVerifier.sol";
 ///
 ///         `trustedListRoot` is admin-rotatable state; `register` enforces
 ///         `i.rTL == trustedListRoot` (S0.3 — restored after Phase-1 drop).
-contract QKBRegistry {
+contract QKBRegistry is IRegistryGate {
     /// @dev Domain string for the `expire` signature digest. Must stay in
     ///      lock-step with `test/helpers/SignatureHelpers.sol::EXPIRE_DOMAIN`.
     string private constant EXPIRE_DOMAIN = "QKB_EXPIRE_V1";
@@ -103,6 +104,14 @@ contract QKBRegistry {
     event NullifierRevoked(bytes32 indexed nullifier, address indexed pkAddr, bytes32 reasonHash);
     event EscrowRegistered(address indexed pkAddr, bytes32 indexed escrowId, address arbitrator, uint64 expiry);
     event EscrowRevoked(address indexed pkAddr, bytes32 indexed escrowId, bytes32 reasonHash);
+    /// @dev MVP refinement §0.3 — arbitrator has requested release; a 48 h
+    ///      Holder cancellation window opens from `at`. Named `…Requested`
+    ///      (not bare `…Pending`) to keep the event identifier distinct from
+    ///      the `EscrowReleasePending` error the spec freezes in §0.3.
+    event EscrowReleasePendingRequested(bytes32 indexed escrowId, address indexed arbitrator, uint64 at);
+    /// @dev MVP refinement §0.3 — arbitrator finalised the release after the
+    ///      cancellation window elapsed. Terminal state.
+    event EscrowReleased(bytes32 indexed escrowId, address indexed arbitrator);
 
     error AlreadyBound();
     error BindingTooOld();
@@ -123,6 +132,9 @@ contract QKBRegistry {
     error EscrowExpiryInPast();
     error EscrowReleasePending();
     error EscrowAlreadyReleased();
+    error NotArbitrator();
+    error UnknownEscrowId();
+    error WrongState();
 
     modifier onlyAdmin() {
         if (msg.sender != admin) revert NotAdmin();
@@ -323,6 +335,40 @@ contract QKBRegistry {
         if (e.state == EscrowState.RELEASED)        revert EscrowAlreadyReleased();
         e.state = EscrowState.REVOKED;
         emit EscrowRevoked(pkAddr, e.escrowId, reasonHash);
+    }
+
+    /// @notice Arbitrator-only hook: mark the escrow as RELEASE_PENDING,
+    ///         opening the Holder's 48 h cancellation window. Called by the
+    ///         arbitrator immediately before emitting `Unlock` so that
+    ///         off-chain watchers can always match the on-chain state to the
+    ///         event stream. Reverts `UnknownEscrowId` if the id was never
+    ///         registered, `NotArbitrator` when called by anyone other than
+    ///         the escrow's bound arbitrator, and `WrongState` unless the
+    ///         escrow is currently ACTIVE.
+    function notifyReleasePending(bytes32 escrowId) external {
+        address pkAddr = escrowIdToPkAddr[escrowId];
+        if (pkAddr == address(0)) revert UnknownEscrowId();
+        EscrowEntry storage e = escrows[pkAddr];
+        if (msg.sender != e.arbitrator) revert NotArbitrator();
+        if (e.state != EscrowState.ACTIVE) revert WrongState();
+        e.state = EscrowState.RELEASE_PENDING;
+        e.releasePendingAt = uint64(block.timestamp);
+        emit EscrowReleasePendingRequested(escrowId, msg.sender, uint64(block.timestamp));
+    }
+
+    /// @notice Arbitrator-only hook: advance the escrow from RELEASE_PENDING
+    ///         to RELEASED once the 48 h Holder cancellation window elapses.
+    ///         Terminal: after this, `revokeEscrow` reverts
+    ///         `EscrowAlreadyReleased`.
+    function finalizeRelease(bytes32 escrowId) external {
+        address pkAddr = escrowIdToPkAddr[escrowId];
+        if (pkAddr == address(0)) revert UnknownEscrowId();
+        EscrowEntry storage e = escrows[pkAddr];
+        if (msg.sender != e.arbitrator) revert NotArbitrator();
+        if (e.state != EscrowState.RELEASE_PENDING) revert WrongState();
+        if (block.timestamp < uint256(e.releasePendingAt) + RELEASE_TIMEOUT) revert WrongState();
+        e.state = EscrowState.RELEASED;
+        emit EscrowReleased(escrowId, msg.sender);
     }
 
     /// @notice Current escrow commitment for a pk, or zero if none / revoked
