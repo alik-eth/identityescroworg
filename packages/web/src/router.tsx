@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitch } from './components/LanguageSwitch';
+import { RoleProvider, RoleSwitcher } from './components/RoleSwitcher';
 import { IndexScreen } from './routes/index';
 import { GenerateScreen } from './routes/generate';
 import { SignScreen } from './routes/sign';
@@ -23,7 +24,7 @@ const STEPS = [
   { to: '/register', key: 'nav.register' },
 ] as const;
 
-function RootLayout() {
+function RootLayoutInner() {
   const { t } = useTranslation();
   return (
     <div className="min-h-screen flex flex-col">
@@ -55,7 +56,10 @@ function RootLayout() {
               </Link>
             ))}
           </nav>
-          <LanguageSwitch />
+          <div className="flex items-center gap-3">
+            <RoleSwitcher />
+            <LanguageSwitch />
+          </div>
         </div>
       </header>
       <main className="flex-1 mx-auto w-full max-w-5xl px-6 py-10">
@@ -65,6 +69,14 @@ function RootLayout() {
         {t('app.footer')}
       </footer>
     </div>
+  );
+}
+
+function RootLayout() {
+  return (
+    <RoleProvider>
+      <RootLayoutInner />
+    </RoleProvider>
   );
 }
 
