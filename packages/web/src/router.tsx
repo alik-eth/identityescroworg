@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { LanguageSwitch } from './components/LanguageSwitch';
+import { RoleProvider, RoleSwitcher } from './components/RoleSwitcher';
 import { IndexScreen } from './routes/index';
 import { GenerateScreen } from './routes/generate';
 import { SignScreen } from './routes/sign';
@@ -15,6 +16,12 @@ import { RegisterScreen } from './routes/register';
 import { EscrowSetupScreen } from './routes/escrowSetup';
 import { EscrowRecoverScreen } from './routes/escrowRecover';
 import { EscrowNotaryScreen } from './routes/escrowNotary';
+import { CustodianLayout } from './routes/custodian';
+import { CustodianIndex } from './routes/custodian.index';
+import { CustodianAgentLayout } from './routes/custodian.$agentId';
+import { CustodianInbox } from './routes/custodian.$agentId.inbox';
+import { CustodianReleases } from './routes/custodian.$agentId.releases';
+import { CustodianKeys } from './routes/custodian.$agentId.keys';
 
 const STEPS = [
   { to: '/generate', key: 'nav.generate' },
@@ -23,7 +30,7 @@ const STEPS = [
   { to: '/register', key: 'nav.register' },
 ] as const;
 
-function RootLayout() {
+function RootLayoutInner() {
   const { t } = useTranslation();
   return (
     <div className="min-h-screen flex flex-col">
@@ -55,7 +62,10 @@ function RootLayout() {
               </Link>
             ))}
           </nav>
-          <LanguageSwitch />
+          <div className="flex items-center gap-3">
+            <RoleSwitcher />
+            <LanguageSwitch />
+          </div>
         </div>
       </header>
       <main className="flex-1 mx-auto w-full max-w-5xl px-6 py-10">
@@ -65,6 +75,14 @@ function RootLayout() {
         {t('app.footer')}
       </footer>
     </div>
+  );
+}
+
+function RootLayout() {
+  return (
+    <RoleProvider>
+      <RootLayoutInner />
+    </RoleProvider>
   );
 }
 
@@ -118,6 +136,48 @@ const escrowNotaryRoute = createRoute({
   component: EscrowNotaryScreen,
 });
 
+const custodianRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/custodian',
+  component: CustodianLayout,
+});
+
+const custodianIndexRoute = createRoute({
+  getParentRoute: () => custodianRoute,
+  path: '/',
+  component: CustodianIndex,
+});
+
+const custodianAgentRoute = createRoute({
+  getParentRoute: () => custodianRoute,
+  path: '$agentId',
+  component: CustodianAgentLayout,
+});
+
+const custodianAgentIndexRoute = createRoute({
+  getParentRoute: () => custodianAgentRoute,
+  path: '/',
+  component: CustodianInbox,
+});
+
+const custodianInboxRoute = createRoute({
+  getParentRoute: () => custodianAgentRoute,
+  path: 'inbox',
+  component: CustodianInbox,
+});
+
+const custodianReleasesRoute = createRoute({
+  getParentRoute: () => custodianAgentRoute,
+  path: 'releases',
+  component: CustodianReleases,
+});
+
+const custodianKeysRoute = createRoute({
+  getParentRoute: () => custodianAgentRoute,
+  path: 'keys',
+  component: CustodianKeys,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   generateRoute,
@@ -127,6 +187,15 @@ const routeTree = rootRoute.addChildren([
   escrowSetupRoute,
   escrowRecoverRoute,
   escrowNotaryRoute,
+  custodianRoute.addChildren([
+    custodianIndexRoute,
+    custodianAgentRoute.addChildren([
+      custodianAgentIndexRoute,
+      custodianInboxRoute,
+      custodianReleasesRoute,
+      custodianKeysRoute,
+    ]),
+  ]),
 ]);
 
 export const router = createRouter({ routeTree });

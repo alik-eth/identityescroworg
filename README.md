@@ -95,6 +95,36 @@ pnpm verify:real-qes binding.qkb.json binding.qkb.json.p7s
 
 The verifier expects the signed `.p7s` alongside the public `.json` binding. Detached CAdES `.p7s` files are git-ignored globally — they are bound to a natural person's legal identity and must never be committed.
 
+### Demo mode (in-browser custodian)
+
+Phase 2 ships a single-SPA demo that exercises the full Holder → Custodian → Recipient/Notary flow against local anvil — no docker-compose agent fleet required. The SPA runs all three pseudo-custodians (`agent-a/b/c`) in the browser via `@qkb/qie-agent/browser`; state persists in `localStorage`.
+
+```bash
+# 1. Bring up anvil + deploy QKBRegistry + AuthorityArbitrator,
+#    pump the manifest to packages/web/public/local.json.
+./scripts/dev-chain.sh
+
+# 2. Run the SPA.
+pnpm -F @qkb/web dev
+#    → http://localhost:5173
+#      · /escrow/setup          (Holder — blue)
+#      · /custodian/agent-a     (Custodian — amber)
+#      · /escrow/notary         (Recipient — emerald)
+
+# 3. When done:
+./scripts/dev-chain.sh stop
+```
+
+The role switcher in the top-right header hops between the three sections. Each role's palette is scoped via `data-role="holder|custodian|recipient"` on `<RoleShell>`; active role persists to `localStorage["qie.demo.role"]`.
+
+To point the same SPA at the real Node agents from `deploy/mock-qtsps/docker-compose.yml` instead of the in-browser ones:
+
+```bash
+VITE_QIE_USE_REAL_HTTP=1 pnpm -F @qkb/web dev
+```
+
+The existing Node agent server + docker-compose fleet remain the path for integration testing and eventual real-QTSP deployment — the in-browser demo does NOT replace them.
+
 ## Deployment
 
 - **Sepolia** is the primary testnet.

@@ -1,4 +1,8 @@
 import { useCallback, useState } from 'react';
+import {
+  getDefaultAgentTransport,
+  type AgentTransport,
+} from '../features/qie/agent-transport';
 
 /**
  * Notary-assisted heir-recovery hook (§0.4 of the QIE MVP refinement plan).
@@ -48,9 +52,14 @@ const DEFAULT_FETCH: FetchLike =
     : () => Promise.reject(new Error('fetch is not available'));
 
 export function useNotaryRecover(
-  options: { fetchImpl?: FetchLike } = {},
+  options: { fetchImpl?: FetchLike; transport?: AgentTransport } = {},
 ): UseNotaryRecoverReturn {
   const fetchImpl = options.fetchImpl ?? DEFAULT_FETCH;
+  const transport: AgentTransport | null = options.transport
+    ? options.transport
+    : options.fetchImpl
+      ? null
+      : getDefaultAgentTransport();
   const [state, setState] = useState<NotaryRecoverState>({
     phase: 'idle',
     shares: [],
@@ -77,27 +86,50 @@ export function useNotaryRecover(
       let wrongState = false;
       try {
         for (const a of input.agents) {
-          // qie-agent grafted `on_behalf_of` onto the existing release route.
-          const url = new URL(`/escrow/${input.escrowId}/release`, a.endpoint).toString();
-          let res: Response;
-          try {
-            res = await fetchImpl(url, {
-              method: 'POST',
-              headers: { 'content-type': 'application/json' },
-              cache: 'no-store',
-              body: JSON.stringify(body),
-            });
-          } catch {
-            failures[a.agent_id] = 'network';
-            continue;
+          let okBody: unknown = null;
+          if (transport) {
+            try {
+              const resp = await transport.release(
+                a.endpoint,
+                input.escrowId,
+                body as Record<string, unknown>,
+              );
+              if (!resp.ok) {
+                failures[a.agent_id] = resp.status ?? 0;
+                if (resp.status === 409) wrongState = true;
+                continue;
+              }
+              okBody = resp.body;
+            } catch {
+              failures[a.agent_id] = 'network';
+              continue;
+            }
+          } else {
+            // qie-agent grafted `on_behalf_of` onto the existing release route.
+            const url = new URL(
+              `/escrow/${input.escrowId}/release`,
+              a.endpoint,
+            ).toString();
+            let res: Response;
+            try {
+              res = await fetchImpl(url, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                cache: 'no-store',
+                body: JSON.stringify(body),
+              });
+            } catch {
+              failures[a.agent_id] = 'network';
+              continue;
+            }
+            if (!res.ok) {
+              failures[a.agent_id] = res.status;
+              if (res.status === 409) wrongState = true;
+              continue;
+            }
+            okBody = (await res.json()) as unknown;
           }
-          if (!res.ok) {
-            failures[a.agent_id] = res.status;
-            if (res.status === 409) wrongState = true;
-            continue;
-          }
-          const j = (await res.json()) as unknown;
-          shares.push({ agent_id: a.agent_id, body: j });
+          shares.push({ agent_id: a.agent_id, body: okBody });
           if (shares.length >= threshold) break;
         }
 
@@ -118,7 +150,7 @@ export function useNotaryRecover(
         });
       }
     },
-    [fetchImpl],
+    [fetchImpl, transport],
   );
 
   return { state, run };
