@@ -1,0 +1,34 @@
+{
+  "app": {
+    "title": "QKB"
+  },
+  "nav": {
+    "home": "Home",
+    "generate": "Generate",
+    "sign": "Sign",
+    "upload": "Upload",
+    "register": "Register"
+  },
+  "lang": {
+    "label": "Language",
+    "en": "English",
+    "uk": "Ukrainian"
+  },
+  "index": {
+    "heading": "Qualified Key Binding",
+    "subheading": "Bind a secp256k1 key to your qualified electronic identity.",
+    "start": "Start a new binding"
+  },
+  "generate": {
+    "heading": "Generate binding"
+  },
+  "sign": {
+    "heading": "Sign binding"
+  },
+  "upload": {
+    "heading": "Upload signed binding"
+  },
+  "register": {
+    "heading": "Register on-chain"
+  }
+}
