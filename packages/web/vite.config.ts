@@ -13,10 +13,4 @@ export default defineConfig({
   worker: {
     format: 'es',
   },
-  test: {
-    environment: 'jsdom',
-    globals: true,
-    include: ['tests/unit/**/*.test.{ts,tsx}'],
-    setupFiles: ['./tests/setup.ts'],
-  },
 });
