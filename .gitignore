@@ -43,3 +43,9 @@ pnpm-lock.yaml
 # Real-QES fixtures live under fixtures/ once promoted by the team lead.
 /binding.qkb.json
 /binding.qkb.json.p7s
+
+# Detached CAdES/PKCS#7 signatures contain personal data of the signer
+# (subject CN, issuer attributes, signing-time). Globally ignored —
+# .p7s is NEVER committed on any branch. Public binding .json files
+# (no PII) may be committed under fixtures/qes/.
+*.p7s
