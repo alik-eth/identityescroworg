@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { basename, join, resolve } from 'node:path';
 
 // circom_tester ships untyped; require for clean interop.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -37,10 +37,16 @@ export async function compile(
   const hash = createHash('sha256').update(src).digest('hex').slice(0, 16);
   const outDir = join(cacheRoot, hash);
   mkdirSync(outDir, { recursive: true });
+  // circom_tester writes `<circuit>_js/` under outDir on compile. If the
+  // source hash already has a populated cache, skip recompile; otherwise
+  // force it. Lets unchanged source run at cache speed without manual flags
+  // while still handling a fresh cache key correctly.
+  const wasmDir = join(outDir, `${basename(fullPath, '.circom')}_js`);
+  const cached = existsSync(wasmDir);
 
   return circomTester.wasm(fullPath, {
     output: outDir,
-    recompile: options.recompile ?? false,
+    recompile: options.recompile ?? !cached,
     prime: 'bn128',
     include: [repoCircuitsDir, nodeModulesDir],
   });
