@@ -15,4 +15,14 @@ export {
   type TrustedCasFile,
   type VerifyOpts,
 } from "./qes-verify.js";
+export {
+  makeEscrowStateReader,
+  type MakeEscrowStateReaderOpts,
+} from "./escrow-state-reader.js";
+export type {
+  EscrowState as OnChainEscrowState,
+  EscrowStateReader,
+  NotaryVerifyResult,
+  NotaryVerify,
+} from "./context.js";
 export * from "./wire.js";
