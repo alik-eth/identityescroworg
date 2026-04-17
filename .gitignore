@@ -38,3 +38,8 @@ pnpm-lock.yaml
 .env
 .env.local
 !.env.example
+
+# Local QKB artifacts produced by `pnpm binding:admin` and similar.
+# Real-QES fixtures live under fixtures/ once promoted by the team lead.
+/binding.qkb.json
+/binding.qkb.json.p7s
