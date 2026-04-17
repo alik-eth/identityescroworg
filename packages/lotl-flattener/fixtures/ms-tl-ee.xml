@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TrustServiceStatusList xmlns="http://uri.etsi.org/02231/v2#">
+  <SchemeInformation>
+    <TSLType>http://uri.etsi.org/TrstSvc/TrustedList/TSLType/EUgeneric</TSLType>
+    <SchemeTerritory>EE</SchemeTerritory>
+  </SchemeInformation>
+  <TrustServiceProviderList>
+    <TrustServiceProvider>
+      <TSPInformation>
+        <TSPName><Name xml:lang="en">SK ID Solutions AS</Name></TSPName>
+      </TSPInformation>
+      <TSPServices>
+        <TSPService>
+          <ServiceInformation>
+            <ServiceTypeIdentifier>http://uri.etsi.org/TrstSvc/Svctype/CA/QC</ServiceTypeIdentifier>
+            <ServiceName><Name xml:lang="en">EE Certification Centre Root CA</Name></ServiceName>
+            <ServiceDigitalIdentity>
+              <DigitalId>
+                <X509Certificate>MIIB+TCCAWICAQEwDQYJKoZIhvcNAQEFBQAwgZIxCzAJBgNVBAYTAkVFMRcwFQYDVQQKDA5TSyBJRCBTb2x1dGlvbnMxIDAeBgNVBAMMF0VFIENlcnRpZmljYXRpb24gQ2VudHJlMSwwKgYJKoZIhvcNAQkBFh1zdXBwb3J0QHNraWRzb2x1dGlvbnMuZXUuc2FtcGxlMB4XDTIwMDEwMTAwMDAwMFoXDTMwMDEwMTAwMDAwMFowgZIxCzAJBgNVBAYTAkVFMRcwFQYDVQQKDA5TSyBJRCBTb2x1dGlvbnMxIDAeBgNVBAMMF0VFIENlcnRpZmljYXRpb24gQ2VudHJlMSwwKgYJKoZIhvcNAQkBFh1zdXBwb3J0QHNraWRzb2x1dGlvbnMuZXUuc2FtcGxlMA0GCSqGSIb3DQEBBQUAA0sAMEgCQQDfakeCAQ==</X509Certificate>
+              </DigitalId>
+            </ServiceDigitalIdentity>
+            <ServiceStatus>http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/granted</ServiceStatus>
+            <StatusStartingTime>2020-01-01T00:00:00Z</StatusStartingTime>
+          </ServiceInformation>
+        </TSPService>
+        <TSPService>
+          <ServiceInformation>
+            <ServiceTypeIdentifier>http://uri.etsi.org/TrstSvc/Svctype/unspecified</ServiceTypeIdentifier>
+            <ServiceName><Name xml:lang="en">SK Timestamping Service</Name></ServiceName>
+            <ServiceDigitalIdentity>
+              <DigitalId>
+                <X509Certificate>MIIB+TCCAWICAQIwDQYJKoZIhvcNAQEFBQAwgZIxCzAJBgNVBAYTAkVFMRcwFQYDVQQKDA5TSyBJRCBTb2x1dGlvbnMxIDAeBgNVBAMMF1NLIFRpbWVzdGFtcGluZyBTZXJ2aWNlMSwwKgYJKoZIhvcNAQkBFh1zdXBwb3J0QHNraWRzb2x1dGlvbnMuZXUuc2FtcGxlMB4XDTIxMDEwMTAwMDAwMFoXDTMxMDEwMTAwMDAwMFowgZIxCzAJBgNVBAYTAkVFMRcwFQYDVQQKDA5TSyBJRCBTb2x1dGlvbnMxIDAeBgNVBAMMF1NLIFRpbWVzdGFtcGluZyBTZXJ2aWNlMSwwKgYJKoZIhvcNAQkBFh1zdXBwb3J0QHNraWRzb2x1dGlvbnMuZXUuc2FtcGxlMA0GCSqGSIb3DQEBBQUAA0sAMEgCQQDfbWtl</X509Certificate>
+              </DigitalId>
+            </ServiceDigitalIdentity>
+            <ServiceStatus>http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/granted</ServiceStatus>
+            <StatusStartingTime>2021-01-01T00:00:00Z</StatusStartingTime>
+          </ServiceInformation>
+        </TSPService>
+      </TSPServices>
+    </TrustServiceProvider>
+  </TrustServiceProviderList>
+</TrustServiceStatusList>

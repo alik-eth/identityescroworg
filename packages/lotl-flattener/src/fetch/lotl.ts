@@ -1,3 +1,5 @@
+// Strips the ETSI TS 119 612 namespace prefix so element paths stay flat;
+// production LOTL parsers do the same.
 import { XMLParser } from 'fast-xml-parser';
 
 export interface LotlPointer {
