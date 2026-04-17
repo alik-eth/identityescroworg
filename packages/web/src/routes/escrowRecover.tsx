@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useEscrowRecover } from '../features/qie/use-escrow-recover';
 
 /**
  * QIE `/escrow/recover` — recovery flow for the original holder.
@@ -11,6 +12,10 @@ import { useTranslation } from 'react-i18next';
 export function EscrowRecoverScreen() {
   const { t } = useTranslation();
   const [isSelfMode, setIsSelfMode] = useState<boolean | null>(null);
+  const [escrowId, setEscrowId] = useState('');
+  const [endpoint, setEndpoint] = useState('');
+  const [unlockTx, setUnlockTx] = useState('');
+  const { state: recoverState, recover } = useEscrowRecover();
 
   useEffect(() => {
     const params = new URLSearchParams(
@@ -68,6 +73,8 @@ export function EscrowRecoverScreen() {
         {t('escrow.recover.escrowIdLabel')}
         <input
           type="text"
+          value={escrowId}
+          onChange={(e) => setEscrowId(e.target.value)}
           className="w-full bg-slate-800 font-mono text-xs p-2 rounded mt-1"
           aria-label={t('escrow.recover.escrowIdLabel')}
         />
@@ -76,6 +83,8 @@ export function EscrowRecoverScreen() {
         {t('escrow.recover.agentEndpointLabel')}
         <input
           type="text"
+          value={endpoint}
+          onChange={(e) => setEndpoint(e.target.value)}
           className="w-full bg-slate-800 font-mono text-xs p-2 rounded mt-1"
           aria-label={t('escrow.recover.agentEndpointLabel')}
         />
@@ -84,6 +93,8 @@ export function EscrowRecoverScreen() {
         {t('escrow.recover.unlockTxLabel')}
         <input
           type="text"
+          value={unlockTx}
+          onChange={(e) => setUnlockTx(e.target.value)}
           className="w-full bg-slate-800 font-mono text-xs p-2 rounded mt-1"
           aria-label={t('escrow.recover.unlockTxLabel')}
         />
@@ -98,9 +109,32 @@ export function EscrowRecoverScreen() {
           aria-label={t('escrow.recover.recipientSkLabel')}
         />
       </label>
-      <button className="bg-emerald-500/10 border border-emerald-500/30 px-4 py-2 rounded">
-        {t('escrow.recover.run')}
+      <button
+        disabled={!escrowId || !endpoint || recoverState.phase === 'collecting'}
+        onClick={() =>
+          recover({
+            escrowId: (escrowId.startsWith('0x') ? escrowId : `0x${escrowId}`) as `0x${string}`,
+            threshold: 1,
+            agents: [{ agent_id: 'primary', endpoint }],
+            body: { arbitrator_unlock_tx: unlockTx },
+          })
+        }
+        className="bg-emerald-500/10 border border-emerald-500/30 px-4 py-2 rounded disabled:opacity-50"
+      >
+        {recoverState.phase === 'collecting'
+          ? t('escrow.recover.running')
+          : t('escrow.recover.run')}
       </button>
+      {recoverState.phase === 'done' && (
+        <p className="text-emerald-300 text-sm" data-testid="recover-status">
+          {t('escrow.recover.done')}
+        </p>
+      )}
+      {recoverState.phase === 'error' && (
+        <p className="text-red-400 text-sm" data-testid="recover-error">
+          {recoverState.error}
+        </p>
+      )}
     </section>
   );
 }
