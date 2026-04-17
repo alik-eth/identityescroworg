@@ -6,7 +6,9 @@ import { console2 } from "forge-std/console2.sol";
 import { QKBRegistry } from "../src/QKBRegistry.sol";
 import { IGroth16Verifier } from "../src/QKBVerifier.sol";
 import { StubGroth16Verifier } from "../src/verifier/StubGroth16Verifier.sol";
-import { QKBGroth16Verifier } from "../src/verifier/QKBGroth16Verifier.sol";
+// QKBGroth16Verifier is re-introduced as two 14-signal variants in Sprint 0 S0.6
+// (one RSA, one ECDSA). Until circuits-eng pumps them, the deploy script only
+// supports the stub verifier path.
 
 /// @notice Deploy QKBRegistry wired to the ECDSA-leaf Groth16 verifier.
 ///
@@ -50,13 +52,12 @@ contract Deploy is Script {
         vm.startBroadcast(adminPriv);
 
         if (verifierAddr == address(0)) {
-            if (useStub) {
-                verifierAddr = address(new StubGroth16Verifier());
-                console2.log("Deployed StubGroth16Verifier (CI only):", verifierAddr);
-            } else {
-                verifierAddr = address(new QKBGroth16Verifier());
-                console2.log("Deployed real QKBGroth16Verifier:", verifierAddr);
-            }
+            // Sprint 0 transitional: real 14-signal verifier contracts are
+            // pending circuits-eng ceremony re-run. Stub-only path for CI
+            // and anvil dry-runs; S0.6 restores the dual real-verifier path.
+            require(useStub, "Deploy: real verifier not yet available in Sprint 0 (set USE_STUB_VERIFIER=true or pass ECDSA_VERIFIER_ADDR)");
+            verifierAddr = address(new StubGroth16Verifier());
+            console2.log("Deployed StubGroth16Verifier (CI only):", verifierAddr);
         }
 
         registry = new QKBRegistry(IGroth16Verifier(verifierAddr), initialRoot, admin);

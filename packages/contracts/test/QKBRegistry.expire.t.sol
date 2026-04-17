@@ -37,12 +37,14 @@ contract QKBRegistryExpireTest is Test {
     function _registerG() internal returns (address pkAddr) {
         verifier.setAccept(true);
         QKBVerifier.Inputs memory i;
-        i.leafSpkiCommit = uint256(keccak256("stub-leaf-commit"));
         i.pkX = _splitToLimbsLE(GX);
         i.pkY = _splitToLimbsLE(GY);
         i.ctxHash = bytes32(uint256(0xA1));
+        i.rTL = INITIAL_ROOT;
         i.declHash = DeclarationHashes.EN;
         i.timestamp = uint64(block.timestamp);
+        i.algorithmTag = 1;
+        i.nullifier = bytes32(uint256(0xBEEF1));
         QKBVerifier.Proof memory p;
         registry.register(p, i);
         return vm.addr(BOUND_PRIV);

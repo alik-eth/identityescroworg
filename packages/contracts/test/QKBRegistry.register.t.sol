@@ -36,12 +36,14 @@ contract QKBRegistryRegisterTest is Test {
     }
 
     function _validInputs() internal view returns (QKBVerifier.Inputs memory i) {
-        i.leafSpkiCommit = uint256(keccak256("stub-leaf-commit"));
         i.pkX = _splitToLimbsLE(GX);
         i.pkY = _splitToLimbsLE(GY);
         i.ctxHash = CTX_HASH;
+        i.rTL = INITIAL_ROOT;
         i.declHash = DeclarationHashes.EN;
         i.timestamp = uint64(block.timestamp);
+        i.algorithmTag = 1; // ECDSA
+        i.nullifier = bytes32(uint256(0xBEEF));
     }
 
     function _zeroProof() internal pure returns (QKBVerifier.Proof memory p) {}
