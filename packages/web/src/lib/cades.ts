@@ -239,6 +239,40 @@ function classifyLeaf(
   throw new QkbError('cades.parse', { reason: 'leaf-spki-alg', oid: spkiAlg });
 }
 
+/**
+ * Standalone algorithm detection from a leaf cert DER (spec §14.1,
+ * orchestration §0 S0.2). Used by consumers that have a parsed cert but
+ * not a full CMS — e.g., the QIE recovery path that reconstructs a
+ * binding from `R` and needs to route to the right prover variant.
+ *
+ * Throws QkbError('cades.parse') with a typed reason when the SPKI
+ * algorithm is neither rsaEncryption nor an EC key on P-256.
+ */
+export function detectAlgorithmTag(leafCertDer: Uint8Array): AlgorithmTag {
+  let cert: Certificate;
+  try {
+    const asn = asn1js.fromBER(bytesToArrayBuffer(leafCertDer));
+    if (asn.offset === -1) throw new Error('asn1');
+    cert = new Certificate({ schema: asn.result });
+  } catch (cause) {
+    throw new QkbError('cades.parse', { reason: 'cert-asn1', cause: String(cause) });
+  }
+  const spkiAlg = cert.subjectPublicKeyInfo.algorithm.algorithmId;
+  if (spkiAlg === OID_RSA) return ALGORITHM_TAG_RSA;
+  if (spkiAlg === OID_EC_PUBLIC_KEY) {
+    const curveParam = cert.subjectPublicKeyInfo.algorithm.algorithmParams;
+    const curveOid =
+      curveParam instanceof asn1js.ObjectIdentifier
+        ? curveParam.valueBlock.toString()
+        : undefined;
+    if (curveOid !== OID_P256) {
+      throw new QkbError('cades.parse', { reason: 'ecdsa-curve', curve: curveOid });
+    }
+    return ALGORITHM_TAG_ECDSA;
+  }
+  throw new QkbError('cades.parse', { reason: 'leaf-spki-alg', oid: spkiAlg });
+}
+
 function encodeSignedAttrsForSignature(signer: SignerInfo): Uint8Array {
   if (!signer.signedAttrs) {
     throw new QkbError('cades.parse', { reason: 'missing-signed-attrs' });
