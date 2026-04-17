@@ -1,10 +1,7 @@
 import { useTranslation } from 'react-i18next';
+import { PhaseCard } from '../components/PhaseCard';
 
 export function SignScreen() {
   const { t } = useTranslation();
-  return (
-    <section>
-      <h2>{t('sign.heading')}</h2>
-    </section>
-  );
+  return <PhaseCard step={2} total={4} accent="blue" title={t('sign.heading')} />;
 }

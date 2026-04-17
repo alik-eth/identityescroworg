@@ -1,10 +1,9 @@
 import { useTranslation } from 'react-i18next';
+import { PhaseCard } from '../components/PhaseCard';
 
 export function GenerateScreen() {
   const { t } = useTranslation();
   return (
-    <section>
-      <h2>{t('generate.heading')}</h2>
-    </section>
+    <PhaseCard step={1} total={4} accent="emerald" title={t('generate.heading')} />
   );
 }
