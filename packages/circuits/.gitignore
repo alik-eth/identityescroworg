@@ -1,0 +1,8 @@
+build/
+dist/
+node_modules/
+ceremony/ptau/
+*.r1cs
+*.wasm
+*.zkey
+*.sym
