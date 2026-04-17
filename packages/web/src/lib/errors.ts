@@ -40,3 +40,40 @@ export class BundleError extends QkbError {
     this.name = 'BundleError';
   }
 }
+
+export const ALL_ERROR_CODES: readonly ErrorCode[] = [
+  'binding.size',
+  'binding.field',
+  'binding.jcs',
+  'cades.parse',
+  'qes.sigInvalid',
+  'qes.digestMismatch',
+  'qes.certExpired',
+  'qes.unknownCA',
+  'qes.wrongAlgorithm',
+  'witness.offsetNotFound',
+  'witness.fieldTooLong',
+  'prover.wasmOOM',
+  'prover.cancelled',
+  'bundle.malformed',
+  'registry.rootMismatch',
+  'registry.alreadyBound',
+  'registry.ageExceeded',
+];
+
+export interface I18nLike {
+  t: (key: string) => string;
+}
+
+export function localizeError(
+  err: unknown,
+  i18n: I18nLike,
+  fallback = 'Unknown error',
+): string {
+  if (err instanceof QkbError) {
+    const localized = i18n.t(err.messageKey);
+    return localized && localized !== err.messageKey ? localized : err.code;
+  }
+  if (err instanceof Error) return err.message || fallback;
+  return fallback;
+}

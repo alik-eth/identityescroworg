@@ -30,5 +30,39 @@
   },
   "register": {
     "heading": "Register on-chain"
+  },
+  "errors": {
+    "binding": {
+      "size": "Binding statement is larger than the protocol limit.",
+      "field": "Binding contains an invalid field value.",
+      "jcs": "Binding could not be canonicalized as JCS.",
+      "parse": "Binding could not be parsed."
+    },
+    "cades": {
+      "parse": "The detached signature could not be parsed."
+    },
+    "qes": {
+      "sigInvalid": "The qualified electronic signature is not valid.",
+      "digestMismatch": "The signed digest does not match the binding.",
+      "certExpired": "The signing certificate is not valid for the binding timestamp.",
+      "unknownCA": "The signing authority is not in the EU trusted list.",
+      "wrongAlgorithm": "The signature algorithm is not supported in this version."
+    },
+    "witness": {
+      "offsetNotFound": "Could not locate a required field inside the binding.",
+      "fieldTooLong": "A field in the binding exceeds the circuit length limit."
+    },
+    "prover": {
+      "wasmOOM": "The in-browser prover ran out of memory.",
+      "cancelled": "Proof generation was cancelled."
+    },
+    "bundle": {
+      "malformed": "The QKB bundle file is malformed."
+    },
+    "registry": {
+      "rootMismatch": "The trusted-list root does not match the registry on-chain.",
+      "alreadyBound": "This key is already bound on-chain.",
+      "ageExceeded": "The binding timestamp is too old to register."
+    }
   }
 }
