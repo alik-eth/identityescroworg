@@ -1,0 +1,19 @@
+{
+  "variant": "ecdsa",
+  "wasmUrl": "https://prove.identityescrow.org/QKBPresentationEcdsaLeaf.wasm",
+  "zkeyUrl": "https://prove.identityescrow.org/qkb.zkey",
+  "wasmSha256": "d9ee0881a9f9ae0f82881a5c7a13c4e466468acb5967e41071b12903f5c2a8b0",
+  "zkeySha256": "015e61e0737eaa4d5e5de1db5c2cc86c9dcca8504a9a3b480f7d67a2bf9358fe",
+  "wasmBytes": 42582216,
+  "zkeyBytes": 4419368711,
+  "uploadedAt": "2026-04-17T14:31:56Z",
+  "ceremony": {
+    "circuit": "QKBPresentationEcdsaLeaf",
+    "constraints": 7633285,
+    "wires": 7589268,
+    "publicSignals": 12,
+    "powersOfTau": 23,
+    "contributor": "qkb-dev-fly-1",
+    "contributionHash": "bdbe80e803a9b81260517d55c7c9c133618eaaa1ebf60ed70c7d2117da723416 8392c68daa09ee5182ecd3ab818b5d5800ad2303149eee812ff580f1625a1c3b"
+  }
+}
