@@ -1,0 +1,141 @@
+# docker-compose.yml — three-agent local E2E harness (Q8).
+#
+# Bring-up order (enforced via `depends_on` with healthchecks):
+#
+#   anvil (healthy)
+#     ↳ deployer: one-shot forge runner; writes /shared/local.json
+#       ↳ agent-a, agent-b, agent-c: each mount /shared/local.json read-only
+#                                    and the gitignored .keys.json key file.
+#
+# Host port map (container port is always 8080):
+#   agent-a → 8080
+#   agent-b → 8081
+#   agent-c → 8082
+#   anvil   → 8545
+#
+# Build context for the agent image is the monorepo root (two levels up).
+# `pnpm -F @qkb/qie-core build && pnpm -F @qkb/qie-agent build` MUST run on
+# the host first — the Dockerfile does not build from source.
+
+services:
+  anvil:
+    image: ghcr.io/foundry-rs/foundry:v1.0.0
+    entrypoint: ["anvil"]
+    command: [
+      "--host", "0.0.0.0",
+      "--chain-id", "31337",
+      "--accounts", "10",
+      "--balance", "1000",
+      "--block-time", "1",
+    ]
+    ports: ["8545:8545"]
+    healthcheck:
+      test: ["CMD-SHELL", "cast block-number --rpc-url http://127.0.0.1:8545 > /dev/null 2>&1"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 2s
+
+  deployer:
+    image: ghcr.io/foundry-rs/foundry:v1.0.0
+    # Read the mounted script and pipe to sh — avoids exec-bit + SELinux
+    # friction on rootless podman installs while still running the same
+    # contents.
+    entrypoint: ["sh", "-c", "sh /deploy.sh"]
+    working_dir: /contracts
+    environment:
+      ANVIL_RPC: "http://anvil:8545"
+      # Anvil default first account — DEV ONLY, do not reuse off-host.
+      DEV_ADMIN_PRIVATE_KEY: "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+      DEV_ADMIN_ADDRESS: "0xf39Fd6e51aad88F6F4ce6aB8827279cfFFb92266"
+      ROOT_TL: "0x0000000000000000000000000000000000000000000000000000000000000000"
+      USE_STUB_VERIFIER: "true"
+    volumes:
+      - ../../packages/contracts:/contracts:ro,z
+      - ./deploy.sh:/deploy.sh:ro,z
+      - shared:/shared:z
+    depends_on:
+      anvil:
+        condition: service_healthy
+    restart: "no"
+
+  agent-a:
+    image: qie-agent:local
+    build:
+      context: ../..
+      dockerfile: deploy/mock-qtsps/Dockerfile.agent
+    environment:
+      QIE_AGENT_KEYS_PATH: /keys/agent-a.keys.json
+      QIE_AGENT_STORAGE: /data/escrow
+      QIE_AGENT_PORT: "8080"
+      QIE_RPC_URL: "http://anvil:8545"
+      QIE_LOCAL_ADDRESSES_PATH: /shared/local.json
+      STATE_READER_DISABLED: "1"
+    volumes:
+      - ./agents:/keys:ro,z
+      - shared:/shared:ro,z
+      - agent-a-data:/data
+    ports: ["8080:8080"]
+    depends_on:
+      deployer:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/.well-known/qie-agent.json >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 3s
+
+  agent-b:
+    image: qie-agent:local
+    environment:
+      QIE_AGENT_KEYS_PATH: /keys/agent-b.keys.json
+      QIE_AGENT_STORAGE: /data/escrow
+      QIE_AGENT_PORT: "8080"
+      QIE_RPC_URL: "http://anvil:8545"
+      QIE_LOCAL_ADDRESSES_PATH: /shared/local.json
+      STATE_READER_DISABLED: "1"
+    volumes:
+      - ./agents:/keys:ro,z
+      - shared:/shared:ro,z
+      - agent-b-data:/data
+    ports: ["8081:8080"]
+    depends_on:
+      agent-a:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/.well-known/qie-agent.json >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 3s
+
+  agent-c:
+    image: qie-agent:local
+    environment:
+      QIE_AGENT_KEYS_PATH: /keys/agent-c.keys.json
+      QIE_AGENT_STORAGE: /data/escrow
+      QIE_AGENT_PORT: "8080"
+      QIE_RPC_URL: "http://anvil:8545"
+      QIE_LOCAL_ADDRESSES_PATH: /shared/local.json
+      STATE_READER_DISABLED: "1"
+    volumes:
+      - ./agents:/keys:ro,z
+      - shared:/shared:ro,z
+      - agent-c-data:/data
+    ports: ["8082:8080"]
+    depends_on:
+      agent-a:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/.well-known/qie-agent.json >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+      start_period: 3s
+
+volumes:
+  shared: {}
+  agent-a-data: {}
+  agent-b-data: {}
+  agent-c-data: {}

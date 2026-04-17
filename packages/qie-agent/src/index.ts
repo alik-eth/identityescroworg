@@ -7,5 +7,22 @@ export type { StorageAdapter, EscrowRecord, EscrowState } from "./storage/types.
 export { ReplayGuard } from "./replay.js";
 export { signAck, ackPublicKey } from "./ack.js";
 export { startRevocationWatcher, type RevocationLog, type WatcherOpts } from "./watcher.js";
-export { qesVerifyNode } from "./qes-verify.js";
+export {
+  qesVerifyNode,
+  verifyCadesNode,
+  makeCadesVerifiers,
+  loadTrustedCasFromPath,
+  type TrustedCasFile,
+  type VerifyOpts,
+} from "./qes-verify.js";
+export {
+  makeEscrowStateReader,
+  type MakeEscrowStateReaderOpts,
+} from "./escrow-state-reader.js";
+export type {
+  EscrowState as OnChainEscrowState,
+  EscrowStateReader,
+  NotaryVerifyResult,
+  NotaryVerify,
+} from "./context.js";
 export * from "./wire.js";

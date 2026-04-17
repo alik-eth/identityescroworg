@@ -1,0 +1,39 @@
+# Scoped .dockerignore for Dockerfile.agent. Overrides the repo-root
+# .dockerignore when `docker build -f deploy/mock-qtsps/Dockerfile.agent`
+# is used — the agent image legitimately needs packages/qie-{core,agent}/
+# dist + node_modules, unlike the web image.
+
+.git
+.github
+.vscode
+.idea
+
+# Source packages we don't ship in the agent image.
+packages/web
+packages/contracts
+packages/circuits
+packages/lotl-flattener
+packages/qie-cli
+
+# Build artifacts from other packages.
+packages/web/node_modules
+packages/web/dist
+packages/contracts/node_modules
+packages/contracts/out
+packages/contracts/cache
+packages/circuits/node_modules
+packages/circuits/build
+packages/lotl-flattener/node_modules
+packages/lotl-flattener/dist
+packages/qie-cli/node_modules
+packages/qie-cli/dist
+
+# Local env files.
+.env
+.env.local
+*.tar.gz
+
+# Keep repo-root docs/ and tests/ out of the image.
+docs
+packages/*/test
+packages/*/tests
