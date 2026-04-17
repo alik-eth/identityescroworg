@@ -60,17 +60,31 @@ contract QKBRegistry {
     mapping(bytes32 => address) public nullifierToPk;
     mapping(bytes32 => bytes32) public revokedNullifiers;
 
-    /// @dev QIE escrow state (spec §2, §14). Keyed by `pkAddr` — the same
-    ///      key space the Phase-1 binding table uses. Each binding has at
-    ///      most one escrow attached at a time.
+    /// @dev QIE escrow state machine (MVP refinement §0.3). Replaces the
+    ///      earlier `revoked: bool` with an explicit enum so the contract
+    ///      can model the release-pending window and distinguish revoked
+    ///      from released. Keyed by `pkAddr` — the same key space the
+    ///      Phase-1 binding table uses. Each binding has at most one
+    ///      escrow attached at a time.
+    enum EscrowState { NONE, ACTIVE, RELEASE_PENDING, RELEASED, REVOKED }
+
+    /// @dev Holder cancellation window on a RELEASE_PENDING escrow. The
+    ///      arbitrator may `finalizeRelease` only after this timeout
+    ///      elapses from the pending transition.
+    uint64 public constant RELEASE_TIMEOUT = 48 hours;
+
     struct EscrowEntry {
         bytes32 escrowId;
         address arbitrator;
         uint64 expiry;
-        bool revoked;
+        uint64 releasePendingAt; // 0 unless state == RELEASE_PENDING
+        EscrowState state;
     }
 
     mapping(address => EscrowEntry) public escrows;
+    /// @dev Reverse lookup so an arbitrator holding only `escrowId` can
+    ///      resolve the Holder's pkAddr for the state-machine hooks.
+    mapping(bytes32 => address) public escrowIdToPkAddr;
 
     event BindingRegistered(
         address indexed pkAddr,
@@ -107,6 +121,8 @@ contract QKBRegistry {
     error NoEscrow();
     error EscrowAlreadyRevoked();
     error EscrowExpiryInPast();
+    error EscrowReleasePending();
+    error EscrowAlreadyReleased();
 
     modifier onlyAdmin() {
         if (msg.sender != admin) revert NotAdmin();
@@ -277,14 +293,16 @@ contract QKBRegistry {
         if (expiry <= block.timestamp) revert EscrowExpiryInPast();
 
         address pkAddr = _authorizeBinding(p, i);
-        if (escrows[pkAddr].escrowId != bytes32(0)) revert EscrowExists();
+        if (escrows[pkAddr].state != EscrowState.NONE) revert EscrowExists();
 
         escrows[pkAddr] = EscrowEntry({
             escrowId: escrowId,
             arbitrator: arbitrator,
             expiry: expiry,
-            revoked: false
+            releasePendingAt: 0,
+            state: EscrowState.ACTIVE
         });
+        escrowIdToPkAddr[escrowId] = pkAddr;
         emit EscrowRegistered(pkAddr, escrowId, arbitrator, expiry);
     }
 
@@ -299,9 +317,11 @@ contract QKBRegistry {
     ) external {
         address pkAddr = _authorizeBinding(p, i);
         EscrowEntry storage e = escrows[pkAddr];
-        if (e.escrowId == bytes32(0)) revert NoEscrow();
-        if (e.revoked) revert EscrowAlreadyRevoked();
-        e.revoked = true;
+        if (e.state == EscrowState.NONE)            revert NoEscrow();
+        if (e.state == EscrowState.REVOKED)         revert EscrowAlreadyRevoked();
+        if (e.state == EscrowState.RELEASE_PENDING) revert EscrowReleasePending();
+        if (e.state == EscrowState.RELEASED)        revert EscrowAlreadyReleased();
+        e.state = EscrowState.REVOKED;
         emit EscrowRevoked(pkAddr, e.escrowId, reasonHash);
     }
 
@@ -310,16 +330,14 @@ contract QKBRegistry {
     ///         the boolean path.
     function escrowCommitment(address pkAddr) external view returns (bytes32) {
         EscrowEntry storage e = escrows[pkAddr];
-        if (e.escrowId == bytes32(0)) return bytes32(0);
-        if (e.revoked) return bytes32(0);
+        if (e.state != EscrowState.ACTIVE) return bytes32(0);
         if (e.expiry <= block.timestamp) return bytes32(0);
         return e.escrowId;
     }
 
     function isEscrowActive(address pkAddr) external view returns (bool) {
         EscrowEntry storage e = escrows[pkAddr];
-        if (e.escrowId == bytes32(0)) return false;
-        if (e.revoked) return false;
+        if (e.state != EscrowState.ACTIVE) return false;
         if (e.expiry <= block.timestamp) return false;
         return true;
     }

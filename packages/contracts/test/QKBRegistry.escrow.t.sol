@@ -195,4 +195,46 @@ contract QKBRegistryEscrowTest is Test {
         vm.expectRevert(QKBRegistry.InvalidProof.selector);
         registry.revokeEscrow(REASON, _proof(), _inputs(NULLIFIER));
     }
+
+    // ---- C1: state enum + reverse id mapping --------------------------------
+
+    /// @notice State machine default — an unregistered pkAddr has NONE state
+    ///         and all-zero EscrowEntry fields (MVP refinement §0.3).
+    function test_EscrowState_EnumDefault() public {
+        (bytes32 id, address arb, uint64 exp, uint64 pendingAt, QKBRegistry.EscrowState state)
+            = registry.escrows(address(0xdead));
+        assertEq(id, bytes32(0));
+        assertEq(arb, address(0));
+        assertEq(exp, 0);
+        assertEq(pendingAt, 0);
+        assertEq(uint8(state), uint8(QKBRegistry.EscrowState.NONE));
+    }
+
+    /// @notice Reverse escrowId → pkAddr lookup is initially empty (MVP §0.3).
+    function test_EscrowIdToPkAddr_InitiallyZero() public {
+        assertEq(registry.escrowIdToPkAddr(bytes32(uint256(1))), address(0));
+    }
+
+    /// @notice registerEscrow populates `escrowIdToPkAddr` reverse map and
+    ///         sets state to ACTIVE (no releasePendingAt).
+    function test_registerEscrow_populatesReverseMapAndActiveState() public {
+        uint64 expiry = uint64(block.timestamp + 365 days);
+        address pk = _pkAddr();
+        registry.registerEscrow(ESCROW_ID, ARBITRATOR, expiry, _proof(), _inputs(NULLIFIER));
+
+        assertEq(registry.escrowIdToPkAddr(ESCROW_ID), pk);
+        (,,, uint64 pendingAt, QKBRegistry.EscrowState state) = registry.escrows(pk);
+        assertEq(uint8(state), uint8(QKBRegistry.EscrowState.ACTIVE));
+        assertEq(pendingAt, 0);
+    }
+
+    /// @notice revokeEscrow flips state to REVOKED (not a `revoked` bool).
+    function test_revokeEscrow_setsStateRevoked() public {
+        uint64 expiry = uint64(block.timestamp + 365 days);
+        address pk = _pkAddr();
+        registry.registerEscrow(ESCROW_ID, ARBITRATOR, expiry, _proof(), _inputs(NULLIFIER));
+        registry.revokeEscrow(REASON, _proof(), _inputs(NULLIFIER));
+        (,,,, QKBRegistry.EscrowState state) = registry.escrows(pk);
+        assertEq(uint8(state), uint8(QKBRegistry.EscrowState.REVOKED));
+    }
 }
