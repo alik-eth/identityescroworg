@@ -117,7 +117,8 @@
     "registry": {
       "rootMismatch": "The trusted-list root does not match the registry on-chain.",
       "alreadyBound": "This key is already bound on-chain.",
-      "ageExceeded": "The binding timestamp is too old to register."
+      "ageExceeded": "The binding timestamp is too old to register.",
+      "nullifierUsed": "This identity has already been registered for this context. Use a different context to register again."
     }
   }
 }

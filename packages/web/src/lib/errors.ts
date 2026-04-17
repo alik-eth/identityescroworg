@@ -17,7 +17,8 @@ export type ErrorCode =
   | 'bundle.malformed'
   | 'registry.rootMismatch'
   | 'registry.alreadyBound'
-  | 'registry.ageExceeded';
+  | 'registry.ageExceeded'
+  | 'registry.nullifierUsed';
 
 export class QkbError extends Error {
   readonly code: ErrorCode;
@@ -63,6 +64,7 @@ export const ALL_ERROR_CODES: readonly ErrorCode[] = [
   'registry.rootMismatch',
   'registry.alreadyBound',
   'registry.ageExceeded',
+  'registry.nullifierUsed',
 ];
 
 export interface I18nLike {
