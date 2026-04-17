@@ -37,10 +37,12 @@
  */
 import { sha256 } from '@noble/hashes/sha256';
 import * as asn1js from 'asn1js';
+import { buildPoseidon } from 'circomlibjs';
 import { Certificate } from 'pkijs';
 import type { Binding } from './binding';
-import type { ParsedCades } from './cades';
+import type { AlgorithmTag, ParsedCades } from './cades';
 import { QkbError } from './errors';
+import { canonicalizeCertHash } from './merkleLookup';
 
 // Compile-time caps from the leaf circuit. Must stay in sync with
 // QKBPresentationEcdsaLeaf.circom:
@@ -499,4 +501,257 @@ function toAB(b: Uint8Array): ArrayBuffer {
   const ab = new ArrayBuffer(b.byteLength);
   new Uint8Array(ab).set(b);
   return ab;
+}
+
+// ===========================================================================
+// Phase 2 — unified-proof circuit witness + 14-signal public layout
+// ===========================================================================
+//
+// The Phase-2 circuit (QKBPresentationEcdsa / QKBPresentationRsa — circuits-eng
+// owned) inlines all six R_QKB constraints into a single proof and emits
+// fourteen public signals per orchestration §2 / spec §14.3:
+//
+//   [0..3]   pkX limbs        (secp256k1 X coord, 4 × uint64 LE)
+//   [4..7]   pkY limbs        (secp256k1 Y coord, 4 × uint64 LE)
+//   [8]      ctxHash          Poseidon of ctx bytes (0 when ctx empty)
+//   [9]      rTL              trustedListRoot (Poseidon-Merkle root)
+//   [10]     declHash         sha256(decl) mod BN254.p
+//   [11]     timestamp        unix seconds
+//   [12]     algorithmTag     0 = RSA-PKCS1v15-2048, 1 = ECDSA-P256
+//   [13]     nullifier        Poseidon(Poseidon(subjSerial, issuerHash), ctxHash)
+//
+// Division of labor (lead-greenlighted): circuits-eng owns the test-harness
+// witness builder (`test/integration/witness-builder.ts`) and publishes the
+// canonical signal ordering here to the orchestration plan; this module is
+// the production (SPA) witness builder. Shared contract = the 14-signal
+// layout + nullifier inputs; no shared code.
+//
+// The nullifier primitive (spec §14.4):
+//
+//   secret     = Poseidon(subject_serial_limbs, issuer_cert_hash)
+//   nullifier  = Poseidon(secret, ctxHash)
+//
+// - `subject_serial_limbs` = the leaf cert's serialNumber packed as 4 × 64-bit
+//   little-endian limbs (big-endian bytes → 4 limbs, high-limb first). If the
+//   serial is < 32 bytes it is left-padded with zero bytes before limb packing.
+//   Serials > 32 bytes are rejected (no EU QES profile issues serials that large).
+// - `issuer_cert_hash` = Poseidon sponge hash of the intermediate cert DER,
+//   computed by `canonicalizeCertHash(intDer)` (already used in merkleLookup
+//   for the trusted-CA leaves). The SPA can obtain `intDer` either from the
+//   inline CMS (attached CAdES) or via LOTL resolution.
+// - `ctxHash` mirrors the Phase-1 witness emission rule: 0 when ctx is empty,
+//   Poseidon-sponge of ctx bytes otherwise (Phase-2 ctx support lands in S0.5).
+
+export const ALGORITHM_TAG_RSA_STR = '0';
+export const ALGORITHM_TAG_ECDSA_STR = '1';
+
+export interface Phase2PublicSignals {
+  /** 14-element decimal-string array in the frozen orchestration order. */
+  signals: string[];
+  /** Decoded view for ergonomic checks; same values as `signals`. */
+  pkX: string[];
+  pkY: string[];
+  ctxHash: string;
+  rTL: string;
+  declHash: string;
+  timestamp: string;
+  algorithmTag: string;
+  nullifier: string;
+}
+
+export interface Phase2WitnessInput extends LeafWitnessInput {
+  // Restored public signals (dropped from Phase 1 leaf circuit).
+  rTL: string;
+  algorithmTag: string;
+  nullifier: string;
+  // Private witnesses consumed by the circuit to re-derive `nullifier`.
+  subjectSerialLimbs: string[]; // 4 × 64-bit LE limbs
+  issuerCertHash: string; // Poseidon sponge of intermediate cert DER
+}
+
+export interface BuildPhase2WitnessInput extends BuildWitnessInput {
+  /** Poseidon-Merkle root of the trusted-list, as a decimal string or 0x-hex. */
+  trustedListRoot: string | bigint;
+  /** Intermediate cert DER (inline from CMS or resolved via LOTL). */
+  intermediateCertDer: Uint8Array;
+  /** Optional override for CLI/testing; defaults to `parsed.algorithmTag`. */
+  algorithmTag?: AlgorithmTag;
+}
+
+type PoseidonFn = ((inputs: unknown[]) => unknown) & {
+  F: { e: (v: bigint) => unknown; toObject: (v: unknown) => bigint };
+};
+
+let poseidonP: Promise<PoseidonFn> | null = null;
+function getPoseidon(): Promise<PoseidonFn> {
+  if (poseidonP === null) poseidonP = buildPoseidon() as unknown as Promise<PoseidonFn>;
+  return poseidonP;
+}
+
+/**
+ * Pack a variable-length big-endian byte string (the cert subject
+ * serialNumber) into 4 × 64-bit LE limbs. Left-pads with zero bytes to 32.
+ */
+export function subjectSerialToLimbs(serialBytes: Uint8Array): string[] {
+  if (serialBytes.length > 32) {
+    throw new QkbError('witness.fieldTooLong', {
+      reason: 'subject-serial-too-long',
+      got: serialBytes.length,
+    });
+  }
+  const padded = new Uint8Array(32);
+  padded.set(serialBytes, 32 - serialBytes.length);
+  return pkCoordToLimbs(padded);
+}
+
+/**
+ * Extract the leaf cert's subject serialNumber as raw big-endian bytes
+ * (leading zeros stripped, matching DER INTEGER encoding). Preserves the
+ * exact bytes the on-circuit SubjectSerialExtract component scans for.
+ */
+export function extractSubjectSerialBytes(leafDer: Uint8Array): Uint8Array {
+  const asn = asn1js.fromBER(toAB(leafDer));
+  if (asn.offset === -1) {
+    throw new QkbError('witness.offsetNotFound', { field: 'subjectSerial', reason: 'asn1' });
+  }
+  let cert: Certificate;
+  try {
+    cert = new Certificate({ schema: asn.result });
+  } catch (cause) {
+    throw new QkbError('witness.offsetNotFound', {
+      field: 'subjectSerial',
+      reason: 'schema',
+      cause: String(cause),
+    });
+  }
+  const raw = new Uint8Array(cert.serialNumber.valueBlock.valueHexView);
+  if (raw.length === 0) {
+    throw new QkbError('witness.offsetNotFound', { field: 'subjectSerial', reason: 'empty' });
+  }
+  return raw;
+}
+
+/**
+ * Compute nullifier = Poseidon(Poseidon(subjectSerialLimbs[4], issuerHash), ctxHash).
+ * All inputs/outputs are BN254 field elements. Issuer hash is already a
+ * field element (computed via the Poseidon sponge in `canonicalizeCertHash`).
+ */
+export async function computeNullifier(
+  subjectSerialLimbs: bigint[],
+  issuerCertHash: bigint,
+  ctxHash: bigint,
+): Promise<bigint> {
+  if (subjectSerialLimbs.length !== 4) {
+    throw new QkbError('witness.fieldTooLong', {
+      reason: 'subject-serial-limbs',
+      got: subjectSerialLimbs.length,
+    });
+  }
+  const p = await getPoseidon();
+  const F = p.F;
+  const secret = F.toObject(
+    p([
+      F.e(subjectSerialLimbs[0]!),
+      F.e(subjectSerialLimbs[1]!),
+      F.e(subjectSerialLimbs[2]!),
+      F.e(subjectSerialLimbs[3]!),
+      F.e(issuerCertHash),
+    ]) as unknown,
+  );
+  const nul = F.toObject(p([F.e(secret), F.e(ctxHash)]) as unknown);
+  return nul;
+}
+
+function parseFieldString(v: string | bigint): bigint {
+  if (typeof v === 'bigint') return v;
+  const s = v.trim();
+  if (s.startsWith('0x') || s.startsWith('0X')) return BigInt(s);
+  if (!/^\d+$/.test(s)) {
+    throw new QkbError('witness.fieldTooLong', { reason: 'bad-field-string', got: s });
+  }
+  return BigInt(s);
+}
+
+/**
+ * Build the Phase-2 witness (supersets LeafWitnessInput) and include the
+ * derived `nullifier`, `rTL`, and `algorithmTag` public signals plus the
+ * private subject-serial / issuer-hash inputs the circuit consumes.
+ */
+export async function buildPhase2Witness(
+  input: BuildPhase2WitnessInput,
+): Promise<Phase2WitnessInput> {
+  const base = buildLeafWitness({
+    parsed: input.parsed,
+    binding: input.binding,
+    bindingBytes: input.bindingBytes,
+  });
+
+  if (!input.intermediateCertDer || input.intermediateCertDer.length === 0) {
+    throw new QkbError('witness.offsetNotFound', {
+      field: 'intermediateCertDer',
+      reason: 'missing',
+    });
+  }
+
+  const serialBytes = extractSubjectSerialBytes(input.parsed.leafCertDer);
+  const subjectSerialLimbs = subjectSerialToLimbs(serialBytes);
+  const issuerCertHash = await canonicalizeCertHash(input.intermediateCertDer);
+
+  const ctxHashBig = parseFieldString(base.ctxHash);
+  const nullifier = await computeNullifier(
+    subjectSerialLimbs.map((s) => BigInt(s)),
+    issuerCertHash,
+    ctxHashBig,
+  );
+
+  const algorithmTag =
+    (input.algorithmTag ?? input.parsed.algorithmTag) === 1
+      ? ALGORITHM_TAG_ECDSA_STR
+      : ALGORITHM_TAG_RSA_STR;
+
+  const rTL = parseFieldString(input.trustedListRoot).toString();
+
+  return {
+    ...base,
+    rTL,
+    algorithmTag,
+    nullifier: nullifier.toString(),
+    subjectSerialLimbs,
+    issuerCertHash: issuerCertHash.toString(),
+  };
+}
+
+/**
+ * Assemble the 14-element publicSignals array from a Phase-2 witness. Order
+ * is frozen by orchestration §2: pkX[0..3], pkY[0..3], ctxHash, rTL,
+ * declHash, timestamp, algorithmTag, nullifier.
+ *
+ * This mirrors the ordering the compiled circuit emits so the contract's
+ * `uint[14]` input can be populated from either side without ambiguity.
+ */
+export function publicSignalsFromPhase2Witness(w: Phase2WitnessInput): Phase2PublicSignals {
+  const signals: string[] = [
+    ...w.pkX,
+    ...w.pkY,
+    w.ctxHash,
+    w.rTL,
+    w.declHash,
+    w.timestamp,
+    w.algorithmTag,
+    w.nullifier,
+  ];
+  if (signals.length !== 14) {
+    throw new QkbError('witness.fieldTooLong', { reason: 'phase2-signals-shape', got: signals.length });
+  }
+  return {
+    signals,
+    pkX: w.pkX,
+    pkY: w.pkY,
+    ctxHash: w.ctxHash,
+    rTL: w.rTL,
+    declHash: w.declHash,
+    timestamp: w.timestamp,
+    algorithmTag: w.algorithmTag,
+    nullifier: w.nullifier,
+  };
 }

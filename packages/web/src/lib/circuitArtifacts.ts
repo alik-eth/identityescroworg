@@ -70,6 +70,58 @@ export function variantForAlgorithmTag(tag: AlgorithmTag): CircuitVariant {
   throw new QkbError('prover.artifactMismatch', { reason: 'unknown-algorithm-tag', tag });
 }
 
+/**
+ * Phase-2 dual-variant urls.json schema (orchestration §0 S0.3).
+ *
+ * Phase-1 urls.json pinned a single variant at the top level. Phase-2
+ * ships two ceremony artifacts (one RSA, one unified ECDSA) and the SPA
+ * picks between them at runtime based on the detected leaf cert's
+ * algorithmTag. The dual-variant file nests one UrlsJson under each
+ * `rsa`/`ecdsa` key:
+ *
+ *   {
+ *     "rsa":   { "wasmUrl": "...", "zkeyUrl": "...", "wasmSha256": "...", "zkeySha256": "..." },
+ *     "ecdsa": { "wasmUrl": "...", "zkeyUrl": "...", "wasmSha256": "...", "zkeySha256": "..." }
+ *   }
+ *
+ * For backward-compat with the Phase-1 single-variant file that ships in
+ * the SPA bundle today, `pickVariantUrls` accepts either shape and dispatches
+ * to the requested variant.
+ */
+export interface DualUrlsJson {
+  rsa: UrlsJson;
+  ecdsa: UrlsJson;
+}
+
+/**
+ * Pick the UrlsJson for the requested variant out of a file that may be
+ * either the Phase-1 single-variant shape or the Phase-2 dual-variant shape.
+ * Throws prover.artifactMismatch when the requested variant is absent.
+ */
+export function pickVariantUrls(
+  raw: unknown,
+  wanted: CircuitVariant,
+): UrlsJson {
+  if (!isRecord(raw)) {
+    throw new QkbError('prover.artifactMismatch', { reason: 'urls-not-object' });
+  }
+  // Dual-variant shape: top-level has `rsa` + `ecdsa` keys.
+  if ('rsa' in raw && 'ecdsa' in raw) {
+    const entry = raw[wanted];
+    if (!isRecord(entry)) {
+      throw new QkbError('prover.artifactMismatch', {
+        reason: 'urls-variant-missing',
+        wanted,
+      });
+    }
+    // Pin the inner object's variant for downstream validation.
+    const withVariant = { ...entry, variant: wanted } as Record<string, unknown>;
+    return validateUrlsJson(withVariant, wanted);
+  }
+  // Single-variant fallback (Phase-1 shape).
+  return validateUrlsJson(raw, wanted);
+}
+
 export function validateUrlsJson(raw: unknown, expectedVariant?: CircuitVariant): UrlsJson {
   if (!isRecord(raw)) {
     throw new QkbError('prover.artifactMismatch', { reason: 'urls-not-object' });

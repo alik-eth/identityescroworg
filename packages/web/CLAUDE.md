@@ -185,10 +185,82 @@ Fields written per route:
 - Any `console.log` / `console.error` in `src/` — kills the
   "no console errors in dist" smoke test.
 
+## Phase 2 QIE — MVP refinement (current)
+
+The Phase 2 routes land in this worktree. Conventions locked by the
+`2026-04-17-qie-mvp-refinement.md` plan:
+
+- **Routes live at `src/routes/escrowSetup.tsx`, `escrowRecover.tsx`,
+  `escrowNotary.tsx`.** Registered explicitly in `src/router.tsx` (no
+  file-based routing). When adding more QIE routes, keep the same
+  `escrow*`/`arbitrator*` prefix + explicit `createRoute` registration.
+
+- **Default recovery is notary-assisted.** `/escrow/recover` renders a
+  banner that redirects users to `/escrow/notary` unless the URL carries
+  `?mode=self`. The self-recovery form stays reachable behind that query
+  param for the original holder + tests — do not delete it.
+
+- **AuthorityArbitrator only in the setup picker.** TimelockArbitrator is
+  deferred post-pilot per the MVP spec §3.2. When/if it comes back, gate
+  it behind a `VITE_ENABLE_TIMELOCK=1` env flag rather than restoring an
+  unconditional option.
+
+- **Agent wire format — notary-assisted recovery.** The heir-side body
+  for `POST /escrow/:id/release` (NOT `/recover/:id` — the qie-agent
+  grafted `on_behalf_of` onto the existing release route) is:
+
+  ```jsonc
+  {
+    "recipient_pk": "<hybrid_pk>",
+    "arbitrator_unlock_tx": "0x...",
+    "on_behalf_of": {
+      "recipient_pk": "<same>",
+      "notary_cert":  "<DER>",
+      "notary_sig":   "<CAdES>"
+    }
+  }
+  ```
+
+  Built by `src/hooks/use-notary-recover.ts`. The 409 response code is
+  `QIE_ESCROW_WRONG_STATE` (registry state is not `RELEASE_PENDING` or
+  `RELEASED`) and the hook surfaces it distinctly via `state.wrongState`.
+
+- **Notary attestation JCS payload.** `src/lib/notary-attest.ts` emits
+  `{"domain":"qie-notary-recover/v1","escrowId":"0x…","recipient_pk":"0x…"}`
+  with keys sorted alphabetically per RFC 8785. The byte order is fixed
+  because the agent verifies the notary's CAdES signature over those
+  exact bytes — do not reorder fields or change the domain string.
+
+- **Contract ABIs live at the worktree root `fixtures/contracts/`**, not
+  `packages/web/fixtures/contracts/`. The MVP-refinement ABI pump in
+  commit `9ab0222` targets that path. Frozen ABI deltas to respect when
+  wiring viem:
+  - `AuthorityArbitrator.requestUnlock` is 7-arg
+    `(escrowId, recipientHybridPk, evidenceHash, kindHash, referenceHash, issuedAt, authoritySig)`
+    and constructor is `(authority, registry)`.
+  - `UnlockEvidence` event field name is `referenceHash` (NOT `reference`).
+  - `QKBRegistry` release-pending event is
+    `EscrowReleasePendingRequested(bytes32 indexed escrowId, address indexed arbitrator, uint64 at)`;
+    `EscrowReleasePending` is the revert error, not an event.
+
+- **i18n parity** — `src/i18n/en.json` and `src/i18n/uk.json` both carry
+  a top-level `escrow.*` namespace. `tests/unit/i18n.parity.test.ts`
+  walks both trees and fails on drift; add new keys in both files in the
+  same commit.
+
+- **SPA base caveat** — `vite.config.ts` sets `base: './'`, which breaks
+  relative asset resolution at two-segment deep links like
+  `/escrow/notary` when loaded directly from a static host. Playwright
+  e2e for these routes is therefore blocked until `base` is revisited;
+  unit tests using React Testing Library + jsdom fully cover the
+  component behavior in the meantime (`escrowNotary.render.test.tsx`,
+  `escrowRecover.mode.test.tsx`). When deploying to Fly or similar the
+  host must SPA-fallback-serve `index.html` for all paths.
+
 ## Phase handoffs
 
-- **Phase 1 QKB (current):** leaf-only Groth16 proof; chain constraint
-  enforced off-circuit. Target deploy: Sepolia + Fly.io static host at
+- **Phase 1 QKB:** leaf-only Groth16 proof; chain constraint enforced
+  off-circuit. Target deploy: Sepolia + Fly.io static host at
   `identityescrow.org`.
 - **Phase 2 QIE:** introduces escrow commitments (non-empty `context`
   field in the binding, Poseidon-hashed to `ctxHash`), arbitrator UI,

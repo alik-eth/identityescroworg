@@ -12,6 +12,9 @@ import { GenerateScreen } from './routes/generate';
 import { SignScreen } from './routes/sign';
 import { UploadScreen } from './routes/upload';
 import { RegisterScreen } from './routes/register';
+import { EscrowSetupScreen } from './routes/escrowSetup';
+import { EscrowRecoverScreen } from './routes/escrowRecover';
+import { EscrowNotaryScreen } from './routes/escrowNotary';
 
 const STEPS = [
   { to: '/generate', key: 'nav.generate' },
@@ -97,12 +100,33 @@ const registerRoute = createRoute({
   component: RegisterScreen,
 });
 
+const escrowSetupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/escrow/setup',
+  component: EscrowSetupScreen,
+});
+
+const escrowRecoverRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/escrow/recover',
+  component: EscrowRecoverScreen,
+});
+
+const escrowNotaryRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/escrow/notary',
+  component: EscrowNotaryScreen,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   generateRoute,
   signRoute,
   uploadRoute,
   registerRoute,
+  escrowSetupRoute,
+  escrowRecoverRoute,
+  escrowNotaryRoute,
 ]);
 
 export const router = createRouter({ routeTree });
