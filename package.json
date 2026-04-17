@@ -12,7 +12,8 @@
     "format": "biome format --write .",
     "test": "pnpm -r run test",
     "build": "pnpm -r run build",
-    "flatten": "pnpm --filter @qkb/lotl-flattener run cli"
+    "flatten": "pnpm --filter @qkb/lotl-flattener run cli",
+    "deploy:fly": "flyctl deploy --config packages/web/fly.toml --dockerfile packages/web/Dockerfile"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.8.0",
