@@ -46,6 +46,59 @@ contract QKBRegistryRegisterTest is Test {
 
     function _zeroProof() internal pure returns (QKBVerifier.Proof memory p) {}
 
+    function test_register_revertsOnInvalidProof() public {
+        stub.setAccept(false);
+        QKBVerifier.Inputs memory i = _validInputs();
+        vm.expectRevert(QKBRegistry.InvalidProof.selector);
+        registry.register(_zeroProof(), i);
+    }
+
+    function test_register_revertsOnRootMismatch() public {
+        stub.setAccept(true);
+        QKBVerifier.Inputs memory i = _validInputs();
+        i.rTL = bytes32(uint256(0xBADBAD));
+        vm.expectRevert(QKBRegistry.RootMismatch.selector);
+        registry.register(_zeroProof(), i);
+    }
+
+    function test_register_revertsOnFutureTimestamp() public {
+        stub.setAccept(true);
+        QKBVerifier.Inputs memory i = _validInputs();
+        i.timestamp = uint64(block.timestamp + 1);
+        vm.expectRevert(QKBRegistry.BindingFromFuture.selector);
+        registry.register(_zeroProof(), i);
+    }
+
+    function test_register_revertsOnTooOldBinding() public {
+        stub.setAccept(true);
+        QKBVerifier.Inputs memory i = _validInputs();
+        vm.warp(uint256(i.timestamp) + uint256(registry.MAX_AGE()) + 1);
+        vm.expectRevert(QKBRegistry.BindingTooOld.selector);
+        registry.register(_zeroProof(), i);
+    }
+
+    function test_register_revertsOnAlreadyBound() public {
+        stub.setAccept(true);
+        QKBVerifier.Inputs memory i = _validInputs();
+        registry.register(_zeroProof(), i);
+        QKBVerifier.Inputs memory i2 = _validInputs();
+        vm.expectRevert(QKBRegistry.AlreadyBound.selector);
+        registry.register(_zeroProof(), i2);
+    }
+
+    /// @dev declHash whitelist is enforced inside QKBVerifier.verify(), so an
+    ///      unknown declHash short-circuits to verify()==false before register
+    ///      reaches its own checks. The user-visible error is therefore
+    ///      InvalidProof — same defence-in-depth story, one fewer custom
+    ///      error in the ABI.
+    function test_register_revertsOnBadDeclHash() public {
+        stub.setAccept(true);
+        QKBVerifier.Inputs memory i = _validInputs();
+        i.declHash = keccak256("not-EN-not-UK");
+        vm.expectRevert(QKBRegistry.InvalidProof.selector);
+        registry.register(_zeroProof(), i);
+    }
+
     function test_register_happyPath_writesBindingAndEmits() public {
         stub.setAccept(true);
         QKBVerifier.Inputs memory i = _validInputs();
