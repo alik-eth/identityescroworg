@@ -7,6 +7,116 @@
  * does not cascade into meaningless /register red.
  */
 import { test, expect } from '@playwright/test';
+import * as asn1js from 'asn1js';
+import * as pkijs from 'pkijs';
+import { sha256 } from '@noble/hashes/sha256';
+import * as secp from '@noble/secp256k1';
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname_flow = dirname(fileURLToPath(import.meta.url));
+import canonicalize from 'canonicalize';
+
+pkijs.setEngine(
+  'node-webcrypto',
+  new pkijs.CryptoEngine({ name: 'node', crypto: globalThis.crypto }),
+);
+
+interface FlowFixture {
+  bcanonB64: string;
+  pubkeyUncompressedHex: string;
+  binding: Record<string, unknown>;
+  p7s: Buffer;
+}
+
+async function buildFlowFixture(): Promise<FlowFixture> {
+  // Mint an independent secp256k1 keypair for the binding's `pk` field.
+  const priv = secp.utils.randomPrivateKey();
+  const pkUncompressed = secp.getPublicKey(priv, false);
+  const pubkeyUncompressedHex = Array.from(pkUncompressed, (b) => b.toString(16).padStart(2, '0')).join('');
+
+  const nonce = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) nonce[i] = (i * 13 + 7) & 0xff;
+  const enText = readFileSync(
+    resolve(__dirname_flow, '../../../../fixtures/declarations/en.txt'),
+    'utf8',
+  );
+  const nonceHex = '0x' + Array.from(nonce, (b) => b.toString(16).padStart(2, '0')).join('');
+  const binding = {
+    context: '0x',
+    declaration: enText,
+    escrow_commitment: null,
+    nonce: nonceHex,
+    pk: '0x' + pubkeyUncompressedHex,
+    scheme: 'secp256k1',
+    timestamp: Math.floor(Date.now() / 1000),
+    version: 'QKB/1.0',
+  };
+  const bcanonText = canonicalize(binding);
+  if (!bcanonText) throw new Error('canonicalize failed');
+  const bcanon = new TextEncoder().encode(bcanonText);
+  const bcanonB64 = Buffer.from(bcanon).toString('base64');
+
+  // Mint an ECDSA-P256 leaf cert + detached CAdES-BES over the bcanon.
+  const subtle = globalThis.crypto.subtle;
+  const kp = (await subtle.generateKey(
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    true,
+    ['sign', 'verify'],
+  )) as CryptoKeyPair;
+  const cert = new pkijs.Certificate();
+  cert.version = 2;
+  cert.serialNumber = new asn1js.Integer({ value: 1 });
+  const setName = (t: pkijs.RelativeDistinguishedNames, cn: string) => {
+    t.typesAndValues = [
+      new pkijs.AttributeTypeAndValue({
+        type: '2.5.4.3',
+        value: new asn1js.Utf8String({ value: cn }),
+      }),
+    ];
+  };
+  setName(cert.subject, 'QKB E2E Leaf');
+  setName(cert.issuer, 'QKB E2E Leaf');
+  cert.notBefore.value = new Date(Date.now() - 60_000);
+  cert.notAfter.value = new Date(Date.now() + 365 * 24 * 60 * 60_000);
+  await cert.subjectPublicKeyInfo.importKey(kp.publicKey);
+  await cert.sign(kp.privateKey, 'SHA-256');
+
+  const md = sha256(bcanon);
+  const signedAttrs = new pkijs.SignedAndUnsignedAttributes({
+    type: 0,
+    attributes: [
+      new pkijs.Attribute({
+        type: '1.2.840.113549.1.9.3',
+        values: [new asn1js.ObjectIdentifier({ value: '1.2.840.113549.1.7.1' })],
+      }),
+      new pkijs.Attribute({
+        type: '1.2.840.113549.1.9.4',
+        values: [new asn1js.OctetString({ valueHex: md.buffer.slice(0) as ArrayBuffer })],
+      }),
+    ],
+  });
+  const signer = new pkijs.SignerInfo({
+    version: 1,
+    sid: new pkijs.IssuerAndSerialNumber({ issuer: cert.issuer, serialNumber: cert.serialNumber }),
+    signedAttrs,
+  });
+  const signed = new pkijs.SignedData({
+    version: 1,
+    encapContentInfo: new pkijs.EncapsulatedContentInfo({ eContentType: '1.2.840.113549.1.7.1' }),
+    signerInfos: [signer],
+    certificates: [cert],
+  });
+  await signed.sign(kp.privateKey, 0, 'SHA-256');
+  const ci = new pkijs.ContentInfo({
+    contentType: pkijs.id_ContentType_SignedData,
+    content: signed.toSchema(true),
+  });
+  const p7s = Buffer.from(new Uint8Array(ci.toSchema().toBER(false)));
+
+  return { bcanonB64, pubkeyUncompressedHex, binding, p7s };
+}
 
 test('generate — creates a keypair and navigates to /sign', async ({ page }) => {
   await page.goto('/generate');
@@ -48,4 +158,48 @@ test('sign — renders canonical preview, hash, download, jurisdiction tools', a
 test('sign — missing-binding fallback when session is empty', async ({ page }) => {
   await page.goto('/sign');
   await expect(page.getByTestId('sign-missing')).toBeVisible();
+});
+
+test('upload — missing-binding fallback when session is empty', async ({ page }) => {
+  await page.goto('/upload');
+  await expect(page.getByTestId('upload-missing')).toBeVisible();
+});
+
+test('upload — parse → verify (stubbed) → mock-prove → /register handoff', async ({ page }) => {
+  // Mint binding + keypair + p7s in Node so the spec stays deterministic
+  // and fast. Seed the SPA's sessionStorage before /upload loads, then feed
+  // the p7s through the file input.
+  const fixture = await buildFlowFixture();
+
+  await page.addInitScript((f) => {
+    sessionStorage.setItem(
+      'qkb.session.v1',
+      JSON.stringify({
+        bcanonB64: f.bcanonB64,
+        pubkeyUncompressedHex: f.pubkeyUncompressedHex,
+        binding: f.binding,
+        locale: 'en',
+      }),
+    );
+    // Stub the verifier — /upload still runs parseCades + buildLeafWitness
+    // for real, but skipping verifyQes means we don't need the minted CA to
+    // be in trusted-cas.json.
+    (window as unknown as { __QKB_VERIFY__: () => Promise<unknown> }).__QKB_VERIFY__ =
+      async () => ({ ok: true, algorithmTag: 1, caMerkleIndex: 0 });
+  }, {
+    bcanonB64: fixture.bcanonB64,
+    pubkeyUncompressedHex: fixture.pubkeyUncompressedHex,
+    binding: fixture.binding,
+  });
+
+  await page.goto('/upload');
+  await page.setInputFiles('[data-testid="file-input"]', {
+    name: 'binding.qkb.json.p7s',
+    mimeType: 'application/pkcs7-signature',
+    buffer: fixture.p7s,
+  });
+
+  await expect(page.getByTestId('upload-done')).toBeVisible({ timeout: 30_000 });
+  await page.getByTestId('upload-next').click();
+  await expect(page).toHaveURL(/\/register$/);
 });

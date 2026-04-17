@@ -208,9 +208,13 @@ export class SnarkjsProver implements IProver {
 }
 
 function defaultWorkerFactory(): Worker {
-  return new Worker(new URL('../workers/prover.worker.ts', import.meta.url), {
-    type: 'module',
-  });
+  // `/* @vite-ignore */` keeps this URL out of Vite's worker-bundling pass —
+  // the worker imports snarkjs, which is an optional peer we intentionally do
+  // NOT ship in the default static tarball (nightly-only). Callers that want
+  // the real prover set `window.__QKB_REAL_PROVER__ = true` and accept the
+  // snarkjs dependency being available at runtime.
+  const url = new URL(/* @vite-ignore */ '../workers/prover.worker.ts', import.meta.url);
+  return new Worker(url, { type: 'module' });
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
