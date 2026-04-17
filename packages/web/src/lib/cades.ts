@@ -2,21 +2,27 @@
  * CAdES-BES detached parser for `binding.qkb.json.p7s`.
  *
  * Strict by design — anything unexpected raises QkbError('cades.parse').
- * Hard requirements (orchestration §4.3 / spec §4.3):
+ * Hard requirements (orchestration §4.3 / §2.0 / spec §4.3):
  *   - ContentInfo.contentType == id-signedData (1.2.840.113549.1.7.2).
  *   - eContent absent (detached signature).
  *   - exactly ONE SignerInfo.
  *   - signedAttrs MUST be present and MUST contain a `messageDigest` attribute
  *     (1.2.840.113549.1.9.4) of the right length for the chosen digest.
  *   - digestAlgorithm == sha-256 (2.16.840.1.101.3.4.2.1) for Phase 1.
- *   - signatureAlgorithm == rsaEncryption (1.2.840.113549.1.1.1) — RSA-PKCS#1 v1.5.
+ *   - SignerInfo.signatureAlgorithm is one of:
+ *       * rsaEncryption (1.2.840.113549.1.1.1)
+ *       * sha256WithRSAEncryption (1.2.840.113549.1.1.11)
+ *       * ecdsa-with-SHA256 (1.2.840.10045.4.3.2)
  *   - certificates field present with at least leaf + one intermediate.
  *
  * Leaf cert is the one matching the SignerInfo's IssuerAndSerialNumber.
  * Intermediate is the cert in the SET that issued the leaf (subject DN ==
- * leaf.issuer DN). If there are more than two certs (e.g. with cross-signed
- * roots) only leaf + matching intermediate are returned; the rest are ignored
- * for circuit purposes — full chain validation lives in qesVerify.ts.
+ * leaf.issuer DN).
+ *
+ * `leafAlg` / `algorithmTag` are derived from the leaf cert's
+ * SubjectPublicKeyInfo.algorithm, which determines which circuit variant
+ * (RSA vs ECDSA) the witness builder must target. ECDSA leafs must use
+ * NIST P-256 (1.2.840.10045.3.1.7); other curves are rejected.
  */
 import * as asn1js from 'asn1js';
 import {
@@ -33,6 +39,14 @@ const OID_MESSAGE_DIGEST = '1.2.840.113549.1.9.4';
 const OID_SHA256 = '2.16.840.1.101.3.4.2.1';
 const OID_RSA = '1.2.840.113549.1.1.1';
 const OID_RSA_SHA256 = '1.2.840.113549.1.1.11';
+const OID_EC_PUBLIC_KEY = '1.2.840.10045.2.1';
+const OID_ECDSA_SHA256 = '1.2.840.10045.4.3.2';
+const OID_P256 = '1.2.840.10045.3.1.7';
+
+export type LeafAlg = 'rsaEncryption' | 'ecdsa-with-SHA256';
+export const ALGORITHM_TAG_RSA = 0 as const;
+export const ALGORITHM_TAG_ECDSA = 1 as const;
+export type AlgorithmTag = typeof ALGORITHM_TAG_RSA | typeof ALGORITHM_TAG_ECDSA;
 
 export interface ParsedCades {
   signedAttrsDer: Uint8Array;
@@ -40,6 +54,8 @@ export interface ParsedCades {
   messageDigest: Uint8Array;
   digestAlgorithmOid: string;
   signatureAlgorithmOid: string;
+  leafAlg: LeafAlg;
+  algorithmTag: AlgorithmTag;
   leafCertDer: Uint8Array;
   intermediateCertDer: Uint8Array;
 }
@@ -99,7 +115,11 @@ export function parseCades(p7s: Uint8Array): ParsedCades {
   }
 
   const signatureAlgorithmOid = signer.signatureAlgorithm.algorithmId;
-  if (signatureAlgorithmOid !== OID_RSA && signatureAlgorithmOid !== OID_RSA_SHA256) {
+  if (
+    signatureAlgorithmOid !== OID_RSA &&
+    signatureAlgorithmOid !== OID_RSA_SHA256 &&
+    signatureAlgorithmOid !== OID_ECDSA_SHA256
+  ) {
     throw new QkbError('cades.parse', {
       reason: 'signature-alg',
       oid: signatureAlgorithmOid,
@@ -143,15 +163,55 @@ export function parseCades(p7s: Uint8Array): ParsedCades {
     throw new QkbError('cades.parse', { reason: 'intermediate-not-found' });
   }
 
+  const { leafAlg, algorithmTag } = classifyLeaf(leaf, signatureAlgorithmOid);
+
   return {
     signedAttrsDer,
     signatureValue,
     messageDigest,
     digestAlgorithmOid,
     signatureAlgorithmOid,
+    leafAlg,
+    algorithmTag,
     leafCertDer: certDer(leaf),
     intermediateCertDer: certDer(intermediate),
   };
+}
+
+function classifyLeaf(
+  leaf: Certificate,
+  sigAlgOid: string,
+): { leafAlg: LeafAlg; algorithmTag: AlgorithmTag } {
+  const spkiAlg = leaf.subjectPublicKeyInfo.algorithm.algorithmId;
+  if (spkiAlg === OID_RSA) {
+    if (sigAlgOid !== OID_RSA && sigAlgOid !== OID_RSA_SHA256) {
+      throw new QkbError('cades.parse', {
+        reason: 'leaf-alg-mismatch',
+        spki: spkiAlg,
+        sig: sigAlgOid,
+      });
+    }
+    return { leafAlg: 'rsaEncryption', algorithmTag: ALGORITHM_TAG_RSA };
+  }
+  if (spkiAlg === OID_EC_PUBLIC_KEY) {
+    if (sigAlgOid !== OID_ECDSA_SHA256) {
+      throw new QkbError('cades.parse', {
+        reason: 'leaf-alg-mismatch',
+        spki: spkiAlg,
+        sig: sigAlgOid,
+      });
+    }
+    const curveParam = leaf.subjectPublicKeyInfo.algorithm.algorithmParams;
+    const curveOid =
+      curveParam instanceof asn1js.ObjectIdentifier
+        ? curveParam.valueBlock.toString()
+        : undefined;
+    if (curveOid !== OID_P256) {
+      throw new QkbError('cades.parse', { reason: 'ecdsa-curve', curve: curveOid });
+    }
+    return { leafAlg: 'ecdsa-with-SHA256', algorithmTag: ALGORITHM_TAG_ECDSA };
+  }
+  throw new QkbError('cades.parse', { reason: 'leaf-spki-alg', oid: spkiAlg });
 }
 
 function encodeSignedAttrsForSignature(signer: SignerInfo): Uint8Array {

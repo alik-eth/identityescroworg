@@ -1,8 +1,14 @@
 import { describe, expect, it, beforeAll } from 'vitest';
 import forge from 'node-forge';
 import * as asn1js from 'asn1js';
+import * as pkijs from 'pkijs';
 import { sha256 } from '@noble/hashes/sha256';
 import { parseCades } from '../../src/lib/cades';
+
+pkijs.setEngine(
+  'node-webcrypto',
+  new pkijs.CryptoEngine({ name: 'node', crypto: globalThis.crypto }),
+);
 
 interface Fixture {
   rootKey: forge.pki.rsa.KeyPair;
@@ -36,6 +42,8 @@ describe('parseCades — happy path', () => {
     expect(parsed.leafCertDer.length).toBeGreaterThan(0);
     expect(parsed.intermediateCertDer.length).toBeGreaterThan(0);
     expect(toHex(parsed.leafCertDer)).not.toBe(toHex(parsed.intermediateCertDer));
+    expect(parsed.leafAlg).toBe('rsaEncryption');
+    expect(parsed.algorithmTag).toBe(0);
   });
 
   it('signedAttrs parsed back round-trips to a SET (DER form re-parseable)', () => {
@@ -45,6 +53,14 @@ describe('parseCades — happy path', () => {
     const decoded = asn1js.fromBER(ab);
     expect(decoded.offset).not.toBe(-1);
     expect(decoded.result instanceof asn1js.Set).toBe(true);
+  });
+
+  it('classifies an ECDSA P-256 leaf as algorithmTag=1', async () => {
+    const cms = await makeEcdsaCms();
+    const parsed = parseCades(cms);
+    expect(parsed.leafAlg).toBe('ecdsa-with-SHA256');
+    expect(parsed.algorithmTag).toBe(1);
+    expect(parsed.signatureAlgorithmOid).toBe('1.2.840.10045.4.3.2');
   });
 });
 
@@ -233,6 +249,94 @@ function makeFixture(): Fixture {
     return toDer(p7);
   })();
   return { rootKey, intKey, leafKey, rootCert, intCert, leafCert, binding, validCms };
+}
+
+async function makeEcdsaCms(): Promise<Uint8Array> {
+  const ca = await mkPkijsCert({ subject: 'EC-Root', issuerCert: null, isCa: true });
+  const leaf = await mkPkijsCert({
+    subject: 'EC-Leaf',
+    issuerCert: ca,
+    isCa: false,
+  });
+  const binding = new TextEncoder().encode('hello-ecdsa');
+  const md = sha256(binding);
+  const signedAttrs = new pkijs.SignedAndUnsignedAttributes({
+    type: 0,
+    attributes: [
+      new pkijs.Attribute({
+        type: '1.2.840.113549.1.9.3',
+        values: [new asn1js.ObjectIdentifier({ value: '1.2.840.113549.1.7.1' })],
+      }),
+      new pkijs.Attribute({
+        type: '1.2.840.113549.1.9.4',
+        values: [new asn1js.OctetString({ valueHex: md.buffer.slice(0) as ArrayBuffer })],
+      }),
+    ],
+  });
+  const signerInfo = new pkijs.SignerInfo({
+    version: 1,
+    sid: new pkijs.IssuerAndSerialNumber({
+      issuer: leaf.cert.issuer,
+      serialNumber: leaf.cert.serialNumber,
+    }),
+    signedAttrs,
+  });
+  const signed = new pkijs.SignedData({
+    version: 1,
+    encapContentInfo: new pkijs.EncapsulatedContentInfo({
+      eContentType: '1.2.840.113549.1.7.1',
+    }),
+    signerInfos: [signerInfo],
+    certificates: [leaf.cert, ca.cert],
+  });
+  await signed.sign(leaf.privateKey, 0, 'SHA-256');
+  const ci = new pkijs.ContentInfo({
+    contentType: pkijs.id_ContentType_SignedData,
+    content: signed.toSchema(true),
+  });
+  return new Uint8Array(ci.toSchema().toBER(false));
+}
+
+interface PkijsCertResult {
+  cert: pkijs.Certificate;
+  privateKey: CryptoKey;
+}
+
+async function mkPkijsCert(opts: {
+  subject: string;
+  issuerCert: PkijsCertResult | null;
+  isCa: boolean;
+}): Promise<PkijsCertResult> {
+  const subtle = globalThis.crypto.subtle;
+  const algo = { name: 'ECDSA', namedCurve: 'P-256' } as const;
+  const kp = await subtle.generateKey(algo, true, ['sign', 'verify']);
+  const cert = new pkijs.Certificate();
+  cert.version = 2;
+  cert.serialNumber = new asn1js.Integer({
+    value: Math.floor(Math.random() * 1_000_000_000),
+  });
+  const issuerName = opts.issuerCert ? opts.issuerCert.cert.subject : undefined;
+  setName(cert.subject, opts.subject);
+  if (issuerName) {
+    cert.issuer = issuerName;
+  } else {
+    setName(cert.issuer, opts.subject);
+  }
+  cert.notBefore.value = new Date(Date.now() - 60_000);
+  cert.notAfter.value = new Date(Date.now() + 365 * 24 * 60 * 60_000);
+  await cert.subjectPublicKeyInfo.importKey(kp.publicKey);
+  const signWith = opts.issuerCert ? opts.issuerCert.privateKey : kp.privateKey;
+  await cert.sign(signWith, 'SHA-256');
+  return { cert, privateKey: kp.privateKey };
+}
+
+function setName(target: pkijs.RelativeDistinguishedNames, cn: string): void {
+  target.typesAndValues = [
+    new pkijs.AttributeTypeAndValue({
+      type: '2.5.4.3',
+      value: new asn1js.Utf8String({ value: cn }),
+    }),
+  ];
 }
 
 function mkCert(opts: {
