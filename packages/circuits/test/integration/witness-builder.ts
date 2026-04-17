@@ -11,11 +11,11 @@ import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 
 // Compile-time caps the main circuit uses.
-export const MAX_BCANON = 2048;
-export const MAX_SA = 2048;
-export const MAX_CERT = 2048;
+export const MAX_BCANON = 1024;
+export const MAX_SA = 1536;
+export const MAX_CERT = 1536;
 export const MAX_CTX = 256;
-export const MAX_DECL = 1024;
+export const MAX_DECL = 960;
 export const MERKLE_DEPTH = 16;
 
 export interface AdminEcdsaFixture {

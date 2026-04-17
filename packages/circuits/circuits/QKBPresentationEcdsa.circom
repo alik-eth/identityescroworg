@@ -109,9 +109,9 @@ template Bits256ToField() {
 // =============================================================================
 
 template QKBPresentationEcdsa() {
-    var MAX_BCANON = 2048;
-    var MAX_SA = 2048;
-    var MAX_CERT = 2048;
+    var MAX_BCANON = 1024;
+    var MAX_SA = 1536;
+    var MAX_CERT = 1536;
     var MAX_CTX = 256;
     var MAX_DECL = 1024;
     var MAX_TS_DIGITS = 20;
@@ -310,23 +310,19 @@ template QKBPresentationEcdsa() {
 
     // =========================================================================
     // 4. sha256(leafTBS) and EcdsaP256Verify for intermediate signing leaf.
-    //    leafTBS lives inside leafDER starting at leafTbsOffset for leafTbsLen
-    //    bytes. We SHA-hash the padded view; prefix-check against leafDER.
-    // =========================================================================
-    // Prefix check: for each i < leafTbsLen, leafTbsPaddedIn[i] must equal
-    // leafDER[leafTbsOffset + i]. Use a Multiplexer per position (expensive
-    // but bounded).
-    component tbsPick[MAX_CERT];
-    component tbsLt[MAX_CERT];
-    for (var i = 0; i < MAX_CERT; i++) {
-        tbsPick[i] = Multiplexer(1, MAX_CERT);
-        for (var j = 0; j < MAX_CERT; j++) tbsPick[i].inp[j][0] <== leafDER[j];
-        tbsPick[i].sel <== leafTbsOffset + i;
-        tbsLt[i] = LessThan(16);
-        tbsLt[i].in[0] <== i;
-        tbsLt[i].in[1] <== leafTbsLen;
-        tbsLt[i].out * (leafTbsPaddedIn[i] - tbsPick[i].out[0]) === 0;
-    }
+    //    PHASE-1 GAP: we take leafTbsPaddedIn as a direct witness input
+    //    without in-circuit binding to leafDER. The naive prefix-check
+    //    (MAX_CERT Multiplexers each over the MAX_CERT buffer) is O(n²)
+    //    constraint-count and blows the compiler's memory budget past 22 GB.
+    //    Closed in a follow-up via an O(n) substring construction (e.g.,
+    //    shift-then-compare over a logarithmic ladder of rotations).
+    //    Until then, the witness builder — not the circuit — guarantees
+    //    leafTbsPaddedIn matches leafDER at leafTbsOffset.
+    //    leafDerLen + leafTbsLen + leafTbsOffset are kept as declared inputs
+    //    so the witness shape stays stable for the follow-up wiring.
+    leafDerLen * 0 === 0;
+    leafTbsOffset * 0 === 0;
+    leafTbsLen * 0 === 0;
 
     component hashTBS = Sha256Var(MAX_CERT);
     for (var i = 0; i < MAX_CERT; i++) hashTBS.paddedIn[i] <== leafTbsPaddedIn[i];

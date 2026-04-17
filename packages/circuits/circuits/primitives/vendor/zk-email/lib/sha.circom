@@ -4,7 +4,7 @@ include "circomlib/circuits/bitify.circom";
 include "circomlib/circuits/sha256/constants.circom";
 include "circomlib/circuits/sha256/sha256compression.circom";
 include "circomlib/circuits/comparators.circom";
-include "./fp.circom";
+// include "./fp.circom"; -- removed: unused in sha.circom; pulls bigint CheckCarryToZero which collides with circom-ecdsa-p256
 include "../utils/array.circom";
 include "../utils/functions.circom";
 
