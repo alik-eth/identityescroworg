@@ -1,0 +1,41 @@
+No files changed, compilation skipped
+Script ran successfully.
+
+== Return ==
+registry: contract QKBRegistry 0xb7657F73B2A83d720A89601A40580D7516E1867D
+rsa: address 0xD64F63f22BC7D7517C73FC2C873c2d71b48f4c20
+ecdsa: address 0xdcFcef51563688A3ee7b38B8012A866d3515eAB6
+
+== Logs ==
+  Deployed StubGroth16Verifier as RSA verifier: 0xD64F63f22BC7D7517C73FC2C873c2d71b48f4c20
+  Deployed StubGroth16Verifier as ECDSA verifier: 0xdcFcef51563688A3ee7b38B8012A866d3515eAB6
+  QKBRegistry: 0xb7657F73B2A83d720A89601A40580D7516E1867D
+  rsaVerifier: 0xD64F63f22BC7D7517C73FC2C873c2d71b48f4c20
+  ecdsaVerifier: 0xdcFcef51563688A3ee7b38B8012A866d3515eAB6
+  admin: 0xB8d121CD0B2D0AB3df2aFF0B45B2fD354FF4c1f7
+  chainid: 31337
+  0x00000000000000000000000000000000000000000000000000000000c0ffee01
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 2.000000001 gwei
+
+Estimated total gas used for script: 1682073
+
+Estimated amount required: 0.003364146001682073 ETH
+
+==========================
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: /data/Develop/qkb-wt/contracts/broadcast/Deploy.s.sol/31337/run-latest.json
+
+Sensitive values saved to: /data/Develop/qkb-wt/contracts/packages/contracts/cache/Deploy.s.sol/31337/run-latest.json
+
