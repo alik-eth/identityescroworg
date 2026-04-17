@@ -30,6 +30,7 @@ export function GenerateScreen() {
   const [locale, setLocale] = useState<Locale>(
     (i18n.language.startsWith('uk') ? 'uk' : 'en') as Locale,
   );
+  const [contextText, setContextText] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const onGenerate = (): void => {
@@ -50,7 +51,19 @@ export function GenerateScreen() {
       const pk = hexToU8(pubkeyHex);
       const nonce = crypto.getRandomValues(new Uint8Array(32));
       const timestamp = Math.floor(Date.now() / 1000);
-      const binding = buildBinding({ pk, timestamp, nonce, locale });
+      // Optional per-app context for Sybil-resistant nullifier (§14.4). Empty
+      // string ⇒ omit ⇒ binding.context = "0x" (global identity proof).
+      const ctxTrim = contextText.trim();
+      const binding =
+        ctxTrim.length > 0
+          ? buildBinding({
+              pk,
+              timestamp,
+              nonce,
+              locale,
+              context: new TextEncoder().encode(ctxTrim),
+            })
+          : buildBinding({ pk, timestamp, nonce, locale });
       const bcanon = canonicalizeBinding(binding);
       saveSession({
         privkeyHex,
@@ -106,6 +119,27 @@ export function GenerateScreen() {
             <option value="en">{t('lang.en')}</option>
             <option value="uk">{t('lang.uk')}</option>
           </select>
+        </div>
+
+        <div className="space-y-1">
+          <label
+            htmlFor="context-input"
+            className="block text-xs font-mono text-slate-500 uppercase tracking-widest"
+          >
+            {t('generate.contextLabel')}
+          </label>
+          <input
+            id="context-input"
+            type="text"
+            data-testid="context-input"
+            value={contextText}
+            onChange={(e) => setContextText(e.target.value)}
+            placeholder={t('generate.contextPlaceholder')}
+            autoComplete="off"
+            spellCheck={false}
+            className="w-full bg-slate-900 border border-slate-700 text-slate-200 text-sm font-mono rounded px-2 py-1"
+          />
+          <p className="text-[11px] text-slate-500">{t('generate.contextHelp')}</p>
         </div>
 
         {error && (
