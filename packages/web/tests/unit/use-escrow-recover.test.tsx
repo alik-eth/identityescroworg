@@ -27,7 +27,7 @@ describe('useEscrowRecover', () => {
     expect(result.current.state.shares).toHaveLength(2);
     expect(result.current.state.encR).toBe('0xbeef');
     expect(calls).toHaveLength(2);
-    expect(calls[0]).toBe('https://a.example/recover/0xabc');
+    expect(calls[0]).toBe('https://a.example/escrow/0xabc/release');
   });
 
   it('skips agents that return non-2xx and reports insufficient shares', async () => {

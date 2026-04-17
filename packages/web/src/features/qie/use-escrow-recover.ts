@@ -61,7 +61,7 @@ export function useEscrowRecover(
       let encR: string | undefined;
       try {
         for (const a of input.agents) {
-          const url = new URL(`/recover/${input.escrowId}`, a.endpoint).toString();
+          const url = new URL(`/escrow/${input.escrowId}/release`, a.endpoint).toString();
           let res: Response;
           try {
             res = await fetchImpl(url, {
