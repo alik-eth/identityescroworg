@@ -50,6 +50,16 @@ contract QKBRegistry {
     address public admin;
     mapping(address => Binding) public bindings;
 
+    /// @dev Nullifier primitive (spec §14.4). `usedNullifiers[n]` guards
+    ///      against two Holders with the same QES cert subject registering
+    ///      under the same ctxHash. `nullifierToPk` lets relying parties
+    ///      look up the pkAddr a given nullifier attests to.
+    ///      `revokedNullifiers[n]` carries the admin-published revocation
+    ///      reason hash (Sedelmeir-style DB-CRL pattern).
+    mapping(bytes32 => bool) public usedNullifiers;
+    mapping(bytes32 => address) public nullifierToPk;
+    mapping(bytes32 => bytes32) public revokedNullifiers;
+
     event BindingRegistered(
         address indexed pkAddr,
         uint8 indexed algorithmTag,
@@ -61,6 +71,10 @@ contract QKBRegistry {
     event TrustedListRootUpdated(bytes32 oldRoot, bytes32 newRoot);
     event AdminTransferred(address indexed oldAdmin, address indexed newAdmin);
     event VerifierUpdated(uint8 indexed algorithmTag, address oldVerifier, address newVerifier);
+    /// @dev `reasonHash` is an opaque digest of the off-chain revocation
+    ///      justification (e.g. sha256 of a CSV-SR row). The chain does
+    ///      not interpret it; relying parties cross-reference off-chain.
+    event NullifierRevoked(bytes32 indexed nullifier, address indexed pkAddr, bytes32 reasonHash);
 
     error AlreadyBound();
     error BindingTooOld();
@@ -68,6 +82,9 @@ contract QKBRegistry {
     error InvalidProof();
     error UnknownAlgorithm();
     error RootMismatch();
+    error NullifierUsed();
+    error NullifierAlreadyRevoked();
+    error UnknownNullifier();
     error NotBound();
     error BadExpireSig();
     error NotAdmin();
@@ -116,9 +133,13 @@ contract QKBRegistry {
         if (!QKBVerifier.verify(v, p, i)) revert InvalidProof();
         if (i.timestamp > block.timestamp) revert BindingFromFuture();
         if (block.timestamp > uint256(i.timestamp) + MAX_AGE) revert BindingTooOld();
+        if (usedNullifiers[i.nullifier]) revert NullifierUsed();
 
         address pkAddr = QKBVerifier.toPkAddress(i.pkX, i.pkY);
         if (bindings[pkAddr].status != Status.NONE) revert AlreadyBound();
+
+        usedNullifiers[i.nullifier] = true;
+        nullifierToPk[i.nullifier] = pkAddr;
 
         bindings[pkAddr] = Binding({
             status: Status.ACTIVE,
@@ -182,8 +203,25 @@ contract QKBRegistry {
         Binding storage b = bindings[pkAddr];
         if (b.status == Status.NONE) return false;
         if (t < b.boundAt) return false;
+        // Sedelmeir-style DB-CRL: an admin-revoked nullifier marks the
+        // binding as no longer authoritative regardless of status.
+        if (revokedNullifiers[b.nullifier] != bytes32(0)) return false;
         if (b.status == Status.ACTIVE) return true;
         return t < b.expiredAt;
+    }
+
+    /// @notice Admin revocation of a registered nullifier. Publishes a
+    ///         `reasonHash` (opaque to chain) and flips the Sedelmeir-style
+    ///         CRL bit — the mapped binding's `isActiveAt` returns false
+    ///         from this point onward. Callable only for nullifiers that
+    ///         were previously seen by `register`. Non-zero `reasonHash`
+    ///         required so the event carries meaningful audit info.
+    function revokeNullifier(bytes32 nullifier, bytes32 reasonHash) external onlyAdmin {
+        if (reasonHash == bytes32(0)) revert ZeroAddress();
+        if (!usedNullifiers[nullifier]) revert UnknownNullifier();
+        if (revokedNullifiers[nullifier] != bytes32(0)) revert NullifierAlreadyRevoked();
+        revokedNullifiers[nullifier] = reasonHash;
+        emit NullifierRevoked(nullifier, nullifierToPk[nullifier], reasonHash);
     }
 
     function setRsaVerifier(IGroth16Verifier newVerifier) external onlyAdmin {

@@ -92,6 +92,9 @@ contract QKBRegistryRegisterTest is Test {
         QKBVerifier.Inputs memory i = _validInputs();
         registry.register(_zeroProof(), i);
         QKBVerifier.Inputs memory i2 = _validInputs();
+        // Distinct nullifier so the uniqueness guard doesn't fire first;
+        // here we're exercising the pk-uniqueness path.
+        i2.nullifier = bytes32(uint256(i.nullifier) ^ 1);
         vm.expectRevert(QKBRegistry.AlreadyBound.selector);
         registry.register(_zeroProof(), i2);
     }
