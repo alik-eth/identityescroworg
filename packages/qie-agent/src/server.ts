@@ -7,6 +7,8 @@ import { registerEscrowRoutes } from "./routes/escrow.js";
 import { registerReleaseRoutes } from "./routes/release.js";
 import { registerStatusRoutes } from "./routes/status.js";
 import { registerWellKnownRoutes } from "./routes/wellknown.js";
+import { startRevocationWatcher, type RevocationLog } from "./watcher.js";
+import { qesVerifyNode } from "./qes-verify.js";
 import type { RpcFactory, ServerCtx } from "./context.js";
 
 export interface ServerOpts {
@@ -20,6 +22,8 @@ export interface ServerOpts {
   lotlInclusionProof?: { leaf: string; path: string[]; root: string; index: number };
   replayWindowMs?: number;
   bodyLimit?: number;
+  registryAddr?: string;
+  revocationSubscribe?: (onLog: (log: RevocationLog) => void) => () => void;
 }
 
 export async function buildServer(opts: ServerOpts): Promise<FastifyInstance> {
@@ -38,10 +42,27 @@ export async function buildServer(opts: ServerOpts): Promise<FastifyInstance> {
     ackSign: (id: string) => signAck(opts.ackSeed, id, opts.agentId),
     ackPub: ackPublicKey(opts.ackSeed),
     chainRpc: opts.chainRpcByChainId,
-    qesVerify: opts.qesVerify ?? (async () => false),
+    qesVerify: opts.qesVerify ?? qesVerifyNode,
     ...(opts.hybridPk ? { hybridPk: opts.hybridPk } : {}),
     ...(opts.lotlInclusionProof ? { lotlInclusionProof: opts.lotlInclusionProof } : {}),
   };
+
+  if (opts.revocationSubscribe) {
+    startRevocationWatcher({
+      registryAddr: opts.registryAddr ?? "0x0000000000000000000000000000000000000000",
+      subscribe: opts.revocationSubscribe,
+      storage,
+    });
+  }
+
+  // PRIVACY §3 — sensitive endpoints must not be cacheable by intermediaries.
+  app.addHook("onSend", async (req, reply, payload) => {
+    const url = req.url;
+    const sensitive = url === "/escrow"
+      || /^\/escrow\/[^/]+\/(config|release)$/.test(url);
+    if (sensitive) reply.header("cache-control", "no-store, private");
+    return payload;
+  });
 
   registerEscrowRoutes(app, ctx);
   registerReleaseRoutes(app, ctx);

@@ -191,6 +191,45 @@ describe("agent server", () => {
     } finally { await app.close(); }
   });
 
+  it("sets Cache-Control: no-store on sensitive endpoints", async () => {
+    const agentKp = generateHybridKeypair();
+    const cfg = mkCfg(agentKp.pk);
+    const env = buildEnvelope(cfg, new TextEncoder().encode("R"));
+    const app = await buildServer({
+      agentId: "a0", storageDir: dir, ackSeed: new Uint8Array(32).fill(11),
+      hybridPk: agentKp.pk, chainRpcByChainId: {},
+    });
+    try {
+      const r1 = await app.inject({ method: "POST", url: "/escrow", payload: wirePostBody(env) });
+      expect(r1.headers["cache-control"]).toMatch(/no-store/);
+      const r2 = await app.inject({ method: "GET", url: `/escrow/${env.escrowId}/config` });
+      expect(r2.headers["cache-control"]).toMatch(/no-store/);
+      // well-known is publicly cacheable (discovery metadata) — no header set
+      const r3 = await app.inject({ method: "GET", url: "/.well-known/qie-agent.json" });
+      expect(r3.headers["cache-control"]).toBeUndefined();
+    } finally { await app.close(); }
+  });
+
+  it("revocationSubscribe: event flips stored record to revoked", async () => {
+    const agentKp = generateHybridKeypair();
+    const cfg = mkCfg(agentKp.pk);
+    const env = buildEnvelope(cfg, new TextEncoder().encode("R"));
+    let emit: (log: { escrowId: string }) => void = () => {};
+    const app = await buildServer({
+      agentId: "a0", storageDir: dir, ackSeed: new Uint8Array(32).fill(12),
+      hybridPk: agentKp.pk, chainRpcByChainId: {},
+      registryAddr: "0x0000000000000000000000000000000000000099",
+      revocationSubscribe: (cb) => { emit = cb; return () => {}; },
+    });
+    try {
+      await app.inject({ method: "POST", url: "/escrow", payload: wirePostBody(env) });
+      emit({ escrowId: env.escrowId });
+      await new Promise(r => setTimeout(r, 30));
+      const r = await app.inject({ method: "GET", url: `/escrow/${env.escrowId}/status` });
+      expect(r.json().status).toBe("revoked");
+    } finally { await app.close(); }
+  });
+
   it("release: C-path with valid qesVerify → ct + encR", async () => {
     const agentKp = generateHybridKeypair();
     const cfg = mkCfg(agentKp.pk);
