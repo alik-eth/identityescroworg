@@ -40,7 +40,7 @@ export async function compile(
 
   return circomTester.wasm(fullPath, {
     output: outDir,
-    recompile: options.recompile ?? true,
+    recompile: options.recompile ?? false,
     prime: 'bn128',
     include: [repoCircuitsDir, nodeModulesDir],
   });
