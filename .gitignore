@@ -19,6 +19,7 @@ packages/circuits/ceremony/ptau/
 packages/contracts/cache/
 packages/contracts/out/
 packages/contracts/broadcast/
+broadcast/
 
 # Web
 packages/web/dist/
