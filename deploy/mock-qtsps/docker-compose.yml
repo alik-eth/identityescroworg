@@ -70,7 +70,6 @@ services:
       QIE_AGENT_PORT: "8080"
       QIE_RPC_URL: "http://anvil:8545"
       QIE_LOCAL_ADDRESSES_PATH: /shared/local.json
-      STATE_READER_DISABLED: "1"
     volumes:
       - ./agents:/keys:ro,z
       - shared:/shared:ro,z
@@ -94,7 +93,6 @@ services:
       QIE_AGENT_PORT: "8080"
       QIE_RPC_URL: "http://anvil:8545"
       QIE_LOCAL_ADDRESSES_PATH: /shared/local.json
-      STATE_READER_DISABLED: "1"
     volumes:
       - ./agents:/keys:ro,z
       - shared:/shared:ro,z
@@ -118,7 +116,6 @@ services:
       QIE_AGENT_PORT: "8080"
       QIE_RPC_URL: "http://anvil:8545"
       QIE_LOCAL_ADDRESSES_PATH: /shared/local.json
-      STATE_READER_DISABLED: "1"
     volumes:
       - ./agents:/keys:ro,z
       - shared:/shared:ro,z

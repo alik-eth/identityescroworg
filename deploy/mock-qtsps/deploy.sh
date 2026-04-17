@@ -6,9 +6,10 @@
 # JSON, and writes /shared/local.json consumed by the agent services
 # via a shared named volume.
 #
-# DeployArbitrators.s.sol is gated on contracts-eng shipping the script
-# in packages/contracts/script/ — until then we emit an empty arbitrators
-# object. The web/CLI E2E flows can still exercise registry-only paths.
+# Runs Deploy.s.sol and DeployArbitrators.s.sol; merges addresses into
+# /shared/local.json. The arbitrator authority defaults to anvil's first
+# account (DEV ONLY) so the mock-qtsps harness can exercise the full
+# release state machine without human key handling.
 
 set -eu
 
@@ -72,12 +73,44 @@ if [ -z "${REGISTRY_ADDR}" ] || [ "${REGISTRY_ADDR}" = "null" ]; then
   exit 1
 fi
 
+echo "[deploy] running DeployArbitrators.s.sol..."
+export QIE_AUTHORITY_ADDRESS="${DEV_ADMIN_ADDRESS}"
+export QIE_REGISTRY_ADDRESS="${REGISTRY_ADDR}"
+
+forge script script/DeployArbitrators.s.sol:DeployArbitrators \
+  --rpc-url "${ANVIL_RPC}" \
+  --broadcast \
+  --silent \
+  --out /shared/forge-out \
+  --cache-path /shared/forge-cache
+
+ARB_BROADCAST=$(find /contracts/broadcast/DeployArbitrators.s.sol -name 'run-latest.json' 2>/dev/null | head -n 1 || true)
+if [ -z "${ARB_BROADCAST}" ]; then
+  ARB_BROADCAST=$(find /shared -path '*DeployArbitrators*run-latest.json' 2>/dev/null | head -n 1 || true)
+fi
+if [ -z "${ARB_BROADCAST}" ]; then
+  echo "[deploy] could not locate DeployArbitrators broadcast" >&2
+  exit 1
+fi
+
+AUTHORITY_ARB_ADDR=$(jq -r '
+  [.transactions[] | select(.contractName=="AuthorityArbitrator")] | .[-1].contractAddress
+' "${ARB_BROADCAST}")
+
+if [ -z "${AUTHORITY_ARB_ADDR}" ] || [ "${AUTHORITY_ARB_ADDR}" = "null" ]; then
+  echo "[deploy] failed to extract AuthorityArbitrator address" >&2
+  exit 1
+fi
+
 cat > /shared/local.json <<EOF
 {
   "chainId": 31337,
   "rpc": "${ANVIL_RPC}",
   "registry": "${REGISTRY_ADDR}",
-  "arbitrators": {}
+  "arbitrators": {
+    "authority": "${AUTHORITY_ARB_ADDR}",
+    "authorityAuthority": "${DEV_ADMIN_ADDRESS}"
+  }
 }
 EOF
 echo "[deploy] wrote /shared/local.json:"
