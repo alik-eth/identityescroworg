@@ -1,0 +1,51 @@
+name: nightly-web-e2e
+
+on:
+  schedule:
+    - cron: '0 2 * * *' # 02:00 UTC every night
+  workflow_dispatch:
+
+jobs:
+  real-prover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.1.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.11.0'
+          cache: pnpm
+
+      - name: install
+        run: pnpm install --frozen-lockfile
+
+      - name: build
+        run: pnpm --filter @qkb/web build
+
+      - name: install playwright browsers
+        run: pnpm --filter @qkb/web exec playwright install --with-deps chromium
+
+      - name: real-prover e2e
+        env:
+          E2E_REAL_PROVER: '1'
+          # Wire these to the published circuit artifacts from @qkb/circuits.
+          # The job is a no-op (skipped) when they are unset.
+          E2E_PROVER_WASM_URL: ${{ vars.E2E_PROVER_WASM_URL }}
+          E2E_PROVER_ZKEY_URL: ${{ vars.E2E_PROVER_ZKEY_URL }}
+        run: pnpm --filter @qkb/web exec playwright test --project=real-prover
+
+      - name: upload proof artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-prover-output
+          path: |
+            packages/web/test-results/**/proof.json
+            packages/web/test-results/**/publicSignals.json
+          if-no-files-found: ignore
+          retention-days: 14

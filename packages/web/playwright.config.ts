@@ -1,8 +1,10 @@
 import { defineConfig } from '@playwright/test';
 
+const REAL_PROVER = process.env.E2E_REAL_PROVER === '1';
+
 export default defineConfig({
   testDir: './tests/e2e',
-  timeout: 30_000,
+  timeout: REAL_PROVER ? 20 * 60_000 : 30_000,
   fullyParallel: true,
   reporter: 'list',
   use: {
@@ -18,6 +20,10 @@ export default defineConfig({
     {
       name: 'smoke',
       testMatch: /smoke\.spec\.ts/,
+    },
+    {
+      name: 'real-prover',
+      testMatch: /happy-path\.spec\.ts/,
     },
   ],
 });
