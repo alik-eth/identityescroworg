@@ -60,6 +60,26 @@ contract QKBRegistry {
         emit TrustedListRootUpdated(bytes32(0), initialRoot);
     }
 
+    /// @notice Register a fresh QKB binding. See spec §6.2 steps 1–7.
+    function register(QKBVerifier.Proof calldata p, QKBVerifier.Inputs calldata i) external {
+        if (!QKBVerifier.verify(verifier, p, i)) revert InvalidProof();
+        if (i.rTL != trustedListRoot) revert RootMismatch();
+        if (i.timestamp > block.timestamp) revert BindingFromFuture();
+        if (block.timestamp > uint256(i.timestamp) + MAX_AGE) revert BindingTooOld();
+
+        address pkAddr = QKBVerifier.toPkAddress(i.pkX, i.pkY);
+        if (bindings[pkAddr].status != Status.NONE) revert AlreadyBound();
+
+        bindings[pkAddr] = Binding({
+            status: Status.ACTIVE,
+            boundAt: uint64(block.timestamp),
+            expiredAt: 0,
+            ctxHash: i.ctxHash,
+            declHash: i.declHash
+        });
+        emit BindingRegistered(pkAddr, i.ctxHash, i.declHash);
+    }
+
     function updateTrustedListRoot(bytes32 newRoot) external onlyAdmin {
         bytes32 old = trustedListRoot;
         trustedListRoot = newRoot;
