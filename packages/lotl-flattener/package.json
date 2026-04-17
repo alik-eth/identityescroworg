@@ -1,0 +1,25 @@
+{
+  "name": "@qkb/lotl-flattener",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "bin": { "qkb-flatten": "./dist/index.js" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "biome check src tests"
+  },
+  "dependencies": {
+    "asn1js": "^3.0.5",
+    "commander": "^12.0.0",
+    "fast-xml-parser": "^4.4.0",
+    "pkijs": "^3.2.0",
+    "circomlibjs": "^0.1.7"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.5.0"
+  }
+}
