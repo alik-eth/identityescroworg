@@ -1,4 +1,8 @@
 import { useCallback, useState } from 'react';
+import {
+  getDefaultAgentTransport,
+  type AgentTransport,
+} from './agent-transport';
 
 /**
  * Browser-side share collection for QIE recovery.
@@ -49,9 +53,14 @@ const DEFAULT_FETCH: FetchLike =
     : () => Promise.reject(new Error('fetch is not available'));
 
 export function useEscrowRecover(
-  options: { fetchImpl?: FetchLike } = {},
+  options: { fetchImpl?: FetchLike; transport?: AgentTransport } = {},
 ): UseEscrowRecoverReturn {
   const fetchImpl = options.fetchImpl ?? DEFAULT_FETCH;
+  const transport: AgentTransport | null = options.transport
+    ? options.transport
+    : options.fetchImpl
+      ? null
+      : getDefaultAgentTransport();
   const [state, setState] = useState<UseEscrowRecoverState>({ phase: 'idle', shares: [] });
 
   const recover = useCallback(
@@ -60,23 +69,46 @@ export function useEscrowRecover(
       const shares: CollectedShare[] = [];
       let encR: string | undefined;
       try {
+        type ShareResp = { share?: unknown; encR?: string; payload?: unknown };
         for (const a of input.agents) {
-          const url = new URL(`/escrow/${input.escrowId}/release`, a.endpoint).toString();
-          let res: Response;
-          try {
-            res = await fetchImpl(url, {
-              method: 'POST',
-              headers: { 'content-type': 'application/json' },
-              cache: 'no-store',
-              body: JSON.stringify(input.body),
-            });
-          } catch {
-            continue; // network error on one agent is not fatal
+          let j: ShareResp | null = null;
+          if (transport) {
+            try {
+              const resp = await transport.release(
+                a.endpoint,
+                input.escrowId,
+                input.body as Record<string, unknown>,
+              );
+              if (!resp.ok) continue;
+              j = resp.body as ShareResp;
+            } catch {
+              continue;
+            }
+          } else {
+            const url = new URL(
+              `/escrow/${input.escrowId}/release`,
+              a.endpoint,
+            ).toString();
+            let res: Response;
+            try {
+              res = await fetchImpl(url, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                cache: 'no-store',
+                body: JSON.stringify(input.body),
+              });
+            } catch {
+              continue; // network error on one agent is not fatal
+            }
+            if (!res.ok) continue;
+            j = (await res.json()) as ShareResp;
           }
-          if (!res.ok) continue;
-          const j = (await res.json()) as { share?: unknown; encR?: string; payload?: unknown };
+          if (!j) continue;
           if (typeof j.encR === 'string' && encR === undefined) encR = j.encR;
-          shares.push({ agent_id: a.agent_id, payload: j.share ?? j.payload ?? j });
+          shares.push({
+            agent_id: a.agent_id,
+            payload: j.share ?? j.payload ?? j,
+          });
           if (shares.length >= input.threshold) break;
         }
         if (shares.length < input.threshold) {
@@ -94,7 +126,7 @@ export function useEscrowRecover(
           : { phase: 'error', shares, encR, error });
       }
     },
-    [fetchImpl],
+    [fetchImpl, transport],
   );
 
   return { state, recover };

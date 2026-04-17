@@ -10,6 +10,10 @@ import {
   type EscrowConfig,
   type HybridPublicKey,
 } from '@qkb/qie-core';
+import {
+  getDefaultAgentTransport,
+  type AgentTransport,
+} from './agent-transport';
 
 /**
  * Browser-side hybrid-KEM + Shamir envelope builder and fan-out POSTer.
@@ -166,10 +170,28 @@ export function buildSetupEnvelope(
 }
 
 export function useEscrowSetup(
-  options: { fetchImpl?: FetchLike; randomBytes?: RandomBytesFn } = {},
+  options: {
+    fetchImpl?: FetchLike;
+    randomBytes?: RandomBytesFn;
+    /**
+     * Optional AgentTransport — when provided, replaces the raw fetch
+     * fan-out and lets the demo route deposits through the browser-side
+     * BrowserAgent. If omitted, the hook uses `fetchImpl` (legacy path)
+     * so existing tests keep passing untouched.
+     */
+    transport?: AgentTransport;
+  } = {},
 ): UseEscrowSetupReturn {
   const fetchImpl = options.fetchImpl ?? DEFAULT_FETCH;
   const rng = options.randomBytes ?? DEFAULT_RANDOM;
+  // Lazily resolve the default transport so env flag changes apply at
+  // render time. When the caller explicitly passed `fetchImpl` we stay on
+  // the HTTP path to avoid breaking pre-D5 tests that pin fetch mocks.
+  const transport: AgentTransport | null = options.transport
+    ? options.transport
+    : options.fetchImpl
+      ? null
+      : getDefaultAgentTransport();
   const [state, setState] = useState<UseEscrowSetupState>({ phase: 'idle', acks: {} });
 
   const submit = useCallback(
@@ -198,7 +220,6 @@ export function useEscrowSetup(
         for (let i = 0; i < input.agents.length; i++) {
           const agent = input.agents[i]!;
           const pa = envelope.perAgent[i]!;
-          const url = new URL('/escrow', agent.url).toString();
           const body = {
             escrowId: envelope.escrowId,
             config: configWire,
@@ -211,14 +232,26 @@ export function useEscrowSetup(
             },
             encR: encRHex,
           };
-          const res = await fetchImpl(url, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            cache: 'no-store',
-            body: JSON.stringify(body),
-          });
-          if (!res.ok) {
-            throw new Error(`agent ${agent.id} rejected with HTTP ${res.status}`);
+          if (transport) {
+            const resp = await transport.deposit(agent.url, body);
+            if (!resp.ok) {
+              throw new Error(
+                `agent ${agent.id} rejected (${resp.status ?? 'err'})`,
+              );
+            }
+          } else {
+            const url = new URL('/escrow', agent.url).toString();
+            const res = await fetchImpl(url, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              cache: 'no-store',
+              body: JSON.stringify(body),
+            });
+            if (!res.ok) {
+              throw new Error(
+                `agent ${agent.id} rejected with HTTP ${res.status}`,
+              );
+            }
           }
           acks[agent.id] = 'ok';
           setState({ phase: 'submitting', escrowId: envelope.escrowId, acks: { ...acks } });
@@ -233,7 +266,7 @@ export function useEscrowSetup(
         });
       }
     },
-    [fetchImpl, rng],
+    [fetchImpl, rng, transport],
   );
 
   return { state, submit };
