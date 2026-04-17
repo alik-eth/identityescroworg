@@ -203,6 +203,9 @@ importers:
       '@noble/secp256k1':
         specifier: ^2.1.0
         version: 2.3.0
+      '@qkb/qie-core':
+        specifier: workspace:*
+        version: link:../qie-core
       '@tailwindcss/vite':
         specifier: ^4.2.2
         version: 4.2.2(vite@5.4.21(@types/node@20.19.39)(lightningcss@1.32.0))

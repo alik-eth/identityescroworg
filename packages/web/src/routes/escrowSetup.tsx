@@ -146,12 +146,21 @@ export function EscrowSetupScreen() {
               {t('escrow.setup.back')}
             </button>
             <button
-              disabled={setupState.phase === 'submitting'}
+              disabled={setupState.phase === 'submitting' || true}
+              title="TODO(W8): wire custodian picker + recipient keygen before enabling submit"
               onClick={() =>
+                // Placeholder — UI still owes a custodian picker and a
+                // recipient hybrid-pk generator before it can call submit()
+                // with real inputs. See W7/W8 tracking.
                 submit({
-                  escrowId: '0x00' as `0x${string}`,
+                  R: new Uint8Array(0),
+                  holderPk: ('0x04' + '0'.repeat(128)) as `0x04${string}`,
                   agents: [],
-                  bodiesByAgentId: {},
+                  threshold,
+                  recipientHybridPk: { x25519: new Uint8Array(32), mlkem: new Uint8Array(1184) },
+                  arbitrator: { chainId: 11155111, address: '0x' + '0'.repeat(40) as `0x${string}`, kind: 'authority' },
+                  expiry: Math.floor(Date.now() / 1000) + expiryDays * 86400,
+                  jurisdiction: 'UA',
                 })
               }
               className="bg-emerald-500/10 border border-emerald-500/30 px-4 py-2 rounded disabled:opacity-50"
