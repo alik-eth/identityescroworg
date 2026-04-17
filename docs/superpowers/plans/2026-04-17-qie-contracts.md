@@ -2,13 +2,67 @@
 
 > **For agentic workers:** long-lived agent in worktree `/data/Develop/qie-wt/contracts`, branch `feat/qie-contracts`. Commit per task. Go idle between tasks; lead wakes you with next task via SendMessage.
 
-**Goal:** Extend `QKBRegistry` with escrow registration + revocation, ship two `IArbitrator` implementations (`AuthorityArbitrator`, `TimelockArbitrator`), deploy to Sepolia.
+**Goal:** (1) Close Phase-1 registry debt — restore dual verifiers, add nullifier mapping, enforce rTL on-chain (Sprint 0); then (2) extend with escrow registration + revocation + arbitrators + Sepolia deploy (Sprint 1+).
 
-**Architecture:** Phase 1 registry gains an escrow sub-store keyed by `keccak256(pk)`. Arbitrators are standalone contracts emitting a canonical `Unlock` event consumed off-chain by QIE agents. `registerEscrow`/`revokeEscrow` reuse the Phase 1 Groth16 verifier for authentication.
+**Architecture:** Sprint 0 returns `QKBRegistry` to the 14-public-signal layout with dual-verifier dispatch, adds `usedNullifiers` + `nullifierToPk` maps. Sprint 1+ adds escrow stores keyed by `keccak256(pk)`, arbitrators, registration auth via Phase-1 verifier reuse.
 
 **Tech Stack:** Solidity 0.8.24, Foundry (forge/cast/anvil), root `foundry.toml`, viem for client-side.
 
-Interface contracts: `2026-04-17-qie-orchestration.md` §2.3. Do NOT diverge.
+Interface contracts: `2026-04-17-qie-orchestration.md` §0 (Sprint 0) + §2.3 (escrow). Do NOT diverge.
+
+---
+
+## Sprint 0 — Phase-1 debt closure (lands before escrow work)
+
+Ship these tasks first, all on `feat/qie-contracts` (rebased on `main` after
+Phase 1 tag `v0.1.0-phase1`):
+
+- [ ] **S0.1 — Re-expand `QKBVerifier.Inputs` to 14 signals.** Drop
+  `leafSpkiCommit`. Add `bytes32 rTL`, `uint8 algorithmTag`,
+  `bytes32 nullifier`. `IGroth16Verifier.verifyProof` input array becomes
+  `uint256[14]`. Update pack order to match spec §14.3. Commit:
+  `feat(contracts): S0.1 restore 14-signal public layout + nullifier field`.
+
+- [ ] **S0.2 — Restore dual-verifier dispatch in `QKBRegistry`.** Constructor
+  `(IGroth16Verifier rsa_, IGroth16Verifier ecdsa_, bytes32 initialRoot,
+  address initialAdmin)`. `register` dispatches on `i.algorithmTag`
+  (`0 = RSA`, `1 = ECDSA`); reverts `UnknownAlgorithm` otherwise. Re-add
+  `setRsaVerifier` + `setEcdsaVerifier` admin setters; remove `setVerifier`.
+  `BindingRegistered` event regains indexed `algorithmTag`. Commit:
+  `feat(contracts): S0.2 dual-verifier dispatch restored`.
+
+- [ ] **S0.3 — Re-enable `rTL` check.** `register` reverts
+  `RootMismatch` when `i.rTL != trustedListRoot`. Commit:
+  `feat(contracts): S0.3 on-chain rTL equality check restored`.
+
+- [ ] **S0.4 — Nullifier primitive.** Add
+  `mapping(bytes32 => bool) public usedNullifiers` and
+  `mapping(bytes32 => address) public nullifierToPk`. `register` reverts
+  `NullifierUsed()` if `usedNullifiers[nullifier]`. On success it sets
+  both maps. Add admin `revokeNullifier(bytes32 nullifier, bytes32 reasonHash)`
+  that sets a `revokedNullifiers` entry and emits `NullifierRevoked`.
+  Extend `isActiveAt` to return `false` if the binding's nullifier has been
+  revoked. Commit: `feat(contracts): S0.4 nullifier uniqueness + admin revocation`.
+
+- [ ] **S0.5 — Integration test with real RSA + ECDSA proofs.** Take the
+  Phase 1 real-Diia-proof fixture under `test/fixtures/integration/`;
+  re-generate a 14-signal variant against the Sprint-0 circuits (lead
+  pumps the new proof.json / public.json from circuits after circuits
+  ceremony re-runs). Assert `register` accepts both variants, duplicate
+  `nullifier` submission reverts, revoked nullifier makes `isActiveAt`
+  return false. Commit: `test(contracts): S0.5 real RSA + ECDSA proof
+  integration + nullifier dedup`.
+
+- [ ] **S0.6 — Deploy script update.** `Deploy.s.sol` takes
+  `RSA_VERIFIER_ADDR` + `ECDSA_VERIFIER_ADDR` env (back from the
+  single-verifier Phase-1 variant). `USE_STUB_VERIFIER` bool still
+  available for CI. Commit: `feat(contracts): S0.6 deploy script —
+  dual real verifiers`.
+
+Run `forge test` after each commit. Target: all 46+ Phase-1 tests updated +
+new S0.5 tests green, no regressions in admin/expire/isActiveAt/fuzz suites.
+
+Once S0 merges, continue with the Sprint 1+ tasks below.
 
 ---
 

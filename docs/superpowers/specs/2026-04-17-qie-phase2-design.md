@@ -9,7 +9,14 @@
 
 Phase 2 delivers **Qualified Identity Escrow (QIE)** as an overlay on the Phase 1 QKB. Holders who already hold a Phase 1 QKB `(B, σ_QES, cert_QES)` for a `pk` may additionally escrow *identity-recovery material* across a threshold of QTSP custodians. Release yields the raw recovery material — no QEAA, no qualified-seal issuance — so QTSPs act as dumb custodians; recipients verify reconstructed artifacts against Phase 1's chain.
 
-Out of scope: key-recovery escrow (`sk` is never escrowed), threshold decryption, QTSP-issued QEAAs, real-LOTL QIE service-type URI integration (Phase 2 ships with a synthetic LOTL extension).
+Phase 2 also **closes four gaps inherited from Phase 1** (amendments §14 of this spec):
+
+1. **RSA-PKCS#1 v1.5 variant** of the presentation proof. Phase 1 shipped ECDSA-P256 only (Diia). Phase 2 adds RSA-2048 so Polish Szafir, Estonian SK, and other RSA-issuing QTSPs work.
+2. **Unified single-proof circuit.** Phase 1's §5.4 split-proof fallback (leaf-only + deferred chain) is collapsed back into one proof that carries `rTL` + `algorithmTag` in its public signals, matching the original `R_QKB` specification. The 28 GB peak memory that forced the split in Phase 1 is comfortably accommodated by `performance-12x` Fly machines (48 GB); ceremony happens there as standard operating procedure.
+3. **Flyctl-based ceremony** documented as the canonical production path — covers setup, contribute, export, R2 upload. Local dev boxes are for development-stub circuits only.
+4. **Nullifier primitive for deduplication** — one new public signal, one new on-chain mapping, enables Sybil-resistance per context, revocation-readiness, and escrow-link-on-release (§14.4).
+
+Out of scope: key-recovery escrow (`sk` is never escrowed), threshold decryption, QTSP-issued QEAAs, real-LOTL QIE service-type URI integration (Phase 2 ships with a synthetic LOTL extension), Feldman VSS (Phase 3), threshold ML-KEM (no mature library yet).
 
 ## 1. Terms
 
@@ -225,3 +232,184 @@ Coverage gate: ≥ 90% lines on `qie-core`; 100% branch on security-critical pat
 - Chunk size for `encR` (64 KiB cap is arbitrary; revisit based on max cert chain size).
 - Whether `qie-agent` should expose a gRPC surface alongside REST. MVP: REST only.
 - Whether setup wizard should optionally re-bind (emit a new Phase 1 binding with `escrow_commitment = escrowId`) vs. using pure on-chain linkage. MVP: on-chain linkage only; document rebind as a Holder-driven flow reusing Phase 1 tooling.
+
+---
+
+## 14. Phase-1 debt amendments (decided 2026-04-17)
+
+Phase 1 shipped with four known deviations from the original `R_QKB`
+specification, driven by a 22 GB compile-memory ceiling on the lead's
+dev box and by the need to unblock downstream integration before the
+ceremony completed. Phase 2 closes all four in a single pass before
+touching any QIE-specific work, because every QIE primitive (the
+`registerEscrow` dispatch, the agent predicate evaluator, the recovery
+flow) reads the Phase-1 public signals and would break on a second
+layout change downstream.
+
+### 14.1 RSA-PKCS#1 v1.5 variant (`QKBPresentationRsa.circom`)
+
+- Scope: RSA-2048 signatures over CAdES-BES `signedAttrs`, matching the
+  modulus layout used by Polish Szafir + Estonian SK (4×512-bit limbs,
+  `@zk-email/circuits` `RsaPkcs1V15Verify` sub-template).
+- Reuses Phase-1 sub-circuits: `BindingParseFull`, `Sha256Var`,
+  `PoseidonChunkHashVar`, `DeclarationWhitelist`, `Secp256k1PkMatch`
+  (unchanged — the bound key is still secp256k1 regardless of the QES
+  algorithm; `algorithmTag` refers to the QES signature, not the bound
+  key).
+- Public-signal layout identical to ECDSA variant (§14.3) — the
+  `algorithmTag` distinguishes them on-chain.
+- Ceremony: separate `.zkey` + verifier per variant, each at its own
+  R2 URL in `urls.json`. The web runtime picks the prover variant from
+  the detected QES cert's SignatureAlgorithm OID.
+- Registry dispatch: `QKBRegistry.register` receives `algorithmTag` in
+  the proof and routes to `rsaVerifier` or `ecdsaVerifier` — the
+  dual-verifier registry pattern that was removed in Phase 1 T10
+  returns.
+
+### 14.2 Unified single-proof circuit
+
+- The Phase-1 `QKBPresentationEcdsaLeaf` + the never-shipped
+  `QKBPresentationEcdsaChain` collapse into one
+  `QKBPresentationEcdsa.circom` that inlines all six constraints
+  (R_QKB.{1,2,3,4,5,6}): the leaf QES verify, the intermediate-signs-
+  leaf verify, the Merkle inclusion of the intermediate under `rTL`,
+  `B.pk` match, context + declaration + timestamp binds.
+- Estimated constraint budget: ~10–11 M (leaf ECDSA 7.6 M + chain ECDSA
+  2.5 M + Merkle 0.4 M). Budget covered by `performance-12x` Fly
+  machines with 48 GB, which we already validated tolerate ≥28 GB setup
+  peaks comfortably.
+- `leafSpkiCommit` is removed from the public signals — it only existed
+  to glue the split proofs together, and the single-proof circuit has
+  no glue. The contract's `QKBVerifier.Inputs` struct loses the field.
+
+### 14.3 Public-signal layout (Phase 2 final — 14 signals)
+
+```
+[0..3]   pkX limbs (4 × uint64 LE)
+[4..7]   pkY limbs (4 × uint64 LE)
+[8]      ctxHash
+[9]      rTL                 ← restored from Phase-1 drop
+[10]     declHash            (sha256(decl) mod BN254.p)
+[11]     timestamp
+[12]     algorithmTag        ← restored from Phase-1 drop (0=RSA, 1=ECDSA)
+[13]     nullifier           ← new, §14.4
+```
+
+Registry-side changes:
+- `IGroth16Verifier.verifyProof` input array: `uint[14]`.
+- `QKBVerifier.Inputs` gains `rTL`, `algorithmTag`, `nullifier`; loses
+  `leafSpkiCommit`.
+- `QKBRegistry` regains the `rTL == trustedListRoot` check dropped in
+  Phase-1 T10, and gains the nullifier-uniqueness mapping in §14.4.
+
+### 14.4 Nullifier primitive
+
+Construction:
+```
+secret     = Poseidon(subject_serial_limbs, issuer_cert_hash)
+nullifier  = Poseidon(secret, ctxHash)
+```
+
+- `subject_serial_limbs` — 4×64-bit LE limbs of the certificate's
+  subject `serialNumber` attribute, extracted from the leaf cert DER
+  inside the circuit. This is the PII-carrying stable identifier in
+  every EU QES cert (РНОКПП for UA Diia, PESEL for PL Szafir, Personal
+  Code for EE). The circuit never outputs it.
+- `issuer_cert_hash` — Poseidon hash of the intermediate cert DER
+  (already computed in the circuit for §2.2 of the R_QKB proof — the
+  Merkle-leaf preimage). Reusing it makes the nullifier stable across
+  certificate renewals under the same issuer: the Holder's tax ID
+  doesn't change when their cert rotates, but their cert serial number
+  does — binding against the **issuer** instead of the cert scoops up
+  renewals.
+- `ctxHash` — the Phase 1 binding's existing context field. Reused
+  unchanged. An empty context (`ctxHash = 0`) yields a global
+  nullifier suitable for KYC; a per-dApp `ctxHash` yields a
+  Sybil-resistance nullifier suitable for DAO voting, airdrops, etc.
+
+Properties (per the 2026-04-17 lead ↔ Alik conversation):
+
+- **Uniqueness per context.** Two registrations attempting the same
+  `(secret, ctxHash)` pair produce the same `nullifier`. On-chain
+  `mapping(bytes32 nullifier => bool used)` enforces one-Holder-one-
+  registration per context.
+- **Unlinkability across contexts.** Different `ctxHash` yields
+  different `nullifier`; the observer of two contexts' nullifier sets
+  cannot cross-link Holders (unless Poseidon is broken or secret
+  leaked via side-channel).
+- **Revocation-ready.** Same primitive as Sedelmeir's DB-CRL: publish
+  a revoked `nullifier` and any registry that observes the publication
+  treats the corresponding binding as expired.
+- **Escrow-ready.** The `secret` is the same value the QIE recovery
+  flow would re-derive from `R` on release — so the recipient can
+  independently verify `nullifier == Poseidon(Poseidon(subject_serial,
+  issuer_hash), ctxHash)` from the reconstructed recovery material.
+  This links an on-chain nullifier back to a decrypted QES identity
+  through the threshold of custodians, and only through them.
+
+On-chain:
+- `QKBRegistry` gains `mapping(bytes32 => bool) usedNullifiers` and
+  `error NullifierUsed()`. `register` reverts on duplicate.
+- `QKBRegistry` also gains `mapping(bytes32 => address) nullifierToPk`
+  for the Sedelmeir-style revocation publication pattern: a revoked
+  `nullifier` implies the mapped `pkAddr` is no longer authoritative
+  regardless of its `bindings[pkAddr].status`.
+
+Ceremony impact:
+- Circuit constraint count up ~40 k (two Poseidon hashes). Negligible
+  vs. the ~10 M base cost.
+- Public-signal count 14 (from 13 in original design, 12 in Phase-1
+  shipped variant).
+
+### 14.5 Flyctl ceremony as standard procedure
+
+The Phase-1 precedent (`packages/circuits/ceremony/scripts/fly-setup-remote.sh`)
+becomes the documented production path:
+
+1. `fly apps create qkb-ceremony-<handle>` + `fly volumes create
+   ceremony_data --size 40 --region fra`.
+2. `fly machine run node:20-bookworm --vm-size performance-12x
+   --vm-memory 49152 --volume ceremony_data:/data sleep infinity`
+   (48 GB RAM covers unified-proof setup with comfortable headroom).
+3. SFTP-upload compressed `.r1cs.zst` (2×SHA256Var + 2×ECDSA + Merkle
+   = ~10 M constraints compresses ~25× with zstd — under 100 MB
+   transfer).
+4. On-machine: `curl` ptau 2^24 from googleapis CDN (~18 GB — larger
+   circuit needs a larger ceremony).
+5. `snarkjs groth16 setup → zkey contribute → export` in a detached
+   tmux session. `NODE_OPTIONS='--max-old-space-size=45056'`.
+6. Compress + SFTP-pull the `.zkey` back. Local sha256 verify against
+   on-machine hash.
+7. `aws s3 cp` (R2-compatible) upload of `.zkey` + `.wasm` to the R2
+   bucket `proving-1` under `prove.identityescrow.org`.
+8. `fly machine destroy && fly volumes destroy && fly apps destroy` —
+   ephemeral infra, ceremony cost ≈ $1–2 total.
+
+Per-variant artifacts (RSA + ECDSA) → two parallel ceremonies, two
+entries in `urls.json`. Consumers key by `algorithmTag`.
+
+Local dev boxes continue to run the **stub** circuit flow
+(`circuits/QKBPresentationEcdsaLeafStub.circom` + Phase-2 sibling for
+RSA) for contract + web integration tests. Stubs ship with a dev
+verifier that has the 14-signal layout but no real constraints.
+
+### 14.6 Sequencing inside Phase 2
+
+These amendments land **before any QIE-core code** because every QIE
+primitive reads the Phase 1 public signals:
+
+1. Write `QKBPresentationRsa.circom` + stub sibling. Ship RSA stub to
+   contracts + web so they can test dispatch.
+2. Write `QKBPresentationEcdsa.circom` (unified) + stub sibling. Ship
+   ECDSA stub to contracts + web with the 14-signal layout.
+3. Extend `QKBVerifier.sol` + `QKBRegistry.sol`: dual verifier
+   addresses back, `nullifier` check, `rTL` check, `algorithmTag`
+   dispatch.
+4. Update `packages/web` witness builder for 14 signals + nullifier
+   computation.
+5. Run real unified-proof ceremonies (×2 variants) on Fly.
+6. Swap stub verifiers for real in the Sepolia deploy.
+7. **Then** begin QIE-core, qie-agent, QIE routes.
+
+This sequencing is explicit in the per-worker Phase-2 plans
+(`qie-{contracts,web,qie,flattener}.md`).

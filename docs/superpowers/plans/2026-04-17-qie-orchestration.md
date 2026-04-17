@@ -15,6 +15,51 @@ Spec: `docs/superpowers/specs/2026-04-17-qie-phase2-design.md`
 
 ---
 
+## 0. Phase-1 debt amendments (land first — see spec §14)
+
+Phase 2 opens with a **pre-QIE sprint** that closes four deviations Phase 1
+took under the 22 GB compile ceiling. Every QIE primitive in §§1–9 of this
+plan reads the Phase 1 public signals, so landing QIE-core work before the
+signal layout stabilizes would force a painful re-verification pass.
+
+Sprint 0 deliverables (all must land + merge before QIE-core dispatch):
+
+| # | What                                                 | Owner        | Blocks                        |
+|---|------------------------------------------------------|--------------|-------------------------------|
+| A | RSA-2048 variant circuit + stub verifier             | circuits lead | contracts, web                |
+| B | Unified single-proof ECDSA circuit + stub verifier   | circuits lead | contracts, web                |
+| C | 14-signal `QKBVerifier.sol` + dual-dispatch registry | contracts-eng | web, qie-eng                  |
+| D | Nullifier primitive end-to-end (circuit + contract + web helpers) | circuits lead + contracts-eng + web-eng | qie-eng |
+| E | Flyctl ceremony run ×2 (RSA + unified-ECDSA) + R2 upload | circuits lead | Sepolia deploy, web runtime   |
+| F | Sepolia redeploy of `QKBRegistry` with two real verifiers + nullifier mapping | contracts-eng | web runtime                   |
+
+Public signal layout (per spec §14.3 — **frozen** once Sprint 0 ships):
+
+```
+[0..3]   pkX limbs
+[4..7]   pkY limbs
+[8]      ctxHash
+[9]      rTL
+[10]     declHash         (mod BN254.p)
+[11]     timestamp
+[12]     algorithmTag     (0 = RSA-PKCS1v15-2048, 1 = ECDSA-P256)
+[13]     nullifier        (Poseidon(secret, ctxHash))
+```
+
+Registry changes in Sprint 0:
+- `verifier` (single) → `rsaVerifier` + `ecdsaVerifier` (back to two).
+- `QKBVerifier.Inputs`: drop `leafSpkiCommit`, add `rTL` + `algorithmTag` + `nullifier`.
+- `register` gains `rTL == trustedListRoot` check (Phase 1 dropped this).
+- `register` gains `usedNullifiers[nullifier]` duplicate check, reverts `NullifierUsed()`.
+- New mapping `nullifierToPk` for revocation publication.
+- Constructor takes `(IGroth16Verifier rsa_, IGroth16Verifier ecdsa_, bytes32 initialRoot, address initialAdmin)`.
+
+Sprint 0 is tracked as Phase-2 tasks in `docs/superpowers/plans/2026-04-17-qie-contracts.md §Sprint 0` and `2026-04-17-qie-web.md §Sprint 0`. Circuits-side sprint-0 work lands directly on `feat/circuits-phase2` (circuits engineer is the lead this phase — Phase-1 circuits-eng is retired).
+
+QIE-proper (§§1–9) begins only after Sprint 0 is merged to `main`.
+
+---
+
 ## Team topology
 
 | Agent name      | subagent_type      | Owns                                                                          | Plan file                                   |
@@ -250,7 +295,7 @@ struct EscrowEntry {
 }
 
 function registerEscrow(bytes calldata pk, bytes32 escrowId, address arbitrator, uint64 expiry) external;
-function revokeEscrow(bytes calldata pk, bytes32 reasonHash, bytes calldata proof, uint256[13] calldata publicSignals) external;
+function revokeEscrow(bytes calldata pk, bytes32 reasonHash, bytes calldata proof, uint256[14] calldata publicSignals) external;
 function escrowCommitment(bytes calldata pk) external view returns (bytes32);
 function isEscrowActive(bytes calldata pk) external view returns (bool);
 ```
