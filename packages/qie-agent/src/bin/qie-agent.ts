@@ -45,6 +45,13 @@ function hexToBytes(h: string): Uint8Array {
 }
 
 async function main(): Promise<void> {
+  // Accept an optional `serve` positional for symmetry with the Dockerfile
+  // CMD. Any other arg is an error so typos fail loud.
+  const args = process.argv.slice(2);
+  if (args.length > 0 && args[0] !== "serve") {
+    throw new Error(`qie-agent: unknown command "${args[0]}" (expected "serve" or no arg)`);
+  }
+
   const keysPath = env("QIE_AGENT_KEYS_PATH");
   const keys = JSON.parse(readFileSync(keysPath, "utf8")) as KeyFile;
 
