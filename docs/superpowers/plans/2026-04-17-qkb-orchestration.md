@@ -132,6 +132,14 @@ Produced by web, verifiable offline by anyone:
 }
 ```
 
+### 3.9 Project license — GPLv3
+
+Entire repository is **GPLv3** (see repo-root `COPYING`). Rationale: the ECDSA P-256 circuit source at `privacy-scaling-explorations/circom-ecdsa-p256` is GPLv3, and its constraints propagate through the compiled `.zkey` and generated `Verifier.sol`. MIT-licensed upstreams (zk-email RSA, snarkjs, circomlib) retain their original licenses within their vendor directories.
+
+### 3.10 Primary testnet — Sepolia
+
+Contracts deploy to **Ethereum Sepolia** (chainId 11155111). Arbitrum Sepolia is a secondary target for Phase 1.1+. Admin multisig = single EOA (`ADMIN_ADDRESS` from .env) for the demo; moved to a multisig before any production use.
+
 ### 4.0 Circuit artifact hosting (uploadthing)
 
 `.wasm` and `.zkey` artifacts are too large for git (zkey for a 3–5M-constraint circuit is typically 50–200 MB). They are hosted on **uploadthing** (free tier, 2 GB cap, covers Phase 1 comfortably).

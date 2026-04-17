@@ -34,4 +34,4 @@ pnpm lint
 
 ## License
 
-TBD (MIT recommended for reference implementation, compatible with upstream `@zk-email/circuits` and snarkjs).
+**GPLv3** (see [`COPYING`](COPYING)). Entire repository adopts GPLv3 because the ECDSA P-256 circuit vendor (`privacy-scaling-explorations/circom-ecdsa-p256`) is GPLv3 and its constraints propagate through the compiled `.zkey` and generated `Verifier.sol`. MIT-licensed upstream sub-components (zk-email RSA circuits, snarkjs, circomlib) remain under their original permissive licenses within their vendor directories — see per-directory PROVENANCE.md.
