@@ -16,7 +16,7 @@ pragma circom 2.1.9;
 //  - signature: signature value as bigint (must satisfy s < modulus)
 //  - modulus  : RSA modulus N
 
-include "./vendor/zk-email/rsa.circom";
+include "./vendor/zk-email/lib/rsa.circom";
 
 template RsaPkcs1V15Verify2048() {
     var N_BITS = 121;
