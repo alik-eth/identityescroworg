@@ -3,7 +3,7 @@
 
 export function gfAdd(a: Uint8Array, b: Uint8Array): Uint8Array {
   const r = new Uint8Array(32);
-  for (let i = 0; i < 32; i++) r[i] = a[i] ^ b[i];
+  for (let i = 0; i < 32; i++) r[i] = a[i]! ^ b[i]!;
   return r;
 }
 
@@ -11,7 +11,7 @@ function shl1(a: Uint8Array): { out: Uint8Array; carry: number } {
   const out = new Uint8Array(32);
   let c = 0;
   for (let i = 31; i >= 0; i--) {
-    const v = (a[i] << 1) | c;
+    const v = (a[i]! << 1) | c;
     out[i] = v & 0xff;
     c = (v >> 8) & 1;
   }
@@ -27,12 +27,18 @@ const REDUCTION_LOW = (() => {
   return r;
 })();
 
+function copy(a: Uint8Array): Uint8Array {
+  const r = new Uint8Array(32);
+  r.set(a);
+  return r;
+}
+
 export function gfMul(a: Uint8Array, b: Uint8Array): Uint8Array {
-  let r = new Uint8Array(32);
-  let cur = new Uint8Array(a);
+  let r: Uint8Array = new Uint8Array(32);
+  let cur: Uint8Array = copy(a);
   for (let bi = 31; bi >= 0; bi--) {
     for (let bit = 0; bit < 8; bit++) {
-      if ((b[bi] >> bit) & 1) r = gfAdd(r, cur);
+      if ((b[bi]! >> bit) & 1) r = gfAdd(r, cur);
       const { out, carry } = shl1(cur);
       cur = out;
       if (carry) cur = gfAdd(cur, REDUCTION_LOW);
@@ -42,8 +48,9 @@ export function gfMul(a: Uint8Array, b: Uint8Array): Uint8Array {
 }
 
 export function gfPow(a: Uint8Array, e: bigint): Uint8Array {
-  let r = new Uint8Array(32); r[31] = 1;
-  let base = new Uint8Array(a);
+  const r0 = new Uint8Array(32); r0[31] = 1;
+  let r: Uint8Array = r0;
+  let base: Uint8Array = copy(a);
   while (e > 0n) {
     if (e & 1n) r = gfMul(r, base);
     base = gfMul(base, base);
