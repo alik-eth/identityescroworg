@@ -25,6 +25,9 @@ packages/web/dist/
 packages/web/playwright-report/
 packages/web/test-results/
 
+# pnpm lockfile — team lead owns it on main; workers do not commit
+pnpm-lock.yaml
+
 # OS / editor
 .DS_Store
 .idea/
