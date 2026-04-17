@@ -270,32 +270,74 @@ in the commit message.
 
 ## 9. Deploy
 
+### 9.1 Credentials live in `.env`
+
+Both deploy scripts read admin credentials from environment variables.
+Forge auto-loads `.env` from the repo root (the foundry config root).
+The real `.env` is **gitignored** (root `.gitignore`, with a
+`!.env.example` whitelist for the template) and MUST NEVER appear in:
+
+- commits (Git history is forever, and a leaked key cannot be unleaked),
+- tests (use `vm.envXxx` at runtime; never bake values into source),
+- fixtures under `test/fixtures/`,
+- CI workflow YAML (use the CI provider's secret store; never echo).
+
+If a key is ever transmitted over a non-secure channel (Slack, chat,
+issue comment, agent message), treat it as compromised and rotate
+before any production use.
+
+Required env for `Deploy.s.sol`:
+
+| Var                  | Type    | Notes                                                                |
+|----------------------|---------|----------------------------------------------------------------------|
+| `ROOT_TL`            | bytes32 | Initial `trustedListRoot`.                                           |
+| `ADMIN_PRIVATE_KEY`  | uint256 | Broadcasting key. Also the registry admin.                           |
+| `ADMIN_ADDRESS`      | address | Must equal `vm.addr(ADMIN_PRIVATE_KEY)`. Script reverts `AdminMismatch` otherwise — catches the easy "pasted one but not the other" mistake. |
+| `RSA_VERIFIER_ADDR`  | address | Optional. If absent or `0x0`, deploys a `StubGroth16Verifier`.       |
+| `ECDSA_VERIFIER_ADDR`| address | Same convention.                                                     |
+
+Required env for `UpdateTrustedRoot.s.sol`:
+
+| Var                  | Type    | Notes                                                                |
+|----------------------|---------|----------------------------------------------------------------------|
+| `REGISTRY_ADDR`      | address | Deployed `QKBRegistry`.                                              |
+| `NEW_ROOT_TL`        | bytes32 | New `trustedListRoot`.                                               |
+| `ADMIN_PRIVATE_KEY`  | uint256 | Broadcasting key; must match `registry.admin()` or call reverts on-chain `NotAdmin`. |
+
+### 9.2 Sepolia (chainId 11155111) — locked primary testnet
+
+Add to `.env`:
+
+```
+SEPOLIA_RPC_URL=https://...    # any Sepolia RPC (Alchemy/Infura/public)
+ETHERSCAN_KEY=...              # for source verification
+```
+
+Deploy:
+
 ```bash
-# Required env
-export ROOT_TL=0x...                 # bytes32 trustedListRoot
-export REGISTRY_ADMIN=0x...          # multisig
-
-# Optional env (production should always set both)
-export RSA_VERIFIER_ADDR=0x...       # if absent, deploys a StubGroth16Verifier
-export ECDSA_VERIFIER_ADDR=0x...     # ditto
-
 forge script packages/contracts/script/Deploy.s.sol \
-  --fork-url $RPC_URL --broadcast --private-key $DEPLOYER_KEY
+  --rpc-url $SEPOLIA_RPC_URL --broadcast \
+  --verify --etherscan-api-key $ETHERSCAN_KEY -vv
 ```
 
-Stub fallback is a CI-only convenience; **production deploys MUST pass
-both real verifier addresses**.
-
-For root rotation:
+Rotate root:
 
 ```bash
-export REGISTRY_ADDR=0x...
-export NEW_ROOT_TL=0x...
 forge script packages/contracts/script/UpdateTrustedRoot.s.sol \
-  --fork-url $RPC_URL --broadcast --private-key $ADMIN_KEY
+  --rpc-url $SEPOLIA_RPC_URL --broadcast -vv
 ```
 
-Caller (broadcasting key) must be the registry's `admin`.
+### 9.3 Anvil dry-run
+
+```bash
+anvil --port 8545 &
+forge script packages/contracts/script/Deploy.s.sol \
+  --fork-url http://localhost:8545 -vv      # simulation only (no --broadcast)
+```
+
+Stub-verifier fallback is a dev-only convenience; **production deploys
+MUST pass real verifier addresses**.
 
 ## 10. Gotchas
 

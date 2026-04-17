@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity 0.8.24;
 
 /// @notice Test-only stand-in for the snarkjs-generated Groth16 verifier.
