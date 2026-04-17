@@ -7,14 +7,16 @@ A Holder produces a self-generated keypair, signs a declaration binding that pub
 ## Status
 
 - **Phase 1 — QKB:** in active development (see `docs/superpowers/plans/`). Real-QES validation passes against Ukrainian Diia QES (ECDSA-P256). Sepolia deployment + `identityescrow.org` Fly.io hosting pending the final ceremony.
-- **Phase 2 — QIE:** design frozen (`docs/superpowers/specs/2026-04-17-qie-phase2-design.md`), implementation plans frozen (`docs/superpowers/plans/2026-04-17-qie-*.md`), dispatch gated on Phase 1 deploy.
+- **Phase 2 — QIE:** design frozen (`docs/superpowers/specs/2026-04-17-qie-phase2-design.md`) and amended for the MVP wedge (`docs/superpowers/specs/2026-04-17-qie-mvp-refinement.md`). MVP scope targets three Tier 1 segments — **inheritance / estate planning**, **regulated-entity crypto custody**, and **KYC-recovery in regulated DeFi** — shipping with `AuthorityArbitrator` only, dual-variant prover (RSA-PSS + ECDSA), an explicit escrow state machine, a notary-assisted heir recovery flow, and evidence envelopes on arbitrator releases. `TimelockArbitrator` and standalone recipient UX deferred post-pilot. Dispatch of the MVP amendment is in flight; full Phase 2 tag gated on Phase 1 deploy.
 
 ## Documents
 
 - **Design specs:** [`docs/superpowers/specs/`](docs/superpowers/specs/)
   - [Phase 1 QKB design](docs/superpowers/specs/2026-04-17-qkb-phase1-design.md)
   - [Phase 2 QIE design](docs/superpowers/specs/2026-04-17-qie-phase2-design.md)
-- **Implementation plans:** [`docs/superpowers/plans/`](docs/superpowers/plans/) — five per phase (one orchestration + per-package).
+  - [Phase 2 QIE MVP refinement](docs/superpowers/specs/2026-04-17-qie-mvp-refinement.md) — Tier 1 wedge scope deltas.
+- **Implementation plans:** [`docs/superpowers/plans/`](docs/superpowers/plans/) — per-phase orchestration + per-package plans, plus cross-worker amendments.
+- **QIE operational docs:** [`docs/qie/`](docs/qie/) — §15 legal instrument templates, §16 operational model (agent fees, SLA, liability).
 - **Ceremony:** [`docs/ceremony/`](docs/ceremony/) — trusted-setup transcript, artifact hashes.
 
 ## Architecture
@@ -52,14 +54,14 @@ R = {B, σ_QES, cert}   agent_i holds                release predicate
 QKBRegistry.registerEscrow(pk, hash(E))             Phase 1 verify on R
 ```
 
-Qualified Trust Service Providers act as dumb custodians. Release yields the raw recovery material; the recipient independently re-verifies against Phase 1's chain. Escrow envelopes are post-quantum-safe by construction (hybrid KEM on every share + information-theoretic Shamir on the key).
+Qualified Trust Service Providers act as dumb custodians. Release yields the raw recovery material; the recipient independently re-verifies against Phase 1's chain. Escrow envelopes are post-quantum-safe by construction (hybrid KEM on every share + information-theoretic Shamir on the key). Release is gated by an on-chain state machine (`ACTIVE → RELEASE_PENDING → RELEASED`, with a 48 h Holder cancellation window) and by a typed evidence envelope the authority submits alongside its signature, so downstream parties can audit *why* a release was authorised.
 
 ## Packages
 
 - [`packages/lotl-flattener`](packages/lotl-flattener) — offline CLI; EU LOTL → Poseidon Merkle CA set (`trusted-cas.json`, `root.json`). Phase 2 adds `qie-agents.json`.
 - [`packages/circuits`](packages/circuits) — Circom circuits for `R_QKB` (RSA + ECDSA-P256 variants), Groth16 artifacts, generated `Verifier.sol`.
-- [`packages/contracts`](packages/contracts) — `QKBVerifier` library + `QKBRegistry` reference contract (Foundry). Phase 2 adds `AuthorityArbitrator` + `TimelockArbitrator`.
-- [`packages/web`](packages/web) — TanStack Router static SPA; binding generator, in-browser snarkjs prover, registry client. EN + UK. Phase 2 adds `/escrow/setup` + `/escrow/recover`.
+- [`packages/contracts`](packages/contracts) — `QKBVerifier` library + `QKBRegistry` reference contract (Foundry). Phase 2 adds `AuthorityArbitrator` (with evidence-envelope emission) and the escrow state machine (`ACTIVE → RELEASE_PENDING → RELEASED` + Holder cancellation window); `TimelockArbitrator` is stubbed and deferred post-MVP.
+- [`packages/web`](packages/web) — TanStack Router static SPA; binding generator, in-browser snarkjs prover, registry client. EN + UK. Phase 2 adds `/escrow/setup` and the notary-assisted `/escrow/notary` recovery flow (standalone self-recovery remains reachable via `?mode=self`).
 - [`packages/qie-core`](packages/qie-core) *(Phase 2)* — hybrid KEM, Shamir, envelope codec, predicate evaluator. Pure TS, browser + Node.
 - [`packages/qie-agent`](packages/qie-agent) *(Phase 2)* — Fastify HTTP custodian reference implementation.
 - [`packages/qie-cli`](packages/qie-cli) *(Phase 2)* — operator/holder/recipient CLI.
