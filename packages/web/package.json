@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "package": "pnpm run build && node scripts/pack.mjs",
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
