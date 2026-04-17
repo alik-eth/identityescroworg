@@ -38,13 +38,19 @@ export function parseMsTl(xml: string): RawService[] {
   const out: RawService[] = [];
   for (const tsp of tsps) {
     const services = asArray<Record<string, unknown>>(
-      (tsp.TSPServices as Record<string, unknown> | undefined)?.TSPService,
+      (tsp.TSPServices as Record<string, unknown> | undefined)?.TSPService as
+        | Record<string, unknown>
+        | Record<string, unknown>[]
+        | undefined,
     );
     for (const svc of services) {
       const info = svc.ServiceInformation as Record<string, unknown> | undefined;
       if (!info) continue;
       const digitalIds = asArray<Record<string, unknown>>(
-        (info.ServiceDigitalIdentity as Record<string, unknown> | undefined)?.DigitalId,
+        (info.ServiceDigitalIdentity as Record<string, unknown> | undefined)?.DigitalId as
+          | Record<string, unknown>
+          | Record<string, unknown>[]
+          | undefined,
       );
       const certs: Uint8Array[] = [];
       for (const did of digitalIds) {

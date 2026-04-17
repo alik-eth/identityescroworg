@@ -4,7 +4,7 @@
     <TSLType>http://uri.etsi.org/TrstSvc/TrustedList/TSLType/EUlistofthelists</TSLType>
     <PointersToOtherTSL>
       <OtherTSLPointer>
-        <TSLLocation>fixtures/ms-tl-ee.xml</TSLLocation>
+        <TSLLocation>ms-tl-ee.xml</TSLLocation>
         <AdditionalInformation>
           <OtherInformation>
             <SchemeTerritory>EE</SchemeTerritory>
@@ -13,7 +13,7 @@
         </AdditionalInformation>
       </OtherTSLPointer>
       <OtherTSLPointer>
-        <TSLLocation>fixtures/ms-tl-pl.xml</TSLLocation>
+        <TSLLocation>ms-tl-pl.xml</TSLLocation>
         <AdditionalInformation>
           <OtherInformation>
             <SchemeTerritory>PL</SchemeTerritory>

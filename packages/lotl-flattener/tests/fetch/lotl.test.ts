@@ -13,7 +13,7 @@ describe('parseLotl', () => {
     const pointers: LotlPointer[] = parseLotl(xml);
     expect(pointers).toHaveLength(2);
     expect(pointers.map((p) => p.territory).sort()).toEqual(['EE', 'PL']);
-    expect(pointers[0]!.location).toMatch(/ms-tl-ee\.xml$/);
+    expect(pointers[0]!.location).toBe('ms-tl-ee.xml');
   });
 
   test('throws on malformed xml', () => {
