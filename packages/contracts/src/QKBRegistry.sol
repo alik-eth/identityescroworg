@@ -112,6 +112,9 @@ contract QKBRegistry is IRegistryGate {
     /// @dev MVP refinement §0.3 — arbitrator finalised the release after the
     ///      cancellation window elapsed. Terminal state.
     event EscrowReleased(bytes32 indexed escrowId, address indexed arbitrator);
+    /// @dev MVP refinement §0.3 — Holder used the 48 h cancellation window to
+    ///      pull the escrow back from RELEASE_PENDING to ACTIVE.
+    event EscrowReleaseCancelled(bytes32 indexed escrowId, address indexed pkAddr);
 
     error AlreadyBound();
     error BindingTooOld();
@@ -369,6 +372,24 @@ contract QKBRegistry is IRegistryGate {
         if (block.timestamp < uint256(e.releasePendingAt) + RELEASE_TIMEOUT) revert WrongState();
         e.state = EscrowState.RELEASED;
         emit EscrowReleased(escrowId, msg.sender);
+    }
+
+    /// @notice Holder-initiated cancel of a pending release. Same Groth16
+    ///         auth as `registerEscrow` / `revokeEscrow`. Only valid while
+    ///         `state == RELEASE_PENDING` and the 48 h Holder window has not
+    ///         elapsed — after that the arbitrator's `finalizeRelease`
+    ///         claim priority and cancel reverts `WrongState`.
+    function cancelReleasePending(
+        QKBVerifier.Proof calldata p,
+        QKBVerifier.Inputs calldata i
+    ) external {
+        address pkAddr = _authorizeBinding(p, i);
+        EscrowEntry storage e = escrows[pkAddr];
+        if (e.state != EscrowState.RELEASE_PENDING) revert WrongState();
+        if (block.timestamp >= uint256(e.releasePendingAt) + RELEASE_TIMEOUT) revert WrongState();
+        e.state = EscrowState.ACTIVE;
+        e.releasePendingAt = 0;
+        emit EscrowReleaseCancelled(e.escrowId, pkAddr);
     }
 
     /// @notice Current escrow commitment for a pk, or zero if none / revoked

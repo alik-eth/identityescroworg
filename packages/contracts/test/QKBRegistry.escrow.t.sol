@@ -39,6 +39,7 @@ contract QKBRegistryEscrowTest is Test {
     event EscrowRevoked(address indexed pkAddr, bytes32 indexed escrowId, bytes32 reasonHash);
     event EscrowReleasePendingRequested(bytes32 indexed escrowId, address indexed arbitrator, uint64 at);
     event EscrowReleased(bytes32 indexed escrowId, address indexed arbitrator);
+    event EscrowReleaseCancelled(bytes32 indexed escrowId, address indexed pkAddr);
 
     function setUp() public {
         rsa = new StubGroth16Verifier();
@@ -352,5 +353,66 @@ contract QKBRegistryEscrowTest is Test {
         vm.expectRevert(QKBRegistry.UnknownEscrowId.selector);
         vm.prank(ARBITRATOR);
         registry.finalizeRelease(bytes32(uint256(0xDEADBEEF)));
+    }
+
+    // ---- C3: cancelReleasePending (Holder 48 h window) ----------------------
+
+    /// @notice cancelReleasePending flips RELEASE_PENDING back to ACTIVE when
+    ///         called within the 48 h Holder window. Same Groth16 auth as
+    ///         revoke/register so only the Holder can do it.
+    function test_CancelReleasePending_RestoresActive() public {
+        (address pk,) = _registerDefaultEscrow();
+        vm.prank(ARBITRATOR);
+        registry.notifyReleasePending(ESCROW_ID);
+
+        vm.expectEmit(true, true, false, true, address(registry));
+        emit EscrowReleaseCancelled(ESCROW_ID, pk);
+        registry.cancelReleasePending(_proof(), _inputs(NULLIFIER));
+
+        (,,, uint64 pendingAt, QKBRegistry.EscrowState state) = registry.escrows(pk);
+        assertEq(uint8(state), uint8(QKBRegistry.EscrowState.ACTIVE));
+        assertEq(pendingAt, 0);
+    }
+
+    /// @notice After the Holder window elapses, cancel reverts `WrongState`
+    ///         (arbitrator may now finalize instead).
+    function test_CancelReleasePending_OnlyDuringWindow() public {
+        _registerDefaultEscrow();
+        vm.prank(ARBITRATOR);
+        registry.notifyReleasePending(ESCROW_ID);
+        vm.warp(block.timestamp + 48 hours);
+        vm.expectRevert(QKBRegistry.WrongState.selector);
+        registry.cancelReleasePending(_proof(), _inputs(NULLIFIER));
+    }
+
+    /// @notice Cannot cancel when escrow is ACTIVE — there's nothing to
+    ///         cancel, state must be RELEASE_PENDING.
+    function test_CancelReleasePending_RevertsWhenActive() public {
+        _registerDefaultEscrow();
+        vm.expectRevert(QKBRegistry.WrongState.selector);
+        registry.cancelReleasePending(_proof(), _inputs(NULLIFIER));
+    }
+
+    /// @notice After cancel, revoke is available again (ACTIVE path).
+    function test_CancelReleasePending_RestoresRevokeEligibility() public {
+        (address pk,) = _registerDefaultEscrow();
+        vm.prank(ARBITRATOR);
+        registry.notifyReleasePending(ESCROW_ID);
+        registry.cancelReleasePending(_proof(), _inputs(NULLIFIER));
+
+        registry.revokeEscrow(REASON, _proof(), _inputs(NULLIFIER));
+        (,,,, QKBRegistry.EscrowState state) = registry.escrows(pk);
+        assertEq(uint8(state), uint8(QKBRegistry.EscrowState.REVOKED));
+    }
+
+    /// @notice cancel still requires a valid Groth16 proof — tamper the
+    ///         verifier and the call reverts `InvalidProof`.
+    function test_CancelReleasePending_RevertsOnBadProof() public {
+        _registerDefaultEscrow();
+        vm.prank(ARBITRATOR);
+        registry.notifyReleasePending(ESCROW_ID);
+        ecdsa.setAccept(false);
+        vm.expectRevert(QKBRegistry.InvalidProof.selector);
+        registry.cancelReleasePending(_proof(), _inputs(NULLIFIER));
     }
 }
