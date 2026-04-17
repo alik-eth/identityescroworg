@@ -2,6 +2,7 @@ export type ErrorCode =
   | 'binding.size'
   | 'binding.field'
   | 'binding.jcs'
+  | 'binding.pkMismatch'
   | 'cades.parse'
   | 'qes.sigInvalid'
   | 'qes.digestMismatch'
@@ -46,6 +47,7 @@ export const ALL_ERROR_CODES: readonly ErrorCode[] = [
   'binding.size',
   'binding.field',
   'binding.jcs',
+  'binding.pkMismatch',
   'cades.parse',
   'qes.sigInvalid',
   'qes.digestMismatch',

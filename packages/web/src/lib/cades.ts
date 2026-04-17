@@ -65,6 +65,12 @@ export interface ParsedCades {
    *  CAdES-BES); `null` when the signer shipped a leaf-only CMS and the
    *  caller must resolve the intermediate from LOTL. */
   intermediateCertDer: Uint8Array | null;
+  /** When the signer emitted an *attached* (enveloping) CAdES-BES, the
+   *  signed binding lives in `encapContentInfo.eContent`. Diia and many
+   *  EU QES tools default to attached; the spec permits both shapes.
+   *  `null` for detached CAdES where the caller supplies the binding
+   *  bytes out-of-band. */
+  embeddedContent: Uint8Array | null;
 }
 
 export function parseCades(p7s: Uint8Array): ParsedCades {
@@ -94,11 +100,16 @@ export function parseCades(p7s: Uint8Array): ParsedCades {
     throw new QkbError('cades.parse', { reason: 'signed-data-schema', cause: String(cause) });
   }
 
+  // CAdES-BES supports both *detached* (eContent omitted) and *attached*
+  // (eContent carries the signed bytes). We accept both — real QES tools
+  // including Diia default to attached. Callers that want a strict-
+  // detached policy can check `embeddedContent === null` themselves.
+  let embeddedContent: Uint8Array | null = null;
   if (
     signed.encapContentInfo.eContent !== undefined &&
     signed.encapContentInfo.eContent.valueBlock.valueHexView.byteLength > 0
   ) {
-    throw new QkbError('cades.parse', { reason: 'expected-detached' });
+    embeddedContent = new Uint8Array(signed.encapContentInfo.eContent.valueBlock.valueHexView);
   }
 
   if (signed.signerInfos.length !== 1) {
@@ -184,6 +195,7 @@ export function parseCades(p7s: Uint8Array): ParsedCades {
     leafCertDer: certDer(leaf),
     leafIssuerDer: rdnDer(leaf.issuer),
     intermediateCertDer: intermediate ? certDer(intermediate) : null,
+    embeddedContent,
   };
 }
 

@@ -89,7 +89,8 @@
       "size": "Binding statement is larger than the protocol limit.",
       "field": "Binding contains an invalid field value.",
       "jcs": "Binding could not be canonicalized as JCS.",
-      "parse": "Binding could not be parsed."
+      "parse": "Binding could not be parsed.",
+      "pkMismatch": "The signed binding commits to a different public key than the one in this session. Regenerate the binding in Step 1 and sign that fresh copy."
     },
     "cades": {
       "parse": "The detached signature could not be parsed."

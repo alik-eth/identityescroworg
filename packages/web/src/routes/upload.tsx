@@ -36,7 +36,7 @@ import {
   bytesToB64,
   hexToBytes,
 } from '../lib/session';
-import { localizeError } from '../lib/errors';
+import { localizeError, QkbError } from '../lib/errors';
 
 type Status = 'idle' | 'parsing' | 'verifying' | 'proving' | 'done' | 'error';
 
@@ -84,11 +84,40 @@ export function UploadScreen() {
     setError(null);
     setStatus('parsing');
     try {
-      const bindingBytes = b64ToBytes(session.bcanonB64!);
+      const sessionBindingBytes = b64ToBytes(session.bcanonB64!);
       const pkBytes = hexToBytes(session.pubkeyUncompressedHex!);
 
       const p7sBuf = new Uint8Array(await file.arrayBuffer());
       const parsed = parseCades(p7sBuf);
+
+      // If the user's QES tool produced an *attached* CAdES (Diia default,
+      // many Szafir variants), the binding JSON lives inside the CMS as
+      // `embeddedContent`. Use that as the source of truth. Detached CAdES
+      // falls back to the session copy.
+      //
+      // When the embedded copy differs from the session copy we must bail
+      // hard: the proof commits to the signed pk, the on-chain register()
+      // call needs msg.sender's pk to match — so a stale session copy
+      // would silently produce a proof of the wrong key, failing at
+      // registry.register() on Sepolia with no clear message. Parse the
+      // embedded binding, extract its `pk`, and compare against the
+      // session pk.
+      const bindingBytes = parsed.embeddedContent ?? sessionBindingBytes;
+      if (
+        parsed.embeddedContent &&
+        !bytesEqual(parsed.embeddedContent, sessionBindingBytes)
+      ) {
+        const signedPkHex = extractPkFromEmbedded(parsed.embeddedContent);
+        const sessionPkHex = (session.pubkeyUncompressedHex ?? '').toLowerCase();
+        const signedPkNorm = signedPkHex.toLowerCase().replace(/^0x/, '');
+        const sessionPkNorm = sessionPkHex.replace(/^0x/, '');
+        if (signedPkNorm !== sessionPkNorm) {
+          throw new QkbError('binding.pkMismatch', {
+            signedPk: signedPkHex,
+            sessionPk: sessionPkHex,
+          });
+        }
+      }
 
       setStatus('verifying');
       const trustedCas = await fetchTrustedCas();
@@ -275,4 +304,26 @@ function blobUrl(bytes: Uint8Array, type: string): string {
 
 function cap(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.byteLength !== b.byteLength) return false;
+  for (let i = 0; i < a.byteLength; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+/**
+ * Pull the `pk` hex string out of a JCS-canonical binding JSON buffer.
+ * Parsing the JSON is safe here — it came out of a QES signature so
+ * its shape has already been vouched for; a malformed one would later
+ * blow up in the witness offset scan. Returns empty string on parse
+ * failure so the pk-mismatch check simply trips the hard error below.
+ */
+function extractPkFromEmbedded(content: Uint8Array): string {
+  try {
+    const json = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(content));
+    return typeof json?.pk === 'string' ? json.pk : '';
+  } catch {
+    return '';
+  }
 }
