@@ -6,14 +6,13 @@ import { console2 } from "forge-std/console2.sol";
 import { QKBRegistry } from "../src/QKBRegistry.sol";
 import { IGroth16Verifier } from "../src/QKBVerifier.sol";
 import { StubGroth16Verifier } from "../src/verifier/StubGroth16Verifier.sol";
-// QKBGroth16Verifier is re-introduced as two 14-signal variants in Sprint 0 S0.6
-// (one RSA, one ECDSA). Until circuits-eng pumps them, the deploy script only
-// supports the stub verifier path.
 
-/// @notice Deploy QKBRegistry wired to the ECDSA-leaf Groth16 verifier.
+/// @notice Deploy QKBRegistry wired to the dual (RSA + ECDSA) Groth16 verifiers.
 ///
-///         Phase 1 ships with ONE verifier (ECDSA-leaf). RSA + chain-proof
-///         variants are deferred to Phase 2 per spec §5.4.
+///         Sprint 0 transitional state: real 14-signal verifiers are in flight
+///         from circuits-eng. This script accepts either pre-deployed verifier
+///         addresses (via env) or stub verifiers (for CI / anvil dry-runs).
+///         S0.6 locks this down further once real verifier contracts land.
 ///
 ///         Admin credentials are sourced from repo-root `.env` (gitignored,
 ///         see CLAUDE.md §10). They MUST NEVER appear in commits, tests,
@@ -23,13 +22,12 @@ import { StubGroth16Verifier } from "../src/verifier/StubGroth16Verifier.sol";
 ///           ROOT_TL              bytes32 — initial trustedListRoot
 ///           ADMIN_PRIVATE_KEY    uint256 — broadcasting key (also the admin)
 ///           ADMIN_ADDRESS        address — must equal vm.addr(ADMIN_PRIVATE_KEY)
-///         Optional env (production MUST set):
-///           ECDSA_VERIFIER_ADDR  address — pre-deployed verifier. If absent
-///                                          a fresh QKBGroth16Verifier is
-///                                          deployed in the same tx.
-///           USE_STUB_VERIFIER    bool    — if true AND ECDSA_VERIFIER_ADDR
-///                                          is empty, deploys a
-///                                          StubGroth16Verifier instead (CI).
+///         Optional env (production MUST set real verifier addresses):
+///           RSA_VERIFIER_ADDR    address — pre-deployed RSA verifier.
+///           ECDSA_VERIFIER_ADDR  address — pre-deployed ECDSA verifier.
+///           USE_STUB_VERIFIER    bool    — if true AND verifier env is empty,
+///                                          deploys StubGroth16Verifier for
+///                                          the missing slot (CI only).
 ///
 ///         Sepolia example (chainId 11155111):
 ///           forge script packages/contracts/script/Deploy.s.sol \
@@ -38,7 +36,7 @@ import { StubGroth16Verifier } from "../src/verifier/StubGroth16Verifier.sol";
 contract Deploy is Script {
     error AdminMismatch(address expected, address derived);
 
-    function run() external returns (QKBRegistry registry, address verifierAddr) {
+    function run() external returns (QKBRegistry registry, address rsaAddr, address ecdsaAddr) {
         bytes32 initialRoot = vm.envBytes32("ROOT_TL");
         uint256 adminPriv = vm.envUint("ADMIN_PRIVATE_KEY");
         address admin = vm.envAddress("ADMIN_ADDRESS");
@@ -46,26 +44,35 @@ contract Deploy is Script {
         address derivedAdmin = vm.addr(adminPriv);
         if (derivedAdmin != admin) revert AdminMismatch(admin, derivedAdmin);
 
-        verifierAddr = vm.envOr("ECDSA_VERIFIER_ADDR", address(0));
+        rsaAddr = vm.envOr("RSA_VERIFIER_ADDR", address(0));
+        ecdsaAddr = vm.envOr("ECDSA_VERIFIER_ADDR", address(0));
         bool useStub = vm.envOr("USE_STUB_VERIFIER", false);
 
         vm.startBroadcast(adminPriv);
 
-        if (verifierAddr == address(0)) {
-            // Sprint 0 transitional: real 14-signal verifier contracts are
-            // pending circuits-eng ceremony re-run. Stub-only path for CI
-            // and anvil dry-runs; S0.6 restores the dual real-verifier path.
-            require(useStub, "Deploy: real verifier not yet available in Sprint 0 (set USE_STUB_VERIFIER=true or pass ECDSA_VERIFIER_ADDR)");
-            verifierAddr = address(new StubGroth16Verifier());
-            console2.log("Deployed StubGroth16Verifier (CI only):", verifierAddr);
+        if (rsaAddr == address(0)) {
+            require(useStub, "Deploy: RSA verifier missing (set RSA_VERIFIER_ADDR or USE_STUB_VERIFIER=true)");
+            rsaAddr = address(new StubGroth16Verifier());
+            console2.log("Deployed StubGroth16Verifier (RSA slot, CI only):", rsaAddr);
+        }
+        if (ecdsaAddr == address(0)) {
+            require(useStub, "Deploy: ECDSA verifier missing (set ECDSA_VERIFIER_ADDR or USE_STUB_VERIFIER=true)");
+            ecdsaAddr = address(new StubGroth16Verifier());
+            console2.log("Deployed StubGroth16Verifier (ECDSA slot, CI only):", ecdsaAddr);
         }
 
-        registry = new QKBRegistry(IGroth16Verifier(verifierAddr), initialRoot, admin);
+        registry = new QKBRegistry(
+            IGroth16Verifier(rsaAddr),
+            IGroth16Verifier(ecdsaAddr),
+            initialRoot,
+            admin
+        );
 
         vm.stopBroadcast();
 
         console2.log("QKBRegistry:", address(registry));
-        console2.log("verifier:", verifierAddr);
+        console2.log("rsaVerifier:", rsaAddr);
+        console2.log("ecdsaVerifier:", ecdsaAddr);
         console2.log("admin:", admin);
         console2.log("chainid:", block.chainid);
         console2.logBytes32(initialRoot);

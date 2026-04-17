@@ -4,19 +4,25 @@ pragma solidity 0.8.24;
 import { QKBVerifier, IGroth16Verifier } from "./QKBVerifier.sol";
 
 /// @notice Reference register-then-authenticate registry for QKB-bound
-///         secp256k1 keys. Phase 1 ships the ECDSA-leaf variant only; both
-///         the RSA variant and the chain-side proof (which would pin rTL
-///         on-chain) are deferred to Phase 2 per spec §5.4.
+///         secp256k1 keys. Phase 2 (Sprint 0) restores the dual-verifier
+///         dispatch path from the original QKB design: the registry holds
+///         both an RSA and an ECDSA Groth16 verifier, and `register`
+///         dispatches on the proof's `algorithmTag` public signal.
 ///
-///         `trustedListRoot` is still held as admin-rotatable state so
-///         downstream consumers have a single source of truth, but the
-///         `register` flow does NOT check it against the proof in Phase 1
-///         — the leaf proof does not expose rTL. Admins vet the LOTL
-///         freshness off-chain until the chain proof lands.
+///         Legal `algorithmTag` values (per orchestration §2.0):
+///           0 = RSA-PKCS#1 v1.5 2048
+///           1 = ECDSA P-256
+///         anything else reverts `UnknownAlgorithm`.
+///
+///         `trustedListRoot` is admin-rotatable state; `register` enforces
+///         `i.rTL == trustedListRoot` (S0.3 — restored after Phase-1 drop).
 contract QKBRegistry {
     /// @dev Domain string for the `expire` signature digest. Must stay in
     ///      lock-step with `test/helpers/SignatureHelpers.sol::EXPIRE_DOMAIN`.
     string private constant EXPIRE_DOMAIN = "QKB_EXPIRE_V1";
+
+    uint8 internal constant ALG_RSA = 0;
+    uint8 internal constant ALG_ECDSA = 1;
 
     enum Status {
         NONE,
@@ -26,31 +32,42 @@ contract QKBRegistry {
 
     struct Binding {
         Status status;
+        uint8 algorithmTag;
         uint64 boundAt;
         uint64 expiredAt;
         bytes32 ctxHash;
         bytes32 declHash;
+        bytes32 nullifier;
     }
 
     /// @dev Maximum age of a binding proof, measured against `i.timestamp` at
     ///      `register` time. Per spec §6.2.
     uint64 public constant MAX_AGE = 90 days;
 
-    IGroth16Verifier public verifier;
+    IGroth16Verifier public rsaVerifier;
+    IGroth16Verifier public ecdsaVerifier;
     bytes32 public trustedListRoot;
     address public admin;
     mapping(address => Binding) public bindings;
 
-    event BindingRegistered(address indexed pkAddr, bytes32 ctxHash, bytes32 declHash);
+    event BindingRegistered(
+        address indexed pkAddr,
+        uint8 indexed algorithmTag,
+        bytes32 ctxHash,
+        bytes32 declHash,
+        bytes32 nullifier
+    );
     event BindingExpired(address indexed pkAddr);
     event TrustedListRootUpdated(bytes32 oldRoot, bytes32 newRoot);
     event AdminTransferred(address indexed oldAdmin, address indexed newAdmin);
-    event VerifierUpdated(address oldVerifier, address newVerifier);
+    event VerifierUpdated(uint8 indexed algorithmTag, address oldVerifier, address newVerifier);
 
     error AlreadyBound();
     error BindingTooOld();
     error BindingFromFuture();
     error InvalidProof();
+    error UnknownAlgorithm();
+    error RootMismatch();
     error NotBound();
     error BadExpireSig();
     error NotAdmin();
@@ -61,23 +78,42 @@ contract QKBRegistry {
         _;
     }
 
-    constructor(IGroth16Verifier verifier_, bytes32 initialRoot, address initialAdmin) {
-        if (address(verifier_) == address(0)) revert ZeroAddress();
+    constructor(
+        IGroth16Verifier rsa_,
+        IGroth16Verifier ecdsa_,
+        bytes32 initialRoot,
+        address initialAdmin
+    ) {
+        if (address(rsa_) == address(0)) revert ZeroAddress();
+        if (address(ecdsa_) == address(0)) revert ZeroAddress();
         if (initialAdmin == address(0)) revert ZeroAddress();
-        verifier = verifier_;
+        rsaVerifier = rsa_;
+        ecdsaVerifier = ecdsa_;
         trustedListRoot = initialRoot;
         admin = initialAdmin;
         emit AdminTransferred(address(0), initialAdmin);
         emit TrustedListRootUpdated(bytes32(0), initialRoot);
-        emit VerifierUpdated(address(0), address(verifier_));
+        emit VerifierUpdated(ALG_RSA, address(0), address(rsa_));
+        emit VerifierUpdated(ALG_ECDSA, address(0), address(ecdsa_));
     }
 
     /// @notice Register a fresh QKB binding. See spec §6.2 steps 1–7.
-    ///         Phase 1 deviation: no on-chain rTL equality check (the leaf
-    ///         proof doesn't carry rTL). admin multisig enforces trusted-list
-    ///         freshness off-chain until the chain proof lands.
+    ///         Dispatch on `i.algorithmTag`: route verification through
+    ///         `rsaVerifier` or `ecdsaVerifier` per the restored §2.0
+    ///         convention. Unknown tags revert `UnknownAlgorithm`. `i.rTL`
+    ///         must equal `trustedListRoot` (S0.3).
     function register(QKBVerifier.Proof calldata p, QKBVerifier.Inputs calldata i) external {
-        if (!QKBVerifier.verify(verifier, p, i)) revert InvalidProof();
+        IGroth16Verifier v;
+        if (i.algorithmTag == ALG_RSA) {
+            v = rsaVerifier;
+        } else if (i.algorithmTag == ALG_ECDSA) {
+            v = ecdsaVerifier;
+        } else {
+            revert UnknownAlgorithm();
+        }
+
+        if (i.rTL != trustedListRoot) revert RootMismatch();
+        if (!QKBVerifier.verify(v, p, i)) revert InvalidProof();
         if (i.timestamp > block.timestamp) revert BindingFromFuture();
         if (block.timestamp > uint256(i.timestamp) + MAX_AGE) revert BindingTooOld();
 
@@ -86,12 +122,14 @@ contract QKBRegistry {
 
         bindings[pkAddr] = Binding({
             status: Status.ACTIVE,
+            algorithmTag: i.algorithmTag,
             boundAt: uint64(block.timestamp),
             expiredAt: 0,
             ctxHash: i.ctxHash,
-            declHash: i.declHash
+            declHash: i.declHash,
+            nullifier: i.nullifier
         });
-        emit BindingRegistered(pkAddr, i.ctxHash, i.declHash);
+        emit BindingRegistered(pkAddr, i.algorithmTag, i.ctxHash, i.declHash, i.nullifier);
     }
 
     /// @notice Tear down a binding. `sig` must be a secp256k1 signature by
@@ -148,10 +186,17 @@ contract QKBRegistry {
         return t < b.expiredAt;
     }
 
-    function setVerifier(IGroth16Verifier newVerifier) external onlyAdmin {
+    function setRsaVerifier(IGroth16Verifier newVerifier) external onlyAdmin {
         if (address(newVerifier) == address(0)) revert ZeroAddress();
-        address old = address(verifier);
-        verifier = newVerifier;
-        emit VerifierUpdated(old, address(newVerifier));
+        address old = address(rsaVerifier);
+        rsaVerifier = newVerifier;
+        emit VerifierUpdated(ALG_RSA, old, address(newVerifier));
+    }
+
+    function setEcdsaVerifier(IGroth16Verifier newVerifier) external onlyAdmin {
+        if (address(newVerifier) == address(0)) revert ZeroAddress();
+        address old = address(ecdsaVerifier);
+        ecdsaVerifier = newVerifier;
+        emit VerifierUpdated(ALG_ECDSA, old, address(newVerifier));
     }
 }

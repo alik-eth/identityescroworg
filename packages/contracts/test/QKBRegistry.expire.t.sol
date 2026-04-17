@@ -23,7 +23,14 @@ contract QKBRegistryExpireTest is Test {
 
     function setUp() public {
         verifier = new StubGroth16Verifier();
-        registry = new QKBRegistry(IGroth16Verifier(address(verifier)), INITIAL_ROOT, ADMIN);
+        // Dual-verifier constructor; both slots point to the same stub for
+        // expire-focused tests (only the ECDSA path is exercised here).
+        registry = new QKBRegistry(
+            IGroth16Verifier(address(verifier)),
+            IGroth16Verifier(address(verifier)),
+            INITIAL_ROOT,
+            ADMIN
+        );
         vm.warp(1_700_000_000);
     }
 
@@ -51,7 +58,7 @@ contract QKBRegistryExpireTest is Test {
     }
 
     function _boundAt(address pkAddr) internal view returns (uint64 boundAt) {
-        (, boundAt,,,) = registry.bindings(pkAddr);
+        (,, boundAt,,,,) = registry.bindings(pkAddr);
     }
 
     function _signExpire(uint256 priv, address pkAddr, uint64 boundAt) internal view returns (bytes memory) {
@@ -70,7 +77,7 @@ contract QKBRegistryExpireTest is Test {
         emit BindingExpired(pkAddr);
         registry.expire(pkAddr, sig);
 
-        (QKBRegistry.Status status,, uint64 expiredAt,,) = registry.bindings(pkAddr);
+        (QKBRegistry.Status status,,, uint64 expiredAt,,,) = registry.bindings(pkAddr);
         assertEq(uint8(status), uint8(QKBRegistry.Status.EXPIRED));
         assertEq(expiredAt, uint64(block.timestamp));
     }
