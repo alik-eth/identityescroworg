@@ -257,6 +257,70 @@ The Phase 2 routes land in this worktree. Conventions locked by the
   `escrowRecover.mode.test.tsx`). When deploying to Fly or similar the
   host must SPA-fallback-serve `index.html` for all paths.
 
+## Phase 2 QIE — in-browser demo (D2–D7)
+
+The SPA doubles as a demo harness: Holder, Custodian, and Recipient
+roles all live inside one origin. The Custodian section folds the
+qie-agent business logic into the browser via `@qkb/qie-agent/browser`.
+
+### Role palette and `<RoleShell>`
+
+- `data-role="holder"` → blue scale
+- `data-role="custodian"` → amber scale
+- `data-role="recipient"` → emerald scale
+
+`RoleShell` (`src/components/RoleShell.tsx`) wraps a subtree with those
+tokens; `RoleSwitcher` in the header persists the active role to
+`localStorage["qie.demo.role"]` and infers the initial role from the URL
+via `roleFromPath`.
+
+### Transport toggle — `VITE_QIE_USE_REAL_HTTP`
+
+`features/qie/agent-transport.ts` exposes an `AgentTransport` abstraction.
+The default path is `makeBrowserTransport()`: `browser://agent-<a|b|c>`
+URLs short-circuit to the in-browser `BrowserAgent`; any other URL falls
+through to HTTP. Setting `VITE_QIE_USE_REAL_HTTP=1` at dev-server boot
+flips the default to `makeHttpTransport()` so all agent calls hit the
+Node agents from `deploy/mock-qtsps/docker-compose.yml`.
+
+The three consumer hooks (`useEscrowSetup`, `useEscrowRecover`,
+`useNotaryRecover`) each accept an explicit `transport` option for tests
+and an explicit `fetchImpl` for the legacy HTTP-only path. Callers that
+pass `fetchImpl` stay on fetch — tests that pin fetch mocks don't need
+to know the transport exists.
+
+### Demo-mode storage schema
+
+All demo state is `localStorage`-backed under the `qie.demo.*` prefix.
+
+| Key                                           | Owner                    | Shape                                                   |
+|-----------------------------------------------|--------------------------|---------------------------------------------------------|
+| `qie.demo.role`                               | `RoleSwitcher`           | `"holder" \| "custodian" \| "recipient"`                |
+| `qie.demo.local.json`                         | `useChainDeployment`     | `{chainId, rpc, registry, arbitrators}`                 |
+| `qie.demo.agent.<id>.keypair`                 | `makeBrowserAgent`       | `{hybrid:{x25519_{pk,sk}, mlkem_{pk,sk}}, ack_sk}` hex  |
+| `qie.demo.agent.<id>.inbox`                   | `LocalStorageAdapter`    | `string[]` — escrow-id index for `listInbox()`          |
+| `qie.demo.agent.<id>.escrow.<escrowId>`       | `LocalStorageAdapter`    | `EscrowRecord` — deposited ciphertext + evidence        |
+
+Wiping a single agent is `delete qie.demo.agent.<id>.*`; `clearDemoAgents()`
+in `lib/agent-directory.ts` does it atomically and also drops the
+in-memory Promise cache from `features/demo/agents.ts`.
+
+### Chain deployment manifest
+
+`useChainDeployment` resolves the anvil deployment with precedence
+`localStorage > GET /local.json > missing`. The manifest is produced by
+`scripts/dev-chain.sh` which wraps `docker compose -f deploy/mock-qtsps/`
+and copies the resulting `/shared/local.json` into
+`packages/web/public/local.json`. ABIs live at the worktree root
+`fixtures/contracts/`, not inside `packages/web/`.
+
+### Invariant — do not lose the existing Node fleet
+
+The `@qkb/qie-agent` Node server, Dockerfiles, docker-compose, and the
+per-agent `deploy/mock-qtsps/agents/*.keys.pub.json` files STAY. The
+in-browser demo is additive; removing them breaks integration tests
+that the MVP acceptance suite depends on.
+
 ## Phase handoffs
 
 - **Phase 1 QKB:** leaf-only Groth16 proof; chain constraint enforced
