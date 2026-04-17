@@ -43,12 +43,27 @@ const OID = {
 };
 
 const args = process.argv.slice(2);
-if (args.length !== 2) {
-  console.error('usage: verify-real-qes <binding.qkb.json> <binding.qkb.json.p7s>');
+let trustedCasPath = null;
+const positional = [];
+for (let i = 0; i < args.length; i++) {
+  const a = args[i];
+  if (a === '--trusted-cas') {
+    trustedCasPath = args[++i];
+  } else if (a.startsWith('--trusted-cas=')) {
+    trustedCasPath = a.slice('--trusted-cas='.length);
+  } else {
+    positional.push(a);
+  }
+}
+if (positional.length !== 2) {
+  console.error(
+    'usage: verify-real-qes <binding.qkb.json> <binding.qkb.json.p7s> [--trusted-cas <path>]',
+  );
   process.exit(2);
 }
-const bindingPath = resolve(args[0]);
-const p7sPath = resolve(args[1]);
+const bindingPath = resolve(positional[0]);
+const p7sPath = resolve(positional[1]);
+const trustedCas = trustedCasPath ? loadTrustedCas(resolve(trustedCasPath)) : null;
 
 const bindingBytes = new Uint8Array(readFileSync(bindingPath));
 const cmsBytes = new Uint8Array(readFileSync(p7sPath));
@@ -75,7 +90,19 @@ if (certs.length === 0) fatal('no certificates in CMS');
 
 const leaf = findLeaf(certs, signer.sid);
 if (!leaf) fatal('signer cert (matching SignerInfo.sid) not present');
-const intermediate = findIssuer(certs, leaf);
+let intermediate = findIssuer(certs, leaf);
+let intermediateSource = intermediate ? 'inline-cms' : null;
+let intermediateMerkleIndex = null;
+if (!intermediate && trustedCas) {
+  const resolved = resolveIntermediateFromLotl(leaf.issuer, trustedCas);
+  if (resolved) {
+    intermediate = resolved.cert;
+    intermediateSource = 'lotl';
+    intermediateMerkleIndex = resolved.merkleIndex;
+  } else {
+    fatal('CADES_INTERMEDIATE_NOT_IN_LOTL: leaf-only CMS and issuer DN absent from --trusted-cas');
+  }
+}
 
 // 1. messageDigest attr must equal SHA-256(binding bytes).
 const mdAttr = signer.signedAttrs.attributes.find((a) => a.type === OID.messageDigest);
@@ -169,6 +196,8 @@ const summary = {
     issuerOrganization: issuerO,
     issuerCountry: issuerC,
     intermediatePresent: !!intermediate,
+    intermediateSource,
+    intermediateMerkleIndex,
     notBefore: validFrom.toISOString(),
     notAfter: validTo.toISOString(),
     signingTime: signingTime ? signingTime.toISOString() : null,
@@ -181,6 +210,9 @@ console.error(`  binding sha256   : ${summary.binding.sha256}`);
 console.error(`  binding bytes    : ${summary.binding.bytes}`);
 console.error(`  CMS bytes        : ${summary.cms.bytes}`);
 console.error(`  certs in CMS     : ${summary.cms.certCount}`);
+console.error(
+  `  intermediate     : ${summary.signer.intermediatePresent ? `present (${intermediateSource}${intermediateMerkleIndex !== null ? `, merkleIndex=${intermediateMerkleIndex}` : ''})` : 'absent (no chain link verified)'}`,
+);
 console.error(`  issuer (QTSP)    : ${summary.signer.issuerCn} / ${summary.signer.issuerOrganization} / ${summary.signer.issuerCountry}`);
 console.error(`  cert validity    : ${summary.signer.notBefore} → ${summary.signer.notAfter}`);
 console.error(`  signing time     : ${summary.signer.signingTime ?? '(absent)'}`);
@@ -210,6 +242,47 @@ function findLeaf(certs, sid) {
     );
   }
   return undefined;
+}
+
+function loadTrustedCas(path) {
+  let raw;
+  try {
+    raw = JSON.parse(readFileSync(path, 'utf8'));
+  } catch (e) {
+    fatal(`cannot read --trusted-cas ${path}: ${e?.message ?? e}`);
+  }
+  if (!raw || !Array.isArray(raw.cas)) fatal(`malformed trusted-cas at ${path}`);
+  return raw;
+}
+
+function resolveIntermediateFromLotl(leafIssuer, file) {
+  const want = bytesToHex(new Uint8Array(leafIssuer.toSchema().toBER(false)));
+  for (const ca of file.cas) {
+    let der;
+    try {
+      der = b64ToBytes(ca.certDerB64);
+    } catch {
+      continue;
+    }
+    let cert;
+    try {
+      const asn = asn1js.fromBER(toAB(der));
+      if (asn.offset === -1) continue;
+      cert = new pkijs.Certificate({ schema: asn.result });
+    } catch {
+      continue;
+    }
+    const subjDer = bytesToHex(new Uint8Array(cert.subject.toSchema().toBER(false)));
+    if (subjDer === want) {
+      return { cert, merkleIndex: ca.merkleIndex };
+    }
+  }
+  return null;
+}
+
+function b64ToBytes(s) {
+  const bin = Buffer.from(s, 'base64');
+  return new Uint8Array(bin);
 }
 
 function findIssuer(certs, leaf) {

@@ -57,7 +57,14 @@ export interface ParsedCades {
   leafAlg: LeafAlg;
   algorithmTag: AlgorithmTag;
   leafCertDer: Uint8Array;
-  intermediateCertDer: Uint8Array;
+  /** DER-encoded leaf cert `issuer` Name. Used to resolve the intermediate
+   *  from `trusted-cas.json` by issuer-DN match when the CMS only ships the
+   *  leaf (Diia-style CAdES-BES — the intermediate must come from LOTL). */
+  leafIssuerDer: Uint8Array;
+  /** Inline intermediate when the CMS contains one (zk-email / Adobe-style
+   *  CAdES-BES); `null` when the signer shipped a leaf-only CMS and the
+   *  caller must resolve the intermediate from LOTL. */
+  intermediateCertDer: Uint8Array | null;
 }
 
 export function parseCades(p7s: Uint8Array): ParsedCades {
@@ -149,7 +156,7 @@ export function parseCades(p7s: Uint8Array): ParsedCades {
   const certs = (signed.certificates ?? []).filter(
     (c): c is Certificate => c instanceof Certificate,
   );
-  if (certs.length < 2) {
+  if (certs.length < 1) {
     throw new QkbError('cades.parse', { reason: 'cert-count', got: certs.length });
   }
 
@@ -158,10 +165,11 @@ export function parseCades(p7s: Uint8Array): ParsedCades {
   if (!leaf) {
     throw new QkbError('cades.parse', { reason: 'leaf-not-found' });
   }
-  const intermediate = findIssuer(certs, leaf);
-  if (!intermediate) {
-    throw new QkbError('cades.parse', { reason: 'intermediate-not-found' });
-  }
+  // Intermediate is OPTIONAL at parse time. Many real-world QES profiles
+  // (Diia among them) ship a leaf-only CMS and expect the relying party to
+  // resolve the intermediate from a trusted list (LOTL). qesVerify.ts does
+  // that resolution against `trusted-cas.json`.
+  const intermediate = findIssuer(certs, leaf) ?? null;
 
   const { leafAlg, algorithmTag } = classifyLeaf(leaf, signatureAlgorithmOid);
 
@@ -174,8 +182,13 @@ export function parseCades(p7s: Uint8Array): ParsedCades {
     leafAlg,
     algorithmTag,
     leafCertDer: certDer(leaf),
-    intermediateCertDer: certDer(intermediate),
+    leafIssuerDer: rdnDer(leaf.issuer),
+    intermediateCertDer: intermediate ? certDer(intermediate) : null,
   };
+}
+
+function rdnDer(rdn: { toSchema(): asn1js.AsnType }): Uint8Array {
+  return new Uint8Array(rdn.toSchema().toBER(false));
 }
 
 function classifyLeaf(

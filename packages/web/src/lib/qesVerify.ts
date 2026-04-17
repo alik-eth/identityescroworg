@@ -88,7 +88,25 @@ export async function verifyQes(input: VerifyInput): Promise<VerifyOk> {
   }
 
   const leafCert = parseCert(parsed.leafCertDer);
-  const intCert = parseCert(parsed.intermediateCertDer);
+
+  // Resolve the intermediate. If the CMS shipped one (zk-email/Adobe-style)
+  // we use it directly. If it shipped only the leaf (Diia-style CAdES-BES)
+  // we walk trusted-cas.json looking for a CA whose subject DN equals the
+  // leaf's issuer DN, treating that as the LOTL-anchored intermediate.
+  let intermediateDer: Uint8Array;
+  let caMerkleIndex: number;
+  if (parsed.intermediateCertDer) {
+    intermediateDer = parsed.intermediateCertDer;
+    caMerkleIndex = lookupTrustedCa(intermediateDer, trustedCas);
+  } else {
+    const resolved = resolveIntermediateFromLotl(parsed.leafIssuerDer, trustedCas);
+    if (!resolved) {
+      throw new QkbError('qes.unknownCA', { reason: 'intermediate-not-in-lotl' });
+    }
+    intermediateDer = resolved.der;
+    caMerkleIndex = resolved.merkleIndex;
+  }
+  const intCert = parseCert(intermediateDer);
 
   const ts = binding.timestamp * 1000;
   const notBefore = leafCert.notBefore.value.getTime();
@@ -108,9 +126,28 @@ export async function verifyQes(input: VerifyInput): Promise<VerifyOk> {
     throw new QkbError('qes.sigInvalid', { reason: 'chain' });
   }
 
-  const caMerkleIndex = lookupTrustedCa(parsed.intermediateCertDer, trustedCas);
-
   return { ok: true, algorithmTag: parsed.algorithmTag, caMerkleIndex };
+}
+
+function resolveIntermediateFromLotl(
+  leafIssuerDer: Uint8Array,
+  file: TrustedCasFile,
+): { der: Uint8Array; merkleIndex: number } | null {
+  const want = hex(leafIssuerDer);
+  for (const ca of file.cas) {
+    const der = b64ToBytes(ca.certDerB64);
+    let cert: Certificate;
+    try {
+      cert = parseCert(der);
+    } catch {
+      continue;
+    }
+    const subjDer = new Uint8Array(cert.subject.toSchema().toBER(false));
+    if (hex(subjDer) === want) {
+      return { der, merkleIndex: ca.merkleIndex };
+    }
+  }
+  return null;
 }
 
 async function verifySignerSignature(

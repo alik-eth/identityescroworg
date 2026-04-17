@@ -40,8 +40,9 @@ describe('parseCades — happy path', () => {
     expect(parsed.signatureValue.length).toBeGreaterThan(0);
     expect(parsed.signedAttrsDer.length).toBeGreaterThan(0);
     expect(parsed.leafCertDer.length).toBeGreaterThan(0);
-    expect(parsed.intermediateCertDer.length).toBeGreaterThan(0);
-    expect(toHex(parsed.leafCertDer)).not.toBe(toHex(parsed.intermediateCertDer));
+    expect(parsed.intermediateCertDer).not.toBeNull();
+    expect(parsed.intermediateCertDer!.length).toBeGreaterThan(0);
+    expect(toHex(parsed.leafCertDer)).not.toBe(toHex(parsed.intermediateCertDer!));
     expect(parsed.leafAlg).toBe('rsaEncryption');
     expect(parsed.algorithmTag).toBe(0);
   });
@@ -123,11 +124,12 @@ describe('parseCades — error fixtures', () => {
     );
   });
 
-  it('rejects CMS missing intermediate certificate', () => {
+  it('parses leaf-only CMS with intermediateCertDer=null (Diia-style)', () => {
     const cms = makeCms(f, { binding: f.binding, dropIntermediate: true });
-    expect(() => parseCades(cms)).toThrowError(
-      expect.objectContaining({ code: 'cades.parse' }) as unknown as Error,
-    );
+    const parsed = parseCades(cms);
+    expect(parsed.intermediateCertDer).toBeNull();
+    expect(parsed.leafCertDer.length).toBeGreaterThan(0);
+    expect(parsed.leafIssuerDer.length).toBeGreaterThan(0);
   });
 });
 

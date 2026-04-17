@@ -164,17 +164,15 @@ describe('verifyQes — failure modes', () => {
 
   it('sigInvalid: chain link fails (intermediate did not sign leaf)', async () => {
     const otherInt = makeRsaFixture({ locale: 'en' });
+    const otherIntDer = otherInt.parsed.intermediateCertDer!;
     const swapped: ParsedCades = {
       ...rsaFx.parsed,
-      intermediateCertDer: otherInt.parsed.intermediateCertDer,
+      intermediateCertDer: otherIntDer,
     };
     const swappedTrust: TrustedCasFile = {
       version: 1,
       cas: [
-        {
-          merkleIndex: 0,
-          certDerB64: bytesToB64(otherInt.parsed.intermediateCertDer),
-        },
+        { merkleIndex: 0, certDerB64: bytesToB64(otherIntDer) },
       ],
     };
     await expect(
@@ -187,22 +185,66 @@ describe('verifyQes — failure modes', () => {
       }),
     ).rejects.toMatchObject({ code: 'qes.sigInvalid' });
   });
+
+  it('leaf-only CMS: PASSES when intermediate is in trusted-cas (LOTL resolution)', async () => {
+    // Diia-style: CMS shipped only the leaf. Strip the intermediate from the
+    // parsed shape but keep it in the trusted list. qesVerify must resolve
+    // the issuer DN against trusted-cas and proceed.
+    const fx = makeRsaFixture({ locale: 'en' });
+    const intDer = fx.parsed.intermediateCertDer!;
+    const leafOnly: ParsedCades = { ...fx.parsed, intermediateCertDer: null };
+    const r = await verifyQes({
+      parsed: leafOnly,
+      binding: fx.binding,
+      bindingBytes: fx.bindingBytes,
+      expectedPk: fx.pk,
+      trustedCas: {
+        version: 1,
+        cas: [{ merkleIndex: 7, certDerB64: bytesToB64(intDer) }],
+      },
+    });
+    expect(r.ok).toBe(true);
+    expect(r.caMerkleIndex).toBe(7);
+  });
+
+  it('leaf-only CMS: throws qes.unknownCA(intermediate-not-in-lotl) when issuer absent', async () => {
+    const fx = makeRsaFixture({ locale: 'en' });
+    const leafOnly: ParsedCades = { ...fx.parsed, intermediateCertDer: null };
+    const otherFx = makeRsaFixture({ locale: 'en', cnSuffix: '-Unrelated' });
+    const otherIntDer = otherFx.parsed.intermediateCertDer!;
+    await expect(
+      verifyQes({
+        parsed: leafOnly,
+        binding: fx.binding,
+        bindingBytes: fx.bindingBytes,
+        expectedPk: fx.pk,
+        trustedCas: {
+          version: 1,
+          cas: [{ merkleIndex: 0, certDerB64: bytesToB64(otherIntDer) }],
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: 'qes.unknownCA',
+      details: { reason: 'intermediate-not-in-lotl' },
+    });
+  });
 });
 
-function makeRsaFixture(opts: { locale: Locale }): RsaCmsFixture {
+function makeRsaFixture(opts: { locale: Locale; cnSuffix?: string }): RsaCmsFixture {
+  const suf = opts.cnSuffix ?? '';
   const rootKey = forge.pki.rsa.generateKeyPair({ bits: 2048, e: 0x10001 });
   const intKey = forge.pki.rsa.generateKeyPair({ bits: 2048, e: 0x10001 });
   const leafKey = forge.pki.rsa.generateKeyPair({ bits: 2048, e: 0x10001 });
   const intCert = mkCert({
-    subject: 'Int',
-    issuer: 'Root',
+    subject: `Int${suf}`,
+    issuer: `Root${suf}`,
     pub: intKey.publicKey,
     signKey: rootKey.privateKey,
     isCa: true,
   });
   const leafCert = mkCert({
-    subject: 'Leaf',
-    issuer: 'Int',
+    subject: `Leaf${suf}`,
+    issuer: `Int${suf}`,
     pub: leafKey.publicKey,
     signKey: intKey.privateKey,
     isCa: false,
@@ -239,7 +281,7 @@ function makeRsaFixture(opts: { locale: Locale }): RsaCmsFixture {
   const parsed = parseCades(cms);
   const trustedCas: TrustedCasFile = {
     version: 1,
-    cas: [{ merkleIndex: 0, certDerB64: bytesToB64(parsed.intermediateCertDer) }],
+    cas: [{ merkleIndex: 0, certDerB64: bytesToB64(parsed.intermediateCertDer!) }],
   };
   return { parsed, binding, bindingBytes, pk, trustedCas };
 }
@@ -296,7 +338,7 @@ async function makeEcdsaFixture(opts: { locale: Locale }): Promise<RsaCmsFixture
   const parsed = parseCades(cms);
   const trustedCas: TrustedCasFile = {
     version: 1,
-    cas: [{ merkleIndex: 0, certDerB64: bytesToB64(parsed.intermediateCertDer) }],
+    cas: [{ merkleIndex: 0, certDerB64: bytesToB64(parsed.intermediateCertDer!) }],
   };
   return { parsed, binding, bindingBytes, pk, trustedCas };
 }
