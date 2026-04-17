@@ -16,3 +16,36 @@ test('generate — creates a keypair and navigates to /sign', async ({ page }) =
   await page.getByTestId('create-binding').click();
   await expect(page).toHaveURL(/\/sign$/);
 });
+
+test('sign — renders canonical preview, hash, download, jurisdiction tools', async ({ page }) => {
+  // Walk /generate first so session state is populated.
+  await page.goto('/generate');
+  await page.getByTestId('generate-key').click();
+  await page.getByTestId('create-binding').click();
+  await expect(page).toHaveURL(/\/sign$/);
+
+  const preview = await page.getByTestId('bcanon-preview').textContent();
+  expect(preview).toContain('"version":"QKB/1.0"');
+  expect(preview).toContain('"scheme":"secp256k1"');
+
+  const hash = await page.getByTestId('bcanon-hash').textContent();
+  expect(hash).toMatch(/^0x[0-9a-f]{64}$/);
+
+  // Download round-trip via Playwright's download API.
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByTestId('download-binding').click(),
+  ]);
+  expect(download.suggestedFilename()).toBe('binding.qkb.json');
+
+  // Jurisdiction pointers are present.
+  const tools = await page.getByTestId('qes-tools').textContent();
+  expect(tools).toMatch(/Diia|Дія/);
+  expect(tools).toMatch(/SK/);
+  expect(tools).toMatch(/Szafir/);
+});
+
+test('sign — missing-binding fallback when session is empty', async ({ page }) => {
+  await page.goto('/sign');
+  await expect(page.getByTestId('sign-missing')).toBeVisible();
+});
