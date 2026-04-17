@@ -1,0 +1,32 @@
+# syntax=docker/dockerfile:1.7
+
+# ---- Builder ----------------------------------------------------------------
+# Builds the static SPA into /app/packages/web/dist.
+# Build context expected to be the monorepo root (see .dockerignore).
+FROM docker.io/library/node:20-alpine AS builder
+
+RUN corepack enable && corepack prepare pnpm@9.1.0 --activate
+
+WORKDIR /app
+
+# Copy only the workspace surface needed for install + build.
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* tsconfig.base.json ./
+COPY packages/web ./packages/web
+COPY fixtures ./fixtures
+
+# Install just @qkb/web's deps (and its workspace siblings, of which there are none consumed).
+RUN pnpm install --frozen-lockfile=false --filter @qkb/web...
+
+RUN pnpm --filter @qkb/web build
+
+# ---- Runtime ----------------------------------------------------------------
+# Caddy serves the static dist on :8080 (Fly proxy in front handles 80/443).
+FROM docker.io/library/caddy:2-alpine AS runtime
+
+COPY --from=builder /app/packages/web/dist /usr/share/caddy
+COPY packages/web/Caddyfile /etc/caddy/Caddyfile
+
+EXPOSE 8080
+
+# caddy:2-alpine's default ENTRYPOINT runs caddy; CMD points at our Caddyfile.
+CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]

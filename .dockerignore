@@ -1,0 +1,32 @@
+# Build context for Fly.io / docker — keep it lean.
+# We only need the monorepo surface that `Dockerfile` actually COPYs:
+#   package.json, pnpm-workspace.yaml, pnpm-lock.yaml, tsconfig.base.json
+#   packages/web/**
+#   fixtures/**
+
+**/node_modules
+**/dist
+**/build
+**/release
+**/playwright-report
+**/test-results
+
+.git
+.github
+.vscode
+.idea
+
+# Other packages — not consumed by @qkb/web's build.
+packages/contracts
+packages/circuits
+packages/lotl-flattener
+
+# Foundry / Hardhat / circom artifacts (defensive — also covered above).
+broadcast
+cache
+out
+
+# Local env files.
+.env
+.env.local
+*.tar.gz

@@ -1,0 +1,122 @@
+{
+  "app": {
+    "title": "QKB",
+    "logoMark": "ZK",
+    "tagline": "zk · QES · secp256k1",
+    "footer": "QKB · Phase 1 · static SPA · runs from file://"
+  },
+  "nav": {
+    "home": "Home",
+    "generate": "Generate",
+    "sign": "Sign",
+    "upload": "Upload",
+    "register": "Register"
+  },
+  "lang": {
+    "label": "Language",
+    "en": "English",
+    "uk": "Ukrainian"
+  },
+  "index": {
+    "heading": "Qualified Key Binding",
+    "subheading": "Bind a secp256k1 key to your qualified electronic identity.",
+    "start": "Start a new binding"
+  },
+  "common": {
+    "next": "Next",
+    "back": "Back",
+    "download": "Download",
+    "copy": "Copy",
+    "cancel": "Cancel",
+    "continue": "Continue"
+  },
+  "generate": {
+    "heading": "Generate binding",
+    "intro": "Generate a fresh secp256k1 keypair inside your browser. The private key never leaves this page.",
+    "generateButton": "Generate new keypair",
+    "pubkeyLabel": "Public key (uncompressed, SEC1)",
+    "contextLabel": "Optional context (hex, Phase 2)",
+    "timestampLabel": "Binding timestamp",
+    "localeLabel": "Declaration language",
+    "createBinding": "Create binding statement",
+    "missingKey": "Please generate a keypair first."
+  },
+  "sign": {
+    "heading": "Sign binding",
+    "intro": "Download the canonical binding statement, sign it with your national QES tool, and return to upload the detached signature.",
+    "downloadButton": "Download binding.qkb.json",
+    "previewLabel": "Canonical JCS bytes",
+    "hashLabel": "SHA-256 digest",
+    "toolsHeading": "QES tools by jurisdiction",
+    "toolsUaDiia": "Ukraine — Diia app",
+    "toolsUaDiiaDesc": "Use the \"Signature\" feature in Diia with the downloaded file to produce a detached CAdES-BES .p7s.",
+    "toolsEeSk": "Estonia — SK ID",
+    "toolsEeSkDesc": "Sign with ID-card or Mobile-ID via DigiDoc4 and export the .p7s container.",
+    "toolsPl": "Poland — Szafir",
+    "toolsPlDesc": "Use Szafir SDK to emit a detached CAdES-BES signature.",
+    "missingBinding": "No binding to sign. Return to Generate."
+  },
+  "upload": {
+    "heading": "Upload signed binding",
+    "intro": "Drop the .p7s emitted by your QES tool. The browser re-verifies the signature off-circuit and then builds a zero-knowledge proof locally.",
+    "dropP7s": "Drop .p7s here or click to select",
+    "verifying": "Verifying signature off-circuit…",
+    "proving": "Generating proof (may take several minutes)…",
+    "stageWitness": "Building witness",
+    "stageProve": "Groth16 prove",
+    "stageFinalize": "Finalising",
+    "elapsed": "Elapsed",
+    "cancelProof": "Cancel",
+    "restart": "Start over",
+    "missingBinding": "No binding to verify. Return to Generate.",
+    "proofReady": "Proof generated. Continue to Register."
+  },
+  "register": {
+    "heading": "Register on-chain",
+    "intro": "Connect a wallet and submit the Groth16 proof to the QKBRegistry. Gas on Sepolia is ≈340k.",
+    "connect": "Connect wallet",
+    "connected": "Connected",
+    "submit": "Submit register()",
+    "submitting": "Submitting…",
+    "txHash": "Transaction hash",
+    "pkAddr": "Bound address",
+    "noBundle": "No bundle in session. Complete Upload first.",
+    "noWallet": "No EIP-1193 wallet detected. Install MetaMask or equivalent.",
+    "success": "Binding registered successfully."
+  },
+  "errors": {
+    "binding": {
+      "size": "Binding statement is larger than the protocol limit.",
+      "field": "Binding contains an invalid field value.",
+      "jcs": "Binding could not be canonicalized as JCS.",
+      "parse": "Binding could not be parsed."
+    },
+    "cades": {
+      "parse": "The detached signature could not be parsed."
+    },
+    "qes": {
+      "sigInvalid": "The qualified electronic signature is not valid.",
+      "digestMismatch": "The signed digest does not match the binding.",
+      "certExpired": "The signing certificate is not valid for the binding timestamp.",
+      "unknownCA": "The signing authority is not in the EU trusted list.",
+      "wrongAlgorithm": "The signature algorithm is not supported in this version."
+    },
+    "witness": {
+      "offsetNotFound": "Could not locate a required field inside the binding.",
+      "fieldTooLong": "A field in the binding exceeds the circuit length limit."
+    },
+    "prover": {
+      "wasmOOM": "The in-browser prover ran out of memory.",
+      "cancelled": "Proof generation was cancelled.",
+      "artifactMismatch": "Downloaded circuit artifact does not match the expected hash."
+    },
+    "bundle": {
+      "malformed": "The QKB bundle file is malformed."
+    },
+    "registry": {
+      "rootMismatch": "The trusted-list root does not match the registry on-chain.",
+      "alreadyBound": "This key is already bound on-chain.",
+      "ageExceeded": "The binding timestamp is too old to register."
+    }
+  }
+}
