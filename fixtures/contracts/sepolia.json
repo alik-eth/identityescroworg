@@ -1,0 +1,13 @@
+{
+  "chainId": 11155111,
+  "network": "sepolia",
+  "deployedAt": "2026-04-17T15:35:00Z",
+  "admin": "0xB8d121CD0B2D0AB3df2aFF0B45B2fD354FF4c1f7",
+  "QKBRegistry": "0x7F36aF783538Ae8f981053F2b0E45421a1BF4815",
+  "QKBGroth16Verifier": "0xB85ed0636c0b27A51773Fc15C50706bBB915e56f",
+  "initialTrustedListRoot": "0x2aabe358cd38fe2859cdc57d62d611d76bce881ec49ecefa2d26f9338ff0228f",
+  "rootSource": "synthetic-flattener-fixture",
+  "circuit": "QKBPresentationEcdsaLeaf",
+  "signalLayout": "leaf-only-12",
+  "notes": "Phase 1. RSA + unified 14-signal + nullifier deferred to Phase 2 Sprint 0 (§14). real LOTL root replaces initialTrustedListRoot in Phase 2 via updateTrustedListRoot()."
+}

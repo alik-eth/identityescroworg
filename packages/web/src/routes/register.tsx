@@ -27,7 +27,7 @@ import { loadSession } from '../lib/session';
 // TODO: lead pumps real address after `DeployQKBRegistry.s.sol` runs on Sepolia.
 // The constant lives here so a find-and-replace during the pump step is a
 // one-liner. Do NOT hardcode it in routes/tests — always import.
-const REGISTRY_ADDRESS_SEPOLIA = '0x0000000000000000000000000000000000000000';
+const REGISTRY_ADDRESS_SEPOLIA = '0x7F36aF783538Ae8f981053F2b0E45421a1BF4815';
 
 type Eip1193Request = (args: { method: string; params?: unknown[] }) => Promise<unknown>;
 interface Eip1193Provider {
