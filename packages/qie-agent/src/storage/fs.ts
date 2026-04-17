@@ -3,7 +3,7 @@ import {
   unlinkSync, openSync, fsyncSync, closeSync,
 } from "node:fs";
 import { join } from "node:path";
-import type { StorageAdapter, EscrowRecord, EscrowState } from "./types.js";
+import type { StorageAdapter, EscrowRecord, EscrowState, EvidenceEnvelope } from "./types.js";
 
 function safeName(id: string): string {
   if (!/^0x[0-9a-fA-F]+$/.test(id)) throw new Error(`invalid escrowId: ${id}`);
@@ -34,6 +34,22 @@ export class FsStorage implements StorageAdapter {
     const rec = await this.get(escrowId);
     if (!rec) throw new Error(`unknown escrow ${escrowId}`);
     rec.state = state;
+    await this.put(escrowId, rec);
+  }
+
+  async setEvidence(escrowId: string, evidence: EvidenceEnvelope): Promise<void> {
+    const rec = await this.get(escrowId);
+    if (!rec) return; // silently ignore evidence for unknown escrows
+    rec.evidence = evidence;
+    await this.put(escrowId, rec);
+  }
+
+  async markReleased(escrowId: string, recipientHybridPk: string): Promise<void> {
+    const rec = await this.get(escrowId);
+    if (!rec) return;
+    rec.recipientHybridPk = recipientHybridPk;
+    // Preserve terminal revoked state; otherwise advance to released.
+    if (rec.state !== "revoked") rec.state = "released";
     await this.put(escrowId, rec);
   }
 

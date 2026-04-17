@@ -46,6 +46,28 @@ describe("FsStorage", () => {
     const got = await s.get("0x03");
     expect(got).toBeTruthy();
   });
+  it("setEvidence attaches envelope; markReleased flips state + sets pk", async () => {
+    const s = new FsStorage(dir);
+    await s.put("0x05", rec("0x05"));
+    await s.setEvidence("0x05", {
+      kindHash: "0x" + "11".repeat(32),
+      referenceHash: "0x" + "22".repeat(32),
+      evidenceHash: "0x" + "33".repeat(32),
+      issuedAt: 1700000000,
+    });
+    await s.markReleased("0x05", "0xdead");
+    const got = await s.get("0x05");
+    expect(got?.state).toBe("released");
+    expect(got?.recipientHybridPk).toBe("0xdead");
+    expect(got?.evidence?.referenceHash).toBe("0x" + "22".repeat(32));
+  });
+  it("markReleased does not downgrade revoked", async () => {
+    const s = new FsStorage(dir);
+    const r = rec("0x06"); r.state = "revoked";
+    await s.put("0x06", r);
+    await s.markReleased("0x06", "0x00");
+    expect((await s.get("0x06"))?.state).toBe("revoked");
+  });
   it("delete removes record", async () => {
     const s = new FsStorage(dir);
     await s.put("0x04", rec("0x04"));
