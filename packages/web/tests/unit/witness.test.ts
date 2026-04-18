@@ -56,9 +56,9 @@ beforeAll(async () => {
 }, 60_000);
 
 describe('buildLeafWitness — shape', () => {
-  it('produces the leaf-circuit input field set with correct array widths', () => {
+  it('produces the leaf-circuit input field set with correct array widths', async () => {
     const parsed = parseCades(f.p7s);
-    const w = buildLeafWitness({
+    const w = await buildLeafWitness({
       parsed,
       binding: f.binding,
       bindingBytes: f.bindingBytes,
@@ -70,20 +70,37 @@ describe('buildLeafWitness — shape', () => {
     expect(w.signedAttrs).toHaveLength(MAX_SA);
     expect(w.signedAttrsPaddedIn).toHaveLength(MAX_SA);
     expect(w.leafDER).toHaveLength(MAX_CERT);
-    expect(w.leafTbsPaddedIn).toHaveLength(MAX_CERT);
     expect(w.declPaddedIn).toHaveLength(MAX_DECL + 64);
     expect(w.leafSigR).toHaveLength(6);
     expect(w.leafSigS).toHaveLength(6);
+    // Split-proof pivot: leaf carries nullifier + leafSpkiCommit + the
+    // subject-serial offsets that feed the person-level nullifier primitive.
+    expect(typeof w.nullifier).toBe('string');
+    expect(typeof w.leafSpkiCommit).toBe('string');
+    expect(typeof w.subjectSerialValueOffset).toBe('number');
+    expect(typeof w.subjectSerialValueLength).toBe('number');
+    expect(w.subjectSerialValueLength).toBeGreaterThanOrEqual(1);
+    expect(w.subjectSerialValueLength).toBeLessThanOrEqual(32);
   });
 
-  it('emits every bigint-shaped field as a decimal string', () => {
+  it('emits every bigint-shaped field as a decimal string', async () => {
     const parsed = parseCades(f.p7s);
-    const w = buildLeafWitness({
+    const w = await buildLeafWitness({
       parsed,
       binding: f.binding,
       bindingBytes: f.bindingBytes,
     });
-    for (const v of [...w.pkX, ...w.pkY, w.ctxHash, w.declHash, w.timestamp, ...w.leafSigR, ...w.leafSigS]) {
+    for (const v of [
+      ...w.pkX,
+      ...w.pkY,
+      w.ctxHash,
+      w.declHash,
+      w.timestamp,
+      w.nullifier,
+      w.leafSpkiCommit,
+      ...w.leafSigR,
+      ...w.leafSigS,
+    ]) {
       expect(typeof v).toBe('string');
       expect(v).toMatch(/^\d+$/);
     }
@@ -91,9 +108,9 @@ describe('buildLeafWitness — shape', () => {
 });
 
 describe('buildLeafWitness — public signals', () => {
-  it('matches the circuit-side declarations of pkX/pkY/declHash/timestamp/ctxHash', () => {
+  it('matches the circuit-side declarations of pkX/pkY/declHash/timestamp/ctxHash', async () => {
     const parsed = parseCades(f.p7s);
-    const w = buildLeafWitness({
+    const w = await buildLeafWitness({
       parsed,
       binding: f.binding,
       bindingBytes: f.bindingBytes,
@@ -114,9 +131,9 @@ describe('buildLeafWitness — public signals', () => {
 });
 
 describe('buildLeafWitness — offsets', () => {
-  it('every byte-offset field points at the matching key literal in Bcanon', () => {
+  it('every byte-offset field points at the matching key literal in Bcanon', async () => {
     const parsed = parseCades(f.p7s);
-    const w = buildLeafWitness({
+    const w = await buildLeafWitness({
       parsed,
       binding: f.binding,
       bindingBytes: f.bindingBytes,
@@ -143,9 +160,9 @@ describe('buildLeafWitness — offsets', () => {
     }
   });
 
-  it('round-trips sigR/sigS limbs to the 32-byte r/s bytes', () => {
+  it('round-trips sigR/sigS limbs to the 32-byte r/s bytes', async () => {
     const parsed = parseCades(f.p7s);
-    const w = buildLeafWitness({
+    const w = await buildLeafWitness({
       parsed,
       binding: f.binding,
       bindingBytes: f.bindingBytes,
@@ -193,11 +210,14 @@ async function makeFixture(): Promise<Fixture> {
   });
   const bindingBytes = canonicalizeBinding(binding);
 
-  // Mint a self-signed ECDSA-P256 cert.
+  // Mint a self-signed ECDSA-P256 cert. The subject carries an ETSI-style
+  // serialNumber attribute (OID 2.5.4.5, PrintableString) so the
+  // split-proof leaf witness can derive the person-level nullifier via
+  // X509SubjectSerial. The value is arbitrary test-fixture content.
   const cert = new pkijs.Certificate();
   cert.version = 2;
   cert.serialNumber = new asn1js.Integer({ value: 1 });
-  setName(cert.subject, 'QKB Witness Test');
+  setSubjectWithSerialNumber(cert.subject, 'QKB Witness Test', 'PNODE-12345678');
   setName(cert.issuer, 'QKB Witness Test');
   cert.notBefore.value = new Date(Date.now() - 60_000);
   cert.notAfter.value = new Date(Date.now() + 365 * 24 * 60 * 60_000);
@@ -249,6 +269,23 @@ function setName(target: pkijs.RelativeDistinguishedNames, cn: string): void {
     new pkijs.AttributeTypeAndValue({
       type: '2.5.4.3',
       value: new asn1js.Utf8String({ value: cn }),
+    }),
+  ];
+}
+
+function setSubjectWithSerialNumber(
+  target: pkijs.RelativeDistinguishedNames,
+  cn: string,
+  serial: string,
+): void {
+  target.typesAndValues = [
+    new pkijs.AttributeTypeAndValue({
+      type: '2.5.4.3',
+      value: new asn1js.Utf8String({ value: cn }),
+    }),
+    new pkijs.AttributeTypeAndValue({
+      type: '2.5.4.5',
+      value: new asn1js.PrintableString({ value: serial }),
     }),
   ];
 }

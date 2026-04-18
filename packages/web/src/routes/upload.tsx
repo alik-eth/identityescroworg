@@ -130,8 +130,12 @@ export function UploadScreen() {
         trustedCas,
       });
 
-      // Build witness for the leaf circuit.
-      const witness = buildLeafWitness({
+      // Build witness for the leaf circuit. Split-proof pivot: the leaf is
+      // derived from the same shared derivations as the chain, but this
+      // screen still drives only the leaf proof — W2 pumps the chain proof
+      // into the register() call once the chain zkey URL lands from the
+      // circuits ceremony.
+      const witness = await buildLeafWitness({
         parsed,
         binding: session.binding!,
         bindingBytes,
