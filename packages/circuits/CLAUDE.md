@@ -91,6 +91,23 @@ bash packages/circuits/ceremony/scripts/stub-ceremony.sh   # dev-only (for contr
    sub-circuit that pushes past 8 M will OOM even on 40 GB Fly machines
    for the setup phase.
 
+8. **Snarkjs orders `public.json` as `[outputs…, public_inputs…]`**, not
+   by declaration order. The Solidity verifier's `input[N]` array matches
+   this (with the leading `1` from the witness stripped). If your on-chain
+   verifier expects a specific public-signal index layout — and contracts-
+   eng's split-proof `QKBVerifier.verify` does (orchestration §2.1/§2.2
+   pin `leafSpkiCommit` at `leafArr[12]` and `chainArr[2]`, both LAST) —
+   make ALL public signals `signal input` and add an internal equality
+   constraint (`computedValue === publicInputSignal`) for any value that
+   would otherwise be a `signal output`. This applies to
+   `QKBPresentationEcdsa{Leaf,Chain}.circom`: `leafSpkiCommit` is a
+   `signal input` declared LAST in the `component main public [...]`
+   list, constrained to equal
+   `Poseidon2(Poseidon6(leafXLimbs), Poseidon6(leafYLimbs))`. Caught
+   pre-ceremony during the 2026-04-18 split-proof pivot; would have
+   produced a silent byte-misalignment between the ceremony stubs and
+   contracts-eng's K1 layout.
+
 ## Ceremony artifact flow
 
 ```
