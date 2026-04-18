@@ -1,37 +1,48 @@
 /**
- * QKBRegistry bindings — Sprint-0 (Phase 2) shape.
+ * QKBRegistryV3 bindings — split-proof pivot (2026-04-18).
  *
- * The Sprint-0 `QKBRegistry` extends the Phase-1 contract with:
- *   - `uint[14]` public-signal array (was uint[12] in Phase 1).
- *   - Dual verifier dispatch (rsaVerifier + ecdsaVerifier) routed on
- *     publicSignals[12] = algorithmTag.
- *   - `rTL == trustedListRoot` check (restored from Phase-1 drop).
- *   - `mapping(bytes32 => bool) usedNullifiers` + `error NullifierUsed()`.
- *   - `mapping(bytes32 => address) nullifierToPk` for revocation publication.
+ * V3 is a fresh (non-upgrade) contract that replaces V2's single-proof gate
+ * with a split-proof pair: each register / registerEscrow / revokeEscrow /
+ * cancelReleasePending call submits a leaf Groth16 proof (13 public
+ * signals) AND a chain Groth16 proof (3 public signals). The on-chain
+ * verifier asserts `leafInputs.leafSpkiCommit == chainInputs.leafSpkiCommit`
+ * as the glue, then runs both Groth16 verifications before any state
+ * mutation.
  *
  * This module:
- *   1. Exposes the Phase-2 `RegisterArgs` TypeScript shape consumed by the
- *      register-on-chain helper.
+ *   1. Exposes the V3 register / registerEscrow / revokeEscrow TypeScript
+ *      shapes consumed by routes + hooks.
  *   2. Computes the custom-error selectors (first 4 bytes of keccak256 of
- *      the error signature) so the SPA can map reverted tx data back to
- *      typed QkbErrors without needing an ABI decoder.
- *   3. Classifies a revert reason/data string against the Sprint-0 error
+ *      the error signature) so the SPA maps reverted tx data back to typed
+ *      QkbErrors without needing an ABI decoder.
+ *   3. Classifies a revert reason/data string against the V3 error
  *      taxonomy and returns the matching `QkbError` subtype.
+ *   4. Packs a {leaf, chain} witness bundle into the Solidity ABI shapes
+ *      (`Proof`, `LeafInputs`, `ChainInputs`) that the V3 calldata encoder
+ *      can hand straight to viem / ethers / the raw eth_sendTransaction
+ *      JSON-RPC path.
  *
  * The full ABI JSON is pumped by the team lead post-deploy; this module
  * intentionally does NOT bundle it so a rebuild is not required when the
- * contracts worker re-emits the artifact. Consumers (routes) load the
- * ABI from `fixtures/contracts/sepolia-v2.json` at runtime.
+ * contracts worker re-emits the artifact. Consumers load the ABI from
+ * `fixtures/contracts/sepolia.json` at runtime.
  */
 import { keccak_256 } from '@noble/hashes/sha3';
 import { QkbError } from './errors';
+import type {
+  ChainWitnessInput,
+  LeafWitnessInput,
+  Phase2Witness,
+} from './witness';
+import type { Groth16Proof, SplitProveResult } from './prover';
 
-// --- Sprint-0 custom error selectors ----------------------------------------
+// ---------------------------------------------------------------------------
+// V3 custom error selectors
 //
-// The Solidity `error Foo()` / `error Bar(uint x)` shape compiles to a 4-byte
-// selector = first 4 bytes of keccak256(signature). We compute these at
-// module-load so they match the deployed contract regardless of which
-// network we're on. Signatures are frozen by orchestration §C / spec §14.3.
+// Solidity `error Foo()` / `error Bar(uint x)` → 4-byte selector =
+// keccak256(signature)[0..4]. Frozen by orchestration §2 + V3 contract
+// (packages/contracts/src/QKBRegistryV3.sol).
+// ---------------------------------------------------------------------------
 
 function selector(signature: string): `0x${string}` {
   const h = keccak_256(new TextEncoder().encode(signature));
@@ -41,15 +52,40 @@ function selector(signature: string): `0x${string}` {
 }
 
 export const REGISTRY_ERROR_SELECTORS: Readonly<Record<string, `0x${string}`>> = {
-  NullifierUsed: selector('NullifierUsed()'),
-  RootMismatch: selector('RootMismatch()'),
   AlreadyBound: selector('AlreadyBound()'),
+  BindingTooOld: selector('BindingTooOld()'),
+  BindingFromFuture: selector('BindingFromFuture()'),
+  InvalidProof: selector('InvalidProof()'),
+  UnknownAlgorithm: selector('UnknownAlgorithm()'),
+  RootMismatch: selector('RootMismatch()'),
+  NullifierUsed: selector('NullifierUsed()'),
+  NullifierAlreadyRevoked: selector('NullifierAlreadyRevoked()'),
+  UnknownNullifier: selector('UnknownNullifier()'),
+  NotBound: selector('NotBound()'),
+  BadExpireSig: selector('BadExpireSig()'),
+  NotAdmin: selector('NotAdmin()'),
+  ZeroAddress: selector('ZeroAddress()'),
+  EscrowExists: selector('EscrowExists()'),
+  NoEscrow: selector('NoEscrow()'),
+  EscrowAlreadyRevoked: selector('EscrowAlreadyRevoked()'),
+  EscrowExpiryInPast: selector('EscrowExpiryInPast()'),
+  EscrowReleasePending: selector('EscrowReleasePending()'),
+  EscrowAlreadyReleased: selector('EscrowAlreadyReleased()'),
+  NotArbitrator: selector('NotArbitrator()'),
+  UnknownEscrowId: selector('UnknownEscrowId()'),
+  WrongState: selector('WrongState()'),
+  LeafSpkiCommitMismatch: selector('LeafSpkiCommitMismatch()'),
+  // Still present from Phase-1 — kept in the taxonomy so older bundles
+  // surface a useful error when talking to a V2 contract that isn't yet
+  // rotated out.
   AgeExceeded: selector('AgeExceeded()'),
 } as const;
 
-// --- Phase-2 register payload shape -----------------------------------------
+// ---------------------------------------------------------------------------
+// V3 Solidity struct shapes — mirror packages/contracts/src/QKBVerifier.sol
+// ---------------------------------------------------------------------------
 
-export interface Groth16ProofArrays {
+export interface SolidityProof {
   /** `uint[2]` */
   a: readonly [string, string];
   /** `uint[2][2]` */
@@ -58,43 +94,220 @@ export interface Groth16ProofArrays {
   c: readonly [string, string];
 }
 
-export interface RegisterArgs {
-  /** Uncompressed secp256k1 pk bytes (0x04 || X || Y). */
-  pk: `0x04${string}`;
-  /** Groth16 proof, split into a / b / c arrays matching the verifier ABI. */
-  proof: Groth16ProofArrays;
-  /**
-   * 14 public signals in the frozen Sprint-0 order (orchestration §2 /
-   * spec §14.3). The contract reads publicSignals[12] to dispatch to the
-   * RSA or ECDSA verifier; everything else is opaque to the registry.
-   */
-  publicSignals: readonly string[];
+/**
+ * Mirror of QKBVerifier.LeafInputs — the calldata shape consumed by V3's
+ * `register(proofLeaf, leafInputs, proofChain, chainInputs)`.
+ *
+ * Fields use the Solidity-natural types (e.g. bytes32 encoded as 0x-prefixed
+ * 32-byte hex). The decimal-string field elements coming out of the witness
+ * builder are accepted here too — `packLeafInputs` handles the conversion.
+ */
+export interface LeafInputs {
+  readonly pkX: readonly [string, string, string, string];
+  readonly pkY: readonly [string, string, string, string];
+  readonly ctxHash: `0x${string}`;
+  readonly declHash: `0x${string}`;
+  readonly timestamp: string | bigint | number;
+  readonly nullifier: `0x${string}`;
+  readonly leafSpkiCommit: `0x${string}`;
 }
 
+export interface ChainInputs {
+  readonly rTL: `0x${string}`;
+  readonly algorithmTag: 0 | 1;
+  readonly leafSpkiCommit: `0x${string}`;
+}
+
+/**
+ * Top-level V3 register calldata shape. Used by route code + hooks; not
+ * the raw ABI-encoded bytes — that happens in the submit path.
+ */
+export interface RegisterArgs {
+  /** Uncompressed secp256k1 pk bytes (0x04 || X || Y). */
+  readonly pk: `0x04${string}`;
+  readonly proofLeaf: SolidityProof;
+  readonly leafInputs: LeafInputs;
+  readonly proofChain: SolidityProof;
+  readonly chainInputs: ChainInputs;
+}
+
+/**
+ * V3 `registerEscrow(escrowId, arbitrator, expiry, proofLeaf, leafInputs,
+ * proofChain, chainInputs)` shape.
+ */
+export interface RegisterEscrowArgs extends Omit<RegisterArgs, 'pk'> {
+  readonly pk: `0x04${string}`;
+  readonly escrowId: `0x${string}`;
+  readonly arbitrator: `0x${string}`;
+  readonly expiry: string | bigint | number;
+}
+
+/**
+ * V3 `revokeEscrow(reasonHash, proofLeaf, leafInputs, proofChain, chainInputs)` shape.
+ */
+export interface RevokeEscrowArgs extends Omit<RegisterArgs, 'pk'> {
+  readonly pk: `0x04${string}`;
+  readonly reasonHash: `0x${string}`;
+}
+
+// ---------------------------------------------------------------------------
+// Shape validation
+// ---------------------------------------------------------------------------
+
 export function assertRegisterArgsShape(args: RegisterArgs): void {
-  // Expected: '0x' (2) + '04' (2) + X hex (64) + Y hex (64) = 132 chars.
   if (!args.pk.startsWith('0x04') || args.pk.length !== 132) {
     throw new QkbError('binding.pkMismatch', { reason: 'register-args-pk-shape' });
   }
-  if (args.publicSignals.length !== 14) {
-    throw new QkbError('witness.fieldTooLong', {
-      reason: 'register-args-signals',
-      got: args.publicSignals.length,
-    });
-  }
-  if (args.proof.a.length !== 2 || args.proof.c.length !== 2) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'register-args-proof-ac' });
-  }
-  if (
-    args.proof.b.length !== 2 ||
-    args.proof.b[0]!.length !== 2 ||
-    args.proof.b[1]!.length !== 2
-  ) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'register-args-proof-b' });
+  assertProofShape(args.proofLeaf, 'leaf');
+  assertProofShape(args.proofChain, 'chain');
+  assertLeafInputsShape(args.leafInputs);
+  assertChainInputsShape(args.chainInputs);
+  if (args.leafInputs.leafSpkiCommit.toLowerCase() !== args.chainInputs.leafSpkiCommit.toLowerCase()) {
+    throw new QkbError('witness.fieldTooLong', { reason: 'leaf-spki-commit-mismatch' });
   }
 }
 
-// --- Revert classification --------------------------------------------------
+function assertProofShape(p: SolidityProof, side: 'leaf' | 'chain'): void {
+  if (p.a.length !== 2 || p.c.length !== 2) {
+    throw new QkbError('witness.fieldTooLong', { reason: 'proof-ac', side });
+  }
+  if (p.b.length !== 2 || p.b[0]!.length !== 2 || p.b[1]!.length !== 2) {
+    throw new QkbError('witness.fieldTooLong', { reason: 'proof-b', side });
+  }
+}
+
+function assertLeafInputsShape(l: LeafInputs): void {
+  if (l.pkX.length !== 4 || l.pkY.length !== 4) {
+    throw new QkbError('witness.fieldTooLong', { reason: 'leaf-pk-limbs' });
+  }
+  assertHex32(l.ctxHash, 'ctxHash');
+  assertHex32(l.declHash, 'declHash');
+  assertHex32(l.nullifier, 'nullifier');
+  assertHex32(l.leafSpkiCommit, 'leafSpkiCommit');
+}
+
+function assertChainInputsShape(c: ChainInputs): void {
+  assertHex32(c.rTL, 'rTL');
+  assertHex32(c.leafSpkiCommit, 'chain.leafSpkiCommit');
+  if (c.algorithmTag !== 0 && c.algorithmTag !== 1) {
+    throw new QkbError('witness.fieldTooLong', { reason: 'algorithm-tag', got: c.algorithmTag });
+  }
+}
+
+function assertHex32(v: string, field: string): void {
+  if (!/^0x[0-9a-fA-F]{64}$/.test(v)) {
+    throw new QkbError('witness.fieldTooLong', { reason: 'hex32', field });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Witness → V3 calldata shape packers
+// ---------------------------------------------------------------------------
+
+const P = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+
+function toHex32(v: string | bigint | number): `0x${string}` {
+  const big =
+    typeof v === 'bigint'
+      ? v
+      : typeof v === 'number'
+        ? BigInt(v)
+        : v.startsWith('0x') || v.startsWith('0X')
+          ? BigInt(v)
+          : BigInt(v);
+  const reduced = ((big % P) + P) % P;
+  return `0x${reduced.toString(16).padStart(64, '0')}`;
+}
+
+function toLimbString(v: string | bigint): string {
+  if (typeof v === 'bigint') return v.toString();
+  return BigInt(v).toString();
+}
+
+/**
+ * Pack a snarkjs Groth16 proof into the Solidity struct layout. snarkjs
+ * emits `pi_a` / `pi_c` as 3-element arrays (third element is the Jacobian
+ * `z` coordinate, always `"1"` for normalized proofs) and `pi_b` as 3×2;
+ * the Solidity verifier only consumes the first two coords.
+ */
+export function packProof(proof: Groth16Proof): SolidityProof {
+  const a: [string, string] = [String(proof.pi_a[0]), String(proof.pi_a[1])];
+  const c: [string, string] = [String(proof.pi_c[0]), String(proof.pi_c[1])];
+  // Solidity's `uint[2][2] b` is stored as [[b00, b01], [b10, b11]] but
+  // snarkjs pi_b[i] is a 2-element array [real, imag]. The gnark / snarkjs
+  // bn254 convention swaps these at encode time; keep snarkjs's native
+  // ordering here and rely on the Solidity verifier to do the flip (as
+  // circom's own verifier.sol template does). Reversing here would
+  // double-flip and make proofs fail.
+  const b00 = String(proof.pi_b[0]![0]);
+  const b01 = String(proof.pi_b[0]![1]);
+  const b10 = String(proof.pi_b[1]![0]);
+  const b11 = String(proof.pi_b[1]![1]);
+  const b: readonly [readonly [string, string], readonly [string, string]] = [
+    [b01, b00],
+    [b11, b10],
+  ] as const;
+  return { a: [a[0], a[1]] as const, b, c: [c[0], c[1]] as const };
+}
+
+/**
+ * Pack a leaf witness into the Solidity LeafInputs struct.
+ */
+export function packLeafInputs(w: LeafWitnessInput): LeafInputs {
+  return {
+    pkX: [
+      toLimbString(w.pkX[0]!),
+      toLimbString(w.pkX[1]!),
+      toLimbString(w.pkX[2]!),
+      toLimbString(w.pkX[3]!),
+    ] as const,
+    pkY: [
+      toLimbString(w.pkY[0]!),
+      toLimbString(w.pkY[1]!),
+      toLimbString(w.pkY[2]!),
+      toLimbString(w.pkY[3]!),
+    ] as const,
+    ctxHash: toHex32(w.ctxHash),
+    declHash: toHex32(w.declHash),
+    timestamp: toLimbString(w.timestamp),
+    nullifier: toHex32(w.nullifier),
+    leafSpkiCommit: toHex32(w.leafSpkiCommit),
+  };
+}
+
+/**
+ * Pack a chain witness into the Solidity ChainInputs struct.
+ */
+export function packChainInputs(w: ChainWitnessInput): ChainInputs {
+  const tag = w.algorithmTag === '1' ? 1 : 0;
+  return {
+    rTL: toHex32(w.rTL),
+    algorithmTag: tag,
+    leafSpkiCommit: toHex32(w.leafSpkiCommit),
+  };
+}
+
+/**
+ * Build the full V3 register() calldata shape from a Phase-2 witness bundle
+ * plus the two freshly-computed Groth16 proofs.
+ */
+export function buildRegisterArgs(
+  pk: `0x04${string}`,
+  witness: Phase2Witness,
+  proofs: SplitProveResult,
+): RegisterArgs {
+  return {
+    pk,
+    proofLeaf: packProof(proofs.proofLeaf),
+    leafInputs: packLeafInputs(witness.leaf),
+    proofChain: packProof(proofs.proofChain),
+    chainInputs: packChainInputs(witness.chain),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Revert classification
+// ---------------------------------------------------------------------------
 
 /**
  * Inspect a reverted tx's error `data` (4-byte selector + optional args) and
@@ -107,6 +320,9 @@ export function classifyRegistryRevert(data: string | undefined): QkbError | nul
   const lower = data.toLowerCase();
   if (!lower.startsWith('0x')) return null;
   const sel = lower.slice(0, 10);
+
+  // Curated mapping — only surface errors we have localized copy for. Other
+  // V3 errors fall through to null and bubble up the raw message.
   if (sel === REGISTRY_ERROR_SELECTORS.NullifierUsed) {
     return new QkbError('registry.nullifierUsed');
   }
@@ -117,6 +333,9 @@ export function classifyRegistryRevert(data: string | undefined): QkbError | nul
     return new QkbError('registry.alreadyBound');
   }
   if (sel === REGISTRY_ERROR_SELECTORS.AgeExceeded) {
+    return new QkbError('registry.ageExceeded');
+  }
+  if (sel === REGISTRY_ERROR_SELECTORS.BindingTooOld) {
     return new QkbError('registry.ageExceeded');
   }
   return null;
@@ -135,7 +354,9 @@ export function classifyWalletRevert(err: unknown): QkbError | null {
     if (/NullifierUsed/.test(m)) return new QkbError('registry.nullifierUsed');
     if (/RootMismatch/.test(m)) return new QkbError('registry.rootMismatch');
     if (/AlreadyBound/.test(m)) return new QkbError('registry.alreadyBound');
-    if (/AgeExceeded/.test(m)) return new QkbError('registry.ageExceeded');
+    if (/AgeExceeded/.test(m) || /BindingTooOld/.test(m)) {
+      return new QkbError('registry.ageExceeded');
+    }
   }
   const data = extractRevertData(err);
   if (data) return classifyRegistryRevert(data);
