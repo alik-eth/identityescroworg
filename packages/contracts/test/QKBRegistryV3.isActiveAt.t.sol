@@ -1,55 +1,27 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity 0.8.24;
 
-import { Test } from "forge-std/Test.sol";
-import { QKBRegistry } from "../src/QKBRegistry.sol";
-import { QKBVerifierV2, IGroth16VerifierV2 } from "../src/QKBVerifierV2.sol";
-import { DeclarationHashes } from "../src/constants/DeclarationHashes.sol";
-import { StubGroth16Verifier } from "../src/verifier/StubGroth16Verifier.sol";
+import { QKBRegistryV3 } from "../src/QKBRegistryV3.sol";
+import { QKBVerifier } from "../src/QKBVerifier.sol";
+import { V3Harness } from "./helpers/V3Harness.sol";
 import { SignatureHelpers } from "./helpers/SignatureHelpers.sol";
 
-contract QKBRegistryIsActiveAtTest is Test {
-    QKBRegistry internal registry;
-    StubGroth16Verifier internal verifier;
-
-    address internal constant ADMIN = address(0xA11CE);
-    bytes32 internal constant INITIAL_ROOT = bytes32(uint256(0xC0FFEE));
+contract QKBRegistryV3IsActiveAtTest is V3Harness {
     uint256 internal constant BOUND_PRIV = 1;
 
-    uint256 internal constant GX = 0x79BE667EF9DCBBAC55A06295CE870B07029BFCDB2DCE28D959F2815B16F81798;
-    uint256 internal constant GY = 0x483ADA7726A3C4655DA4FBFC0E1108A8FD17B448A68554199C47D08FFB10D4B8;
-
     function setUp() public {
-        verifier = new StubGroth16Verifier();
-        registry = new QKBRegistry(
-            IGroth16VerifierV2(address(verifier)),
-            IGroth16VerifierV2(address(verifier)),
-            INITIAL_ROOT,
-            ADMIN
-        );
-        vm.warp(1_700_000_000);
-    }
-
-    function _splitToLimbsLE(uint256 v) internal pure returns (uint256[4] memory out) {
-        out[0] = v & type(uint64).max;
-        out[1] = (v >> 64) & type(uint64).max;
-        out[2] = (v >> 128) & type(uint64).max;
-        out[3] = (v >> 192) & type(uint64).max;
+        _harnessSetUp();
     }
 
     function _registerG() internal returns (address pkAddr) {
-        verifier.setAccept(true);
-        QKBVerifierV2.Inputs memory i;
-        i.pkX = _splitToLimbsLE(GX);
-        i.pkY = _splitToLimbsLE(GY);
-        i.ctxHash = bytes32(uint256(0xA1));
-        i.rTL = INITIAL_ROOT;
-        i.declHash = DeclarationHashes.EN;
-        i.timestamp = uint64(block.timestamp);
-        i.algorithmTag = 1;
-        i.nullifier = bytes32(uint256(0xBEEF2));
-        QKBVerifierV2.Proof memory p;
-        registry.register(p, i);
+        ecdsaLeaf.setAccept(true);
+        ecdsaChain.setAccept(true);
+        registry.register(
+            _zeroProof(),
+            _leafInputs(bytes32(uint256(0xBEEF2))),
+            _zeroProof(),
+            _chainInputs(1)
+        );
         return vm.addr(BOUND_PRIV);
     }
 

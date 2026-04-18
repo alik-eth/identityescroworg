@@ -3,7 +3,7 @@ pragma solidity 0.8.24;
 
 import { Test } from "forge-std/Test.sol";
 import { QKBRegistry } from "../src/QKBRegistry.sol";
-import { QKBVerifier, IGroth16Verifier } from "../src/QKBVerifier.sol";
+import { QKBVerifierV2, IGroth16VerifierV2 } from "../src/QKBVerifierV2.sol";
 import { DeclarationHashes } from "../src/constants/DeclarationHashes.sol";
 import { StubGroth16Verifier } from "../src/verifier/StubGroth16Verifier.sol";
 
@@ -36,8 +36,8 @@ contract QKBRegistryRegisterTest is Test {
         ecdsaVerifier = new StubGroth16Verifier();
         verifier = ecdsaVerifier; // default test path is ECDSA (tag=1)
         registry = new QKBRegistry(
-            IGroth16Verifier(address(rsaVerifier)),
-            IGroth16Verifier(address(ecdsaVerifier)),
+            IGroth16VerifierV2(address(rsaVerifier)),
+            IGroth16VerifierV2(address(ecdsaVerifier)),
             INITIAL_ROOT,
             ADMIN
         );
@@ -51,7 +51,7 @@ contract QKBRegistryRegisterTest is Test {
         out[3] = (v >> 192) & type(uint64).max;
     }
 
-    function _validInputs() internal view returns (QKBVerifier.Inputs memory i) {
+    function _validInputs() internal view returns (QKBVerifierV2.Inputs memory i) {
         i.pkX = _splitToLimbsLE(GX);
         i.pkY = _splitToLimbsLE(GY);
         i.ctxHash = CTX_HASH;
@@ -62,18 +62,18 @@ contract QKBRegistryRegisterTest is Test {
         i.nullifier = bytes32(uint256(0xBEEF));
     }
 
-    function _zeroProof() internal pure returns (QKBVerifier.Proof memory p) {}
+    function _zeroProof() internal pure returns (QKBVerifierV2.Proof memory p) {}
 
     function test_register_revertsOnInvalidProof() public {
         verifier.setAccept(false);
-        QKBVerifier.Inputs memory i = _validInputs();
+        QKBVerifierV2.Inputs memory i = _validInputs();
         vm.expectRevert(QKBRegistry.InvalidProof.selector);
         registry.register(_zeroProof(), i);
     }
 
     function test_register_revertsOnFutureTimestamp() public {
         verifier.setAccept(true);
-        QKBVerifier.Inputs memory i = _validInputs();
+        QKBVerifierV2.Inputs memory i = _validInputs();
         i.timestamp = uint64(block.timestamp + 1);
         vm.expectRevert(QKBRegistry.BindingFromFuture.selector);
         registry.register(_zeroProof(), i);
@@ -81,7 +81,7 @@ contract QKBRegistryRegisterTest is Test {
 
     function test_register_revertsOnTooOldBinding() public {
         verifier.setAccept(true);
-        QKBVerifier.Inputs memory i = _validInputs();
+        QKBVerifierV2.Inputs memory i = _validInputs();
         vm.warp(uint256(i.timestamp) + uint256(registry.MAX_AGE()) + 1);
         vm.expectRevert(QKBRegistry.BindingTooOld.selector);
         registry.register(_zeroProof(), i);
@@ -89,9 +89,9 @@ contract QKBRegistryRegisterTest is Test {
 
     function test_register_revertsOnAlreadyBound() public {
         verifier.setAccept(true);
-        QKBVerifier.Inputs memory i = _validInputs();
+        QKBVerifierV2.Inputs memory i = _validInputs();
         registry.register(_zeroProof(), i);
-        QKBVerifier.Inputs memory i2 = _validInputs();
+        QKBVerifierV2.Inputs memory i2 = _validInputs();
         // Distinct nullifier so the uniqueness guard doesn't fire first;
         // here we're exercising the pk-uniqueness path.
         i2.nullifier = bytes32(uint256(i.nullifier) ^ 1);
@@ -99,12 +99,12 @@ contract QKBRegistryRegisterTest is Test {
         registry.register(_zeroProof(), i2);
     }
 
-    /// @dev declHash whitelist is enforced inside QKBVerifier.verify(), so an
+    /// @dev declHash whitelist is enforced inside QKBVerifierV2.verify(), so an
     ///      unknown declHash short-circuits to verify()==false before register
     ///      reaches its own checks. User-visible error is InvalidProof.
     function test_register_revertsOnBadDeclHash() public {
         verifier.setAccept(true);
-        QKBVerifier.Inputs memory i = _validInputs();
+        QKBVerifierV2.Inputs memory i = _validInputs();
         i.declHash = keccak256("not-EN-not-UK");
         vm.expectRevert(QKBRegistry.InvalidProof.selector);
         registry.register(_zeroProof(), i);
@@ -112,8 +112,8 @@ contract QKBRegistryRegisterTest is Test {
 
     function test_register_happyPath_writesBindingAndEmits() public {
         verifier.setAccept(true);
-        QKBVerifier.Inputs memory i = _validInputs();
-        address pkAddr = QKBVerifier.toPkAddress(i.pkX, i.pkY);
+        QKBVerifierV2.Inputs memory i = _validInputs();
+        address pkAddr = QKBVerifierV2.toPkAddress(i.pkX, i.pkY);
         assertEq(pkAddr, vm.addr(1));
 
         vm.expectEmit(true, true, false, true, address(registry));
@@ -142,9 +142,9 @@ contract QKBRegistryRegisterTest is Test {
         // ECDSA verifier rejects everything; RSA accepts → proof routed by tag.
         rsaVerifier.setAccept(true);
         ecdsaVerifier.setAccept(false);
-        QKBVerifier.Inputs memory i = _validInputs();
+        QKBVerifierV2.Inputs memory i = _validInputs();
         i.algorithmTag = 0; // RSA
-        address pkAddr = QKBVerifier.toPkAddress(i.pkX, i.pkY);
+        address pkAddr = QKBVerifierV2.toPkAddress(i.pkX, i.pkY);
 
         vm.expectEmit(true, true, false, true, address(registry));
         emit BindingRegistered(pkAddr, 0, CTX_HASH, DeclarationHashes.EN, i.nullifier);
@@ -159,7 +159,7 @@ contract QKBRegistryRegisterTest is Test {
         // ecdsaVerifier and reverts InvalidProof.
         rsaVerifier.setAccept(true);
         ecdsaVerifier.setAccept(false);
-        QKBVerifier.Inputs memory i = _validInputs();
+        QKBVerifierV2.Inputs memory i = _validInputs();
         i.algorithmTag = 1;
         vm.expectRevert(QKBRegistry.InvalidProof.selector);
         registry.register(_zeroProof(), i);
@@ -168,7 +168,7 @@ contract QKBRegistryRegisterTest is Test {
     function test_register_crossDispatch_ecdsaAcceptsButRsaTagFails() public {
         rsaVerifier.setAccept(false);
         ecdsaVerifier.setAccept(true);
-        QKBVerifier.Inputs memory i = _validInputs();
+        QKBVerifierV2.Inputs memory i = _validInputs();
         i.algorithmTag = 0;
         vm.expectRevert(QKBRegistry.InvalidProof.selector);
         registry.register(_zeroProof(), i);
@@ -177,7 +177,7 @@ contract QKBRegistryRegisterTest is Test {
     function test_register_revertsOnUnknownAlgorithm() public {
         rsaVerifier.setAccept(true);
         ecdsaVerifier.setAccept(true);
-        QKBVerifier.Inputs memory i = _validInputs();
+        QKBVerifierV2.Inputs memory i = _validInputs();
         i.algorithmTag = 2;
         vm.expectRevert(QKBRegistry.UnknownAlgorithm.selector);
         registry.register(_zeroProof(), i);

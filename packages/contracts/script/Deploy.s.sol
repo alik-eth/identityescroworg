@@ -4,7 +4,7 @@ pragma solidity 0.8.24;
 import { Script } from "forge-std/Script.sol";
 import { console2 } from "forge-std/console2.sol";
 import { QKBRegistry } from "../src/QKBRegistry.sol";
-import { IGroth16Verifier } from "../src/QKBVerifier.sol";
+import { IGroth16VerifierV2 } from "../src/QKBVerifierV2.sol";
 import { StubGroth16Verifier } from "../src/verifier/StubGroth16Verifier.sol";
 
 /// @notice Deploy QKBRegistry wired to the dual (RSA + ECDSA) Groth16 verifiers.
@@ -62,8 +62,8 @@ contract Deploy is Script {
         }
 
         registry = new QKBRegistry(
-            IGroth16Verifier(rsaAddr),
-            IGroth16Verifier(ecdsaAddr),
+            IGroth16VerifierV2(rsaAddr),
+            IGroth16VerifierV2(ecdsaAddr),
             initialRoot,
             admin
         );

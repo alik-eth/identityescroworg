@@ -3,7 +3,7 @@ pragma solidity 0.8.24;
 
 import { Test } from "forge-std/Test.sol";
 import { QKBRegistry } from "../src/QKBRegistry.sol";
-import { QKBVerifier, IGroth16Verifier } from "../src/QKBVerifier.sol";
+import { QKBVerifierV2, IGroth16VerifierV2 } from "../src/QKBVerifierV2.sol";
 import { DeclarationHashes } from "../src/constants/DeclarationHashes.sol";
 import { StubGroth16Verifier } from "../src/verifier/StubGroth16Verifier.sol";
 
@@ -39,8 +39,8 @@ contract QKBRegistryNullifierTest is Test {
         rsa = new StubGroth16Verifier();
         ecdsa = new StubGroth16Verifier();
         registry = new QKBRegistry(
-            IGroth16Verifier(address(rsa)),
-            IGroth16Verifier(address(ecdsa)),
+            IGroth16VerifierV2(address(rsa)),
+            IGroth16VerifierV2(address(ecdsa)),
             INITIAL_ROOT,
             ADMIN
         );
@@ -54,7 +54,7 @@ contract QKBRegistryNullifierTest is Test {
         out[3] = (v >> 192) & type(uint64).max;
     }
 
-    function _inputsFor(uint256 x, uint256 y, bytes32 nullifier) internal view returns (QKBVerifier.Inputs memory i) {
+    function _inputsFor(uint256 x, uint256 y, bytes32 nullifier) internal view returns (QKBVerifierV2.Inputs memory i) {
         i.pkX = _splitToLimbsLE(x);
         i.pkY = _splitToLimbsLE(y);
         i.ctxHash = CTX_HASH;
@@ -65,12 +65,12 @@ contract QKBRegistryNullifierTest is Test {
         i.nullifier = nullifier;
     }
 
-    function _proof() internal pure returns (QKBVerifier.Proof memory p) {}
+    function _proof() internal pure returns (QKBVerifierV2.Proof memory p) {}
 
     // ---- uniqueness + storage ------------------------------------------------
 
     function test_register_storesUsedNullifierAndMapping() public {
-        QKBVerifier.Inputs memory i = _inputsFor(GX, GY, NULLIFIER_A);
+        QKBVerifierV2.Inputs memory i = _inputsFor(GX, GY, NULLIFIER_A);
         registry.register(_proof(), i);
 
         assertTrue(registry.usedNullifiers(NULLIFIER_A));
@@ -84,7 +84,7 @@ contract QKBRegistryNullifierTest is Test {
         // Second Holder uses a fresh pk (priv=2) but submits the SAME
         // nullifier — simulating a Sybil attempt by the same cert subject
         // against the same ctxHash. Must revert even though the pk is new.
-        QKBVerifier.Inputs memory i2 = _inputsFor(GX2, GY2, NULLIFIER_A);
+        QKBVerifierV2.Inputs memory i2 = _inputsFor(GX2, GY2, NULLIFIER_A);
         vm.expectRevert(QKBRegistry.NullifierUsed.selector);
         registry.register(_proof(), i2);
     }

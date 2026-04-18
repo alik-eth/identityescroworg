@@ -274,6 +274,27 @@ to flag regressions. Refresh deliberately — when you make an intentional
 gas-cost change, re-run `forge snapshot --snap …` and call out the delta
 in the commit message.
 
+### 8.1 V3 `register` gas target (split-proof)
+
+`QKBRegistryV3.register` calls **two** Groth16 `verifyProof`s — one leaf
+(13 public signals), one chain (5 public signals). BN254 pairing +
+linear combination is a ~200k-per-call fixed floor on the EVM, so two
+calls contribute ~400–440k just for the cryptographic work. Add stub-
+path overhead (~197k measured in `test/QKBRegistryV3.register.t.sol`)
+and the real-path projection is **~600k** per `register`.
+
+Target: **≤ 700k** for V3 `register` happy path against real verifiers.
+Anything above 700k is a hard stop — it implies something off in the
+snarkjs verifier generation or our input packing. For reference,
+mainnet ZK-circuit deployments sit in the same order of magnitude
+(Tornado Cash deposit ~1.1M, Semaphore ~500k); 600k for a one-time,
+one-per-user registration is in line with ZK conventions. At 20 gwei
+that's ~$36 on mainnet / negligible on L2.
+
+Real-path number will be pinned in `snapshots/gas-snapshot.txt` after
+circuits-eng emits the ceremony `QKBGroth16VerifierEcdsa{Leaf,Chain}.sol`
+contracts and lead pumps them into `src/verifiers/`.
+
 ## 9. Deploy
 
 ### 9.1 Credentials live in `.env`
