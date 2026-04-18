@@ -10,7 +10,7 @@ import {
 import {
     StubGroth16LeafVerifier,
     StubGroth16ChainVerifier
-} from "./helpers/StubSplitVerifiers.sol";
+} from "../src/verifiers/dev/StubSplitVerifiers.sol";
 
 contract QKBRegistryV3AdminTest is Test {
     QKBRegistryV3 internal registry;

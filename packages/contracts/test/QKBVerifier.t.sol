@@ -11,7 +11,7 @@ import { DeclarationHashes } from "../src/constants/DeclarationHashes.sol";
 import {
     StubGroth16LeafVerifier,
     StubGroth16ChainVerifier
-} from "./helpers/StubSplitVerifiers.sol";
+} from "../src/verifiers/dev/StubSplitVerifiers.sol";
 
 contract QKBVerifierTest is Test {
     StubGroth16LeafVerifier  internal leafStub;

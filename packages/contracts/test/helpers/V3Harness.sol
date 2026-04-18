@@ -12,7 +12,7 @@ import { DeclarationHashes } from "../../src/constants/DeclarationHashes.sol";
 import {
     StubGroth16LeafVerifier,
     StubGroth16ChainVerifier
-} from "./StubSplitVerifiers.sol";
+} from "../../src/verifiers/dev/StubSplitVerifiers.sol";
 
 /// @notice Shared base for the QKBRegistryV3 test suites. Encapsulates the
 ///         four-slot stub verifier deploy, the registry deploy, and the

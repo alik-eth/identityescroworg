@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity 0.8.24;
 
-/// @notice Test-only 13-signal stand-in for the snarkjs-generated split-
-///         proof **leaf** verifier. Ignores the proof + public inputs and
-///         returns a configurable bool.
+/// @notice DEV-ONLY stub for the split-proof leaf verifier (13 public
+///         signals). Ignores the proof + public inputs and always
+///         returns `accept` (default true).
 ///
-///         The canonical (snarkjs-generated) stubs pumped from
-///         `circuits-eng` will live under `src/verifiers/` and land in K2;
-///         this helper exists so the V3 registry tests can exercise the
-///         dispatch + verify + commit-glue logic before that pump.
+///         NEVER deploy to a chain users will rely on. `Deploy*.s.sol`
+///         uses these as anvil / CI fallbacks only, guarded by
+///         `USE_STUB_VERIFIER`. Production slots require the snarkjs-
+///         generated real verifiers pumped from the circuits package.
 contract StubGroth16LeafVerifier {
     bool public accept = true;
 
@@ -26,9 +26,9 @@ contract StubGroth16LeafVerifier {
     }
 }
 
-/// @notice Test-only 5-signal stand-in for the snarkjs-generated split-
-///         proof **chain** verifier. See `StubGroth16LeafVerifier` for
-///         rationale.
+/// @notice DEV-ONLY stub for the split-proof **chain** verifier (5 public
+///         signals). See `StubGroth16LeafVerifier` for the deployment
+///         warning — identical policy.
 contract StubGroth16ChainVerifier {
     bool public accept = true;
 
