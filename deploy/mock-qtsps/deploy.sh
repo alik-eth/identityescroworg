@@ -15,6 +15,22 @@ set -eu
 
 ANVIL_RPC="${ANVIL_RPC:-http://anvil:8545}"
 
+# Extract the last contractAddress matching a contractName from a broadcast
+# run-latest.json. Pure POSIX shell fallback — foundry image has neither
+# jq nor python3 available to a non-root user.
+extract_addr() {
+  # $1 = contract name, $2 = broadcast file
+  name="$1"
+  file="$2"
+  # Find lines like: "contractName":"X","contractAddress":"0x…"
+  # with whitespace tolerance; awk the LAST match.
+  tr -d '\n' < "${file}" \
+    | grep -oE '"contractName":"[^"]+","hash":"[^"]+"|"contractName":"[^"]+","contractAddress":"0x[0-9a-fA-F]{40}"' \
+    | grep "\"contractName\":\"${name}\"" \
+    | grep -oE '0x[0-9a-fA-F]{40}' \
+    | tail -n 1
+}
+
 echo "[deploy] waiting for anvil at ${ANVIL_RPC}..."
 i=0
 until cast block-number --rpc-url "${ANVIL_RPC}" >/dev/null 2>&1; do
@@ -32,11 +48,9 @@ echo "[deploy] anvil ready (block $(cast block-number --rpc-url ${ANVIL_RPC}))"
 export ADMIN_PRIVATE_KEY="${DEV_ADMIN_PRIVATE_KEY}"
 export ADMIN_ADDRESS="${DEV_ADMIN_ADDRESS}"
 
-cd /contracts
-
-# Make /contracts writable in-place isn't possible because the host mount
-# is :ro. Instead we bail with a clear message when submodules are missing —
-# the host operator must run `forge install` in packages/contracts/ first.
+# /contracts is read-only; copy into /tmp/workspace (writable tmpfs) so forge
+# can write broadcast/ and cache/ directories. Submodules + sources are
+# copied through; the host operator must have run `forge install` first.
 if [ ! -f /contracts/lib/forge-std/src/Script.sol ]; then
   echo "[deploy] lib/forge-std missing. Run on the host:" >&2
   echo "          cd packages/contracts && forge install" >&2
@@ -44,17 +58,21 @@ if [ ! -f /contracts/lib/forge-std/src/Script.sol ]; then
   exit 1
 fi
 
+mkdir -p /tmp/workspace
+cp -a /contracts/. /tmp/workspace/
+cd /tmp/workspace
+
 echo "[deploy] running Deploy.s.sol..."
 forge script script/Deploy.s.sol:Deploy \
   --rpc-url "${ANVIL_RPC}" \
   --broadcast \
-  --silent \
   --out /shared/forge-out \
-  --cache-path /shared/forge-cache
+  --cache-path /shared/forge-cache \
+  2>&1 | tee /tmp/deploy-stdout.log
 
 # The broadcast JSON lands under /shared/forge-out/...; pull the latest
 # CREATE for QKBRegistry out with jq.
-BROADCAST=$(find /contracts/broadcast/Deploy.s.sol -name 'run-latest.json' 2>/dev/null | head -n 1 || true)
+BROADCAST=$(find /tmp/workspace/broadcast/Deploy.s.sol -name 'run-latest.json' 2>/dev/null | head -n 1 || true)
 if [ -z "${BROADCAST}" ]; then
   # Fall back — foundry sometimes writes into /shared.
   BROADCAST=$(find /shared -name 'run-latest.json' 2>/dev/null | head -n 1 || true)
@@ -64,9 +82,10 @@ if [ -z "${BROADCAST}" ]; then
   exit 1
 fi
 
-REGISTRY_ADDR=$(jq -r '
-  [.transactions[] | select(.contractName=="QKBRegistry")] | .[-1].contractAddress
-' "${BROADCAST}")
+REGISTRY_ADDR=$(grep -oE '^  QKBRegistry: 0x[0-9a-fA-F]{40}' /tmp/deploy-stdout.log | grep -oE '0x[0-9a-fA-F]{40}' | tail -n 1)
+if [ -z "${REGISTRY_ADDR}" ]; then
+  REGISTRY_ADDR=$(extract_addr QKBRegistry "${BROADCAST}")
+fi
 
 if [ -z "${REGISTRY_ADDR}" ] || [ "${REGISTRY_ADDR}" = "null" ]; then
   echo "[deploy] failed to extract QKBRegistry address" >&2
@@ -80,11 +99,14 @@ export QIE_REGISTRY_ADDRESS="${REGISTRY_ADDR}"
 forge script script/DeployArbitrators.s.sol:DeployArbitrators \
   --rpc-url "${ANVIL_RPC}" \
   --broadcast \
-  --silent \
   --out /shared/forge-out \
-  --cache-path /shared/forge-cache
+  --cache-path /shared/forge-cache \
+  2>&1 | tee /tmp/deploy-arb-stdout.log
 
-ARB_BROADCAST=$(find /contracts/broadcast/DeployArbitrators.s.sol -name 'run-latest.json' 2>/dev/null | head -n 1 || true)
+echo "[deploy] broadcast listing after Deploy.s.sol:"
+find /tmp/workspace/broadcast /shared -name 'run-latest.json' 2>/dev/null || true
+
+ARB_BROADCAST=$(find /tmp/workspace/broadcast/DeployArbitrators.s.sol -name 'run-latest.json' 2>/dev/null | head -n 1 || true)
 if [ -z "${ARB_BROADCAST}" ]; then
   ARB_BROADCAST=$(find /shared -path '*DeployArbitrators*run-latest.json' 2>/dev/null | head -n 1 || true)
 fi
@@ -93,9 +115,10 @@ if [ -z "${ARB_BROADCAST}" ]; then
   exit 1
 fi
 
-AUTHORITY_ARB_ADDR=$(jq -r '
-  [.transactions[] | select(.contractName=="AuthorityArbitrator")] | .[-1].contractAddress
-' "${ARB_BROADCAST}")
+AUTHORITY_ARB_ADDR=$(grep -oE '^  AuthorityArbitrator: 0x[0-9a-fA-F]{40}' /tmp/deploy-arb-stdout.log | grep -oE '0x[0-9a-fA-F]{40}' | tail -n 1)
+if [ -z "${AUTHORITY_ARB_ADDR}" ]; then
+  AUTHORITY_ARB_ADDR=$(extract_addr AuthorityArbitrator "${ARB_BROADCAST}")
+fi
 
 if [ -z "${AUTHORITY_ARB_ADDR}" ] || [ "${AUTHORITY_ARB_ADDR}" = "null" ]; then
   echo "[deploy] failed to extract AuthorityArbitrator address" >&2

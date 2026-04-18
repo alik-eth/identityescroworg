@@ -27,6 +27,23 @@
       rel="stylesheet"
     />
     <title>QKB — Qualified Key Binding</title>
+    <script>
+      // Companion to public/404.html — decode the SPA-github-pages redirect.
+      (function () {
+        var l = window.location;
+        if (l.search.indexOf('?/') === 1) {
+          var decoded = l.search.slice(2).split('&').map(function (s) {
+            return s.replace(/~and~/g, '&');
+          });
+          var rest = decoded[0] || '';
+          var tail = decoded.slice(1).join('&');
+          window.history.replaceState(
+            null, '',
+            l.pathname.replace(/\/$/, '') + '/' + rest + (tail ? '?' + tail : '') + l.hash
+          );
+        }
+      })();
+    </script>
   </head>
   <body class="bg-slate-900 text-slate-200">
     <div id="root"></div>

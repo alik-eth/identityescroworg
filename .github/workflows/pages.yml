@@ -1,0 +1,61 @@
+name: Deploy web SPA to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.1.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.11.x
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build dependency packages
+        run: |
+          pnpm -F @qkb/qie-core build
+          pnpm -F @qkb/qie-agent build
+
+      - name: Build SPA
+        env:
+          VITE_BASE: /${{ github.event.repository.name }}/
+        run: pnpm -F @qkb/web build
+
+      - name: Ensure SPA 404 fallback
+        run: cp packages/web/dist/index.html packages/web/dist/404-fallback.html || true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: packages/web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -42,7 +42,7 @@ services:
     # friction on rootless podman installs while still running the same
     # contents.
     entrypoint: ["sh", "-c", "sh /deploy.sh"]
-    working_dir: /contracts
+    working_dir: /tmp
     environment:
       ANVIL_RPC: "http://anvil:8545"
       # Anvil default first account — DEV ONLY, do not reuse off-host.

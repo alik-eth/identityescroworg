@@ -40,8 +40,10 @@ pnpm-lock.yaml
 .vscode/
 *.swp
 
-# GitHub Actions disabled for Phase 1 (re-enable in Phase 2 after green E2E).
-.github/
+# GitHub Actions — workflows re-enabled for GitHub Pages deploy (Phase 2).
+.github/*
+!.github/workflows/
+!.github/workflows/*
 
 # Secrets
 .env

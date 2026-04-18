@@ -52,6 +52,7 @@ done
 echo "[dev-chain] copying manifest into packages/web/public/local.json..."
 mkdir -p "$(dirname "${MANIFEST_OUT}")"
 docker compose -f "${COMPOSE_FILE}" exec -T deployer cat /shared/local.json \
+  | sed 's|http://anvil:8545|http://127.0.0.1:8545|g' \
   > "${MANIFEST_OUT}"
 
 echo "[dev-chain] ready. Manifest:"
