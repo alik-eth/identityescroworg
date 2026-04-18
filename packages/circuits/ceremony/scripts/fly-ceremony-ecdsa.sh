@@ -72,7 +72,12 @@ sha256sum "$PTAU"
 # ---------------------------------------------------------------------------
 # 3. Compile unified ECDSA presentation (skip if r1cs already on the volume)
 # ---------------------------------------------------------------------------
-export NODE_OPTIONS="--max-old-space-size=57344"
+# Push Node heap to 80 GiB. Run-3 crashed with std::bad_alloc while reading
+# tauG1/tauG2 sections of the 37 GiB pow-25 ptau — the 56 GiB heap was
+# insufficient headroom once snarkjs allocated working buffers alongside
+# the ptau-section buffers. 80 GiB leaves ~16 GiB on the 96 GiB box for
+# kernel + page cache + snarkjs' native-side allocations.
+export NODE_OPTIONS="--max-old-space-size=81920"
 OUT="/data/out"
 mkdir -p "$OUT"
 
