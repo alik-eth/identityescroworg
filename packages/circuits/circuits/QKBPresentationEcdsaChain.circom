@@ -4,15 +4,20 @@ pragma circom 2.1.9;
 //
 // Wires R_QKB constraints 3, 4 per spec §5.3: the intermediate CA signs the
 // leaf TBS, and the intermediate is listed in the trusted-list Merkle root.
-// Exposes `leafSpkiCommit` as a public output so the on-chain verifier can
-// assert equality with the leaf proof's `leafSpkiCommit`, gluing the two
-// Groth16 proofs into one R_QKB attestation (spec §5.4, split-proof fallback).
+// `leafSpkiCommit` is a public input (declared LAST in the public list so
+// snarkjs emits it at `publicSignals[2]` per orchestration §2.2 — snarkjs
+// orders outputs-then-inputs, so using `signal output` here would land it
+// at index 0 and break contracts-eng's `chainArr[2]` packing). The circuit
+// constrains it to equal Poseidon2(Poseidon6(leafXLimbs), Poseidon6(leafYLimbs))
+// below; the on-chain verifier asserts equality with the leaf proof's
+// `leafSpkiCommit`, gluing the two Groth16 proofs into one R_QKB
+// attestation (spec §5.4, split-proof fallback).
 //
 // Public signals (5 — orchestration §2.2):
 //   [0]    rTL               trusted-list Merkle root
 //   [1]    algorithmTag      1 == ECDSA-P256 (literal constraint)
 //   [2]    leafSpkiCommit    Poseidon(Poseidon(leafXLimbs), Poseidon(leafYLimbs))
-//                            — MUST match leaf proof's output signal; on-chain
+//                            — MUST match leaf proof's leafSpkiCommit; on-chain
 //                              equality check enforces binding between the
 //                              two Groth16 proofs.
 //
@@ -71,7 +76,15 @@ template QKBPresentationEcdsaChain() {
     // === Public signals ===
     signal input rTL;
     signal input algorithmTag;
-    signal output leafSpkiCommit;
+    // leafSpkiCommit is a PUBLIC INPUT (not output) so it lands at the last
+    // position of the Solidity verifier's `input[5]` per orchestration §2.2.
+    // See sibling comment in QKBPresentationEcdsaLeaf for the full rationale
+    // (snarkjs outputs-first ordering). The circuit constrains it below to
+    // equal the internally-computed Poseidon2(Poseidon6(X), Poseidon6(Y))
+    // over the leaf SPKI limbs — so the prover cannot pick an arbitrary
+    // value, and the leaf + chain proofs' leafSpkiCommit values coincide by
+    // construction (both derive it from the same leafDER bytes).
+    signal input leafSpkiCommit;
 
     // Literal: this circuit is the ECDSA path.
     algorithmTag === 1;
@@ -139,7 +152,7 @@ template QKBPresentationEcdsaChain() {
     component packXY = Poseidon(2);
     packXY.inputs[0] <== packX.out;
     packXY.inputs[1] <== packY.out;
-    leafSpkiCommit <== packXY.out;
+    packXY.out === leafSpkiCommit;
 
     // =========================================================================
     // 2. sha256(leafTBS) + EcdsaP256Verify with intermediate SPKI.
@@ -205,5 +218,5 @@ template QKBPresentationEcdsaChain() {
     merkle.root <== rTL;
 }
 
-component main {public [rTL, algorithmTag]}
+component main {public [rTL, algorithmTag, leafSpkiCommit]}
     = QKBPresentationEcdsaChain();

@@ -91,7 +91,15 @@ template QKBPresentationEcdsaLeaf() {
     // Person-level nullifier (§14.4 amendment, 2026-04-18). Public input;
     // the circuit derives it in §7 below and constrains equality.
     signal input nullifier;
-    signal output leafSpkiCommit;
+    // leafSpkiCommit is a PUBLIC INPUT (not output) so it lands at the last
+    // position of the Solidity verifier's `input[13]` per the orchestration
+    // §2.1 index map. Snarkjs orders `public.json` as [outputs…, inputs in
+    // declaration order]; making leafSpkiCommit an output would push it to
+    // index 0 and break contracts-eng's `leafArr[12]` packing. The circuit
+    // constrains it below to equal the internally-computed Poseidon2 of the
+    // Poseidon6 digests over the leaf SPKI X/Y limbs — so the prover cannot
+    // pick an arbitrary value.
+    signal input leafSpkiCommit;
 
     // === Private (nullifier extraction) ===
     // Byte offset into leafDER where the subject.serialNumber (OID 2.5.4.5)
@@ -288,7 +296,7 @@ template QKBPresentationEcdsaLeaf() {
     component packXY = Poseidon(2);
     packXY.inputs[0] <== packX.out;
     packXY.inputs[1] <== packY.out;
-    leafSpkiCommit <== packXY.out;
+    packXY.out === leafSpkiCommit;
 
     // =========================================================================
     // 7. Person-level nullifier (§14.4 amendment, 2026-04-18).
@@ -312,5 +320,5 @@ template QKBPresentationEcdsaLeaf() {
     nullifierDerive.nullifier === nullifier;
 }
 
-component main {public [pkX, pkY, ctxHash, declHash, timestamp, nullifier]}
+component main {public [pkX, pkY, ctxHash, declHash, timestamp, nullifier, leafSpkiCommit]}
     = QKBPresentationEcdsaLeaf();

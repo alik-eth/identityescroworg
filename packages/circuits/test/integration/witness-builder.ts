@@ -15,10 +15,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
-
-// circomlibjs has no types.
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { buildPoseidon } = require('circomlibjs');
+import { buildPoseidon } from 'circomlibjs';
 
 // -------------------------------------------------------------------------
 // Compile-time caps — MUST match the on-circuit var declarations.
@@ -73,7 +70,13 @@ export interface AdminEcdsaFixture {
 
 // Leaf circuit: 13 public signals (pkX[4], pkY[4], ctxHash, declHash,
 // timestamp, nullifier, leafSpkiCommit) + private nullifier/binding/SA/leaf
-// inputs.
+// inputs. All 13 are `signal input` in the .circom — leafSpkiCommit is
+// declared public-last so snarkjs emits it at `publicSignals[12]` (snarkjs
+// orders [outputs…, public_inputs…]; making leafSpkiCommit a `signal output`
+// would push it to index 0 and break the Solidity `leafArr[12]` packing).
+// The circuit internally constrains leafSpkiCommit to equal the Poseidon
+// commitment over the leaf SPKI limbs, so the prover can't supply an
+// arbitrary value.
 export interface LeafWitnessInput {
   // Public
   pkX: string[];
@@ -82,6 +85,7 @@ export interface LeafWitnessInput {
   declHash: string;
   timestamp: string;
   nullifier: string;
+  leafSpkiCommit: string;
 
   // Private — nullifier extraction
   subjectSerialValueOffset: number;
@@ -121,13 +125,19 @@ export interface LeafWitnessInput {
 }
 
 // Chain circuit: 5 public signals (rTL, algorithmTag, leafSpkiCommit) +
-// private leafDER/leafTBS/intermediate/Merkle inputs.
+// private leafDER/leafTBS/intermediate/Merkle inputs. Like the Leaf, all 3
+// public signals are `signal input` with leafSpkiCommit declared last so
+// snarkjs emits it at `publicSignals[2]` — matching contracts-eng's
+// `chainArr[2]` packing. The circuit constrains it to the same Poseidon
+// commitment formula the Leaf uses, so both proofs' leafSpkiCommit values
+// match by construction when built from the same leafDER.
 export interface ChainWitnessInput {
   // Public
   rTL: string;
   algorithmTag: string;
+  leafSpkiCommit: string;
 
-  // Private — leaf cert (for leafSpkiCommit equality output)
+  // Private — leaf cert (for leafSpkiCommit equality constraint)
   leafDER: number[];
   leafSpkiXOffset: number;
   leafSpkiYOffset: number;
@@ -470,6 +480,7 @@ export async function buildLeafWitness(fixtureDir: string): Promise<LeafWitnessI
     declHash: s.declHash.toString(),
     timestamp: s.timestamp.toString(),
     nullifier: s.nullifier.toString(),
+    leafSpkiCommit: s.leafSpkiCommit.toString(),
 
     // Nullifier extraction
     subjectSerialValueOffset: s.subjectSerial.contentOffset,
@@ -526,8 +537,9 @@ export async function buildChainWitness(fixtureDir: string): Promise<ChainWitnes
     // Public
     rTL: s.fix.merkle.root,
     algorithmTag: '1',
+    leafSpkiCommit: s.leafSpkiCommit.toString(),
 
-    // Leaf cert (for leafSpkiCommit output)
+    // Leaf cert (for leafSpkiCommit equality constraint)
     leafDER: zeroPadTo(s.leafDer, MAX_CERT),
     leafSpkiXOffset: s.fix.leaf.spki.xOffset,
     leafSpkiYOffset: s.fix.leaf.spki.yOffset,
