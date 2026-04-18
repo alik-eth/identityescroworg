@@ -8,47 +8,10 @@ import {
     IGroth16ChainVerifier
 } from "../src/QKBVerifier.sol";
 import { DeclarationHashes } from "../src/constants/DeclarationHashes.sol";
-
-/// @dev Test-only 13-signal stand-in for the snarkjs-generated leaf
-///      verifier. Ignores the proof + public inputs and returns a
-///      configurable bool. Private to this file because the canonical
-///      leaf / chain stubs (pumped from `circuits-eng`) live under
-///      `src/verifiers/` and arrive in K2.
-contract StubGroth16LeafVerifier {
-    bool public accept = true;
-
-    function setAccept(bool v) external {
-        accept = v;
-    }
-
-    function verifyProof(
-        uint256[2] calldata,
-        uint256[2][2] calldata,
-        uint256[2] calldata,
-        uint256[13] calldata
-    ) external view returns (bool) {
-        return accept;
-    }
-}
-
-/// @dev Test-only 5-signal stand-in for the snarkjs-generated chain
-///      verifier. See `StubGroth16LeafVerifier` for rationale.
-contract StubGroth16ChainVerifier {
-    bool public accept = true;
-
-    function setAccept(bool v) external {
-        accept = v;
-    }
-
-    function verifyProof(
-        uint256[2] calldata,
-        uint256[2][2] calldata,
-        uint256[2] calldata,
-        uint256[5] calldata
-    ) external view returns (bool) {
-        return accept;
-    }
-}
+import {
+    StubGroth16LeafVerifier,
+    StubGroth16ChainVerifier
+} from "./helpers/StubSplitVerifiers.sol";
 
 contract QKBVerifierTest is Test {
     StubGroth16LeafVerifier  internal leafStub;
