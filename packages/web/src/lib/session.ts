@@ -26,8 +26,20 @@ export interface Session {
 
   // From /upload
   cadesB64?: string;
+  /** @deprecated Phase-1 single-proof field. Split-proof pivot uses
+   *  proofLeaf / proofChain; keep for one release so older sessions don't
+   *  clobber new ones. */
   proof?: Groth16Proof;
+  /** @deprecated Phase-1 single publicSignals (14 elements). Split-proof
+   *  pivot uses publicLeaf (13) / publicChain (3). */
   publicSignals?: string[];
+  // Split-proof (2026-04-18 pivot) — both proofs are submitted together
+  // to V3 register(). publicLeaf / publicChain match the orchestration
+  // §2.1 + §2.2 public-signal layouts.
+  proofLeaf?: Groth16Proof;
+  publicLeaf?: string[];
+  proofChain?: Groth16Proof;
+  publicChain?: string[];
   leafCertDerB64?: string;
   intCertDerB64?: string;
   trustedListRoot?: string;

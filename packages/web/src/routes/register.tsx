@@ -1,11 +1,13 @@
 /**
  * /register — Step 4 of the binding flow.
  *
- * Reads proof + publicSignals from sessionStorage and submits a `register()`
- * call to the QKBRegistry on Sepolia via the user's EIP-1193 wallet. The
- * registry address is a TODO-stub today — the lead pumps the deployed
- * Sepolia address into the repo after the contracts worker's Sepolia deploy,
- * and this file then just reads it from `fixtures/contracts/sepolia.json`.
+ * Reads the split-proof bundle (proofLeaf + publicLeaf, proofChain +
+ * publicChain — 2026-04-18 pivot) from sessionStorage and submits a
+ * `register(proofLeaf, leafInputs, proofChain, chainInputs)` call to
+ * QKBRegistryV3 on Sepolia via the user's EIP-1193 wallet. The registry
+ * address is still a TODO-stub today — the lead pumps the deployed
+ * Sepolia address into `fixtures/contracts/sepolia.json` after the V3
+ * deploy; this file then imports it.
  *
  * The wallet + submit pipeline is injectable:
  *   - `window.__QKB_ETHEREUM__` lets Playwright stub EIP-1193 without a real
@@ -15,13 +17,16 @@
  *
  * Both hooks are `undefined` in the production bundle; the default path
  * falls back to the real `window.ethereum` and a minimal hand-rolled
- * `eth_sendTransaction` flow. ABI encoding of the `register(proof,inputs)`
- * calldata is out of scope for this commit — it will land once the
- * contracts worker pumps the Sepolia deployment.
+ * `eth_sendTransaction` flow. ABI encoding of the V3 split-proof calldata
+ * is still a follow-up — it lands when the Sepolia V3 deploy address is
+ * pumped (orchestration §S5).
  */
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PhaseCard } from '../components/PhaseCard';
+import { localizeError } from '../lib/errors';
+import type { Groth16Proof } from '../lib/prover';
+import { classifyWalletRevert } from '../lib/registry';
 import { loadSession } from '../lib/session';
 
 // TODO: lead pumps real address after `DeployQKBRegistry.s.sol` runs on Sepolia.
@@ -38,8 +43,15 @@ interface Eip1193Provider {
 interface SubmitTxInput {
   from: string;
   to: string;
-  proof: unknown;
-  publicSignals: readonly string[];
+  // Split-proof pivot (2026-04-18): V3's register() takes a leaf proof +
+  // leaf 13-signal inputs AND a chain proof + chain 3-signal inputs. The
+  // opaque `Groth16Proof` shape carries the snarkjs a/b/c triples; the
+  // submit-tx implementation is responsible for packing them into the
+  // Solidity struct layout and encoding the register(...) calldata.
+  proofLeaf: Groth16Proof;
+  publicLeaf: readonly string[];
+  proofChain: Groth16Proof;
+  publicChain: readonly string[];
 }
 
 interface SubmitTxResult {
@@ -65,7 +77,16 @@ export function RegisterScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!session.proof || !session.publicSignals) {
+  // Split-proof session (2026-04-18 pivot). Fall back to legacy single-proof
+  // fields so a mid-flight session upgrade path doesn't wipe the user's work,
+  // but refuse to proceed without the full split bundle because V3's
+  // register() requires BOTH proofs.
+  const proofLeaf = session.proofLeaf ?? null;
+  const proofChain = session.proofChain ?? null;
+  const publicLeaf = session.publicLeaf ?? null;
+  const publicChain = session.publicChain ?? null;
+
+  if (!proofLeaf || !proofChain || !publicLeaf || !publicChain) {
     return (
       <PhaseCard step={4} total={4} accent="purple" title={t('register.heading')}>
         <p data-testid="register-missing" className="text-amber-300">
@@ -120,13 +141,23 @@ export function RegisterScreen() {
       const result = await submit({
         from: address,
         to: REGISTRY_ADDRESS_SEPOLIA,
-        proof: session.proof,
-        publicSignals: session.publicSignals!,
+        proofLeaf,
+        publicLeaf,
+        proofChain,
+        publicChain,
       });
       setTxHash(result.txHash);
       setPkAddr(result.pkAddr);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      // Map V3 custom-error selectors (NullifierUsed, RootMismatch,
+      // AlreadyBound, BindingTooOld, AgeExceeded) to localized QkbError copy
+      // before falling back to the raw wallet message.
+      const classified = classifyWalletRevert(err);
+      if (classified) {
+        setError(localizeError(classified, { t }));
+      } else {
+        setError(err instanceof Error ? err.message : String(err));
+      }
     } finally {
       setSubmitting(false);
     }
