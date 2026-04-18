@@ -493,12 +493,13 @@ Construction (off-chain, in the circuit). See
 `docs/superpowers/specs/2026-04-18-person-nullifier-amendment.md`:
 
 ```
-rnokppBytes  = subject.serialNumber attribute content (OID 2.5.4.5)
-rnokppLen    = byte length of that content (1..16)
-rnokppPadded = rnokppBytes ∥ 0x00 × (16 - rnokppLen)
+subjectSerialLimbs[4]  = 4 × uint64 LE packing of the zero-padded-to-32
+                         bytes of the cert's subject serialNumber (OID
+                         2.5.4.5), as emitted by X509SubjectSerial.circom
+subjectSerialLen       = byte length of that content (1..32)
 
-secret       = Poseidon(Poseidon(rnokppPadded), rnokppLen)
-nullifier    = Poseidon(secret, ctxHash)
+secret                 = Poseidon(subjectSerialLimbs[0..3], subjectSerialLen)
+nullifier              = Poseidon(secret, ctxHash)
 ```
 
 Derived from the eIDAS subject-serialNumber mandated by ETSI EN 319

@@ -16,15 +16,25 @@ This binds the nullifier to a specific **certificate**, not to a **person**. Eve
 ## New construction
 
 ```
-rnokppBytes  = subject.serialNumber attribute content (OID 2.5.4.5, PrintableString)
-rnokppLen    = byte length of that content (1..16)
-rnokppPadded = rnokppBytes ∥ 0x00 × (16 - rnokppLen)
+subjectSerialBytes  = subject.serialNumber attribute content (OID 2.5.4.5, PrintableString)
+subjectSerialLen    = byte length of that content (1..32)
+subjectSerialLimbs  = 4 × uint64 LE limbs packing the zero-padded-to-32 byte content
+                      (limb[0] = bytes[0..8] LE, limb[1] = bytes[8..16] LE, …, limb[3] = bytes[24..32] LE)
 
-secret       = Poseidon(Poseidon(rnokppPadded), rnokppLen)
-nullifier    = Poseidon(secret, ctxHash)
+secret              = Poseidon(subjectSerialLimbs[0], subjectSerialLimbs[1],
+                                subjectSerialLimbs[2], subjectSerialLimbs[3],
+                                subjectSerialLen)                              — Poseidon-5
+nullifier           = Poseidon(secret, ctxHash)                                 — Poseidon-2
 ```
 
-`rnokppPadded` is a fixed-size 16-byte array; `Poseidon(rnokppPadded)` is a 16-input Poseidon over byte field elements. Hashing `rnokppLen` alongside the inner digest prevents padding-collision between identifiers of different natural lengths (e.g. an 8-byte EDRPOU vs a 10-byte РНОКПП vs a 12-byte passport number).
+The limb packing is the one already produced by `X509SubjectSerial.circom` (committed as S0.2 on `feat/qie-circuits` at `f5dea56`): 32-byte capacity padded with zeros past `subjectSerialLen`, packed into 4 × uint64 little-endian limbs. MAX_SERIAL=32 comfortably covers every ETSI EN 319 412-1 semantics identifier observed in the wild (longest is ~24 chars for uncommon passport formats; typical `PNOXX-…` is 15–16). Hashing `subjectSerialLen` alongside the limbs prevents padding-collision between identifiers of different natural lengths (e.g. an 8-byte EDRPOU vs a 10-byte РНОКПП vs a 14-byte `PNODE-12345678`).
+
+Design rationale over the earlier 16-byte / two-stage-Poseidon variant considered on 2026-04-18 morning:
+- **Capacity**: 16 was too tight for `TINUA-3627506575` (exactly 16 bytes) — zero headroom. 32 is adequate.
+- **Constraint cost**: one Poseidon-5 (~400 constraints) beats Poseidon-16 + Poseidon-2 (~3500) by an order of magnitude. Relevant given the ECDSA presentation is at 7.63M / 8M budget.
+- **Reuse**: `X509SubjectSerial.circom` already emits these limbs. Refactoring it into a byte-array emitter would be pure overhead.
+
+Cryptographic property is equivalent — the limb packing is a bijection over the padded bytes, so the inner hash over limbs is isomorphic to a hash over bytes modulo the field-element encoding.
 
 ## eIDAS scope
 
