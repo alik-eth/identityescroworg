@@ -80,16 +80,11 @@ component main {public [pkX, pkY, ctxHash, declHash, timestamp, nullifier]}
 
 This gives the 13-signal public layout per orchestration §2.1: 12 inputs + `leafSpkiCommit` output = 13 total.
 
-- [ ] **Step 2: Compile locally + check constraint count**
+- [ ] **Step 2: Local compile — SKIPPED (offloaded to Fly)**
 
-```bash
-mkdir -p /tmp/leaf-out
-circom circuits/QKBPresentationEcdsaLeaf.circom \
-    --r1cs -l circuits -l node_modules -o /tmp/leaf-out 2>&1 | tee /tmp/leaf-out/compile.log
-grep -E 'non-linear constraints|linear constraints|public|private|wires|labels' /tmp/leaf-out/compile.log
-```
+Local workstation is RAM-constrained (31 GB total, Desktop apps + multiple claude CLIs already eating baseline). A 7.68 M-constraint circom compile peaks ~6 GB and has OOM'd local dev before. The Fly ceremony VM (C5) runs the compile anyway, with gate enforcement there. Skip local compile.
 
-Expected: non-linear constraints ≤ 7.95 M. If > 7.95 M, STOP and message lead.
+If you want a sanity check without compiling, run `grep -nE 'signal input|signal output|component' circuits/QKBPresentationEcdsaLeaf.circom` to eyeball the wire shape. The Fly ceremony script will fail-loud if constraints > 8 M.
 
 - [ ] **Step 3: Commit**
 
@@ -301,16 +296,11 @@ component main {public [rTL, algorithmTag]}
     = QKBPresentationEcdsaChain();
 ```
 
-- [ ] **Step 2: Compile + check constraint count**
+- [ ] **Step 2: Local compile — SKIPPED (offloaded to Fly)**
 
-```bash
-mkdir -p /tmp/chain-out
-circom circuits/QKBPresentationEcdsaChain.circom \
-    --r1cs -l circuits -l node_modules -o /tmp/chain-out 2>&1 | tee /tmp/chain-out/compile.log
-grep -E 'non-linear constraints|linear constraints|public|private|wires' /tmp/chain-out/compile.log
-```
+Same rationale as C1 Step 2 — local workstation is RAM-constrained. Chain is smaller (~3.2 M) so it would probably fit locally, but keeping the pattern uniform: all compiles happen on the Fly ceremony VM, where the gate (hard cap 4.0 M for pow-22) fires during setup.
 
-Expected: ~3.2 M non-linear constraints. Hard cap 4.0 M (pow-22 ceiling with safety). If > 4.0 M, STOP and message lead.
+Eyeball the wire shape via grep if desired.
 
 - [ ] **Step 3: Commit**
 
