@@ -19,14 +19,17 @@ pragma circom 2.1.9;
 //      matches; scheme literal is "secp256k1" (checked inside parser).
 //   6. Cert validity: leaf's notBefore ≤ timestamp ≤ notAfter.
 //
-// Public signals (orchestration §2.2, frozen — 13 elements):
+// Public signals (14 elements — amended 2026-04-18, §14.4):
 //   [0..3]  pkX[4]       secp256k1 X limbs, 64-bit LE
 //   [4..7]  pkY[4]       secp256k1 Y limbs
 //   [8]     ctxHash      Poseidon(ctxBytes) or 0 if empty
-//   [9]    rTL           trusted-list Merkle root
+//   [9]     rTL          trusted-list Merkle root
 //   [10]    declHash     packed 256-bit SHA-256 of declaration
 //   [11]    timestamp    Unix seconds, uint64
 //   [12]    algorithmTag 1 == ECDSA-P256 (literal constraint)
+//   [13]    nullifier    Poseidon(Poseidon(subjectSerialLimbs, serialLen),
+//                                 ctxHash); see §14.4 amendment doc at
+//                       docs/superpowers/specs/2026-04-18-person-nullifier-amendment.md
 //
 // Size caps (documented in orchestration §4.1):
 //   MAX_BCANON = 2048   real Diia admin binding is 849 B
@@ -43,6 +46,8 @@ include "./primitives/Sha256Var.circom";
 include "./primitives/EcdsaP256Verify.circom";
 include "./primitives/MerkleProofPoseidon.circom";
 include "./primitives/PoseidonChunkHashVar.circom";
+include "./primitives/NullifierDerive.circom";
+include "./primitives/X509SubjectSerial.circom";
 include "./secp/Secp256k1PkMatch.circom";
 include "circomlib/circuits/bitify.circom";
 include "circomlib/circuits/poseidon.circom";
@@ -125,9 +130,18 @@ template QKBPresentationEcdsa() {
     signal input declHash;
     signal input timestamp;
     signal input algorithmTag;
+    signal input nullifier;
 
     // Literal: this circuit is the ECDSA path.
     algorithmTag === 1;
+
+    // === Private inputs (witness) — nullifier extraction ===
+    // Byte offset into leafDER where the subject.serialNumber (OID 2.5.4.5)
+    // PrintableString content starts, plus its content length (1..32).
+    // Witness-supplied; X509SubjectSerial asserts the TLV shape at that
+    // position and that the prover cannot pad in-band.
+    signal input subjectSerialValueOffset;
+    signal input subjectSerialValueLength;
 
     // === Private inputs (witness) ===
     // Binding
@@ -438,7 +452,31 @@ template QKBPresentationEcdsa() {
     //    witness-supplied tsAscii[14] and a binding proof to `timestamp`.
     leafNotBeforeOffset * 0 === 0;
     leafNotAfterOffset * 0 === 0;
+
+    // =========================================================================
+    // 9. Person-level nullifier (§14.4 amendment, 2026-04-18).
+    //    Extract the subject.serialNumber (OID 2.5.4.5) value bytes from the
+    //    leaf cert DER, pack into 4 × uint64 LE limbs, and derive
+    //        nullifier = Poseidon(Poseidon(limbs[0..3], len), ctxHash).
+    //    The limbs never leak; only the ctx-bound nullifier is public.
+    // =========================================================================
+    component subjectSerial = X509SubjectSerial(MAX_CERT);
+    for (var i = 0; i < MAX_CERT; i++) subjectSerial.leafDER[i] <== leafDER[i];
+    subjectSerial.subjectSerialValueOffset <== subjectSerialValueOffset;
+    subjectSerial.subjectSerialValueLength <== subjectSerialValueLength;
+
+    component nullifierDerive = NullifierDerive();
+    for (var i = 0; i < 4; i++) {
+        nullifierDerive.subjectSerialLimbs[i] <== subjectSerial.subjectSerialLimbs[i];
+    }
+    nullifierDerive.subjectSerialLen <== subjectSerialValueLength;
+    nullifierDerive.ctxHash <== ctxHash;
+
+    // Public-signal binding: constrain the 14th public input against the
+    // derived nullifier. A mismatched public input revert-via-R1CS, not
+    // at the verifier — the verifier only checks the Groth16 equation.
+    nullifierDerive.nullifier === nullifier;
 }
 
-component main {public [pkX, pkY, ctxHash, rTL, declHash, timestamp, algorithmTag]}
+component main {public [pkX, pkY, ctxHash, rTL, declHash, timestamp, algorithmTag, nullifier]}
     = QKBPresentationEcdsa();
