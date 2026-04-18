@@ -8,8 +8,10 @@
 #   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
 #   CEREMONY_BRANCH  (default: feat/qie-circuits)
 #
-# Sized for performance-12x (12 vCPU / 48 GB). Peak memory is groth16 setup
-# at ~35 GB for the unified ECDSA circuit; compile is ~30 GB.
+# Sized for performance-12x with --vm-memory 65536 (12 vCPU / 64 GB). Peak
+# memory is groth16 setup for a ~10.85M-constraint unified ECDSA circuit
+# (~50 GB). 48 GB was tight, 64 GB gives headroom. Idempotent — safe to
+# re-run on a volume that already has a compiled r1cs / fetched ptau.
 
 set -euo pipefail
 
@@ -67,49 +69,78 @@ echo "PTAU SHA256:"
 sha256sum "$PTAU"
 
 # ---------------------------------------------------------------------------
-# 3. Compile unified ECDSA presentation
+# 3. Compile unified ECDSA presentation (skip if r1cs already on the volume)
 # ---------------------------------------------------------------------------
-export NODE_OPTIONS="--max-old-space-size=40960"
+export NODE_OPTIONS="--max-old-space-size=57344"
 OUT="/data/out"
 mkdir -p "$OUT"
 
-echo "[compile] start $(date -Is)"
-circom circuits/QKBPresentationEcdsa.circom \
-  --r1cs --wasm --sym \
-  -l circuits -l node_modules \
-  -o "$OUT" 2>&1 | tee "$OUT/compile.log"
-echo "[compile] done $(date -Is)"
-
-snarkjs r1cs info "$OUT/QKBPresentationEcdsa.r1cs" | tee "$OUT/r1cs-info.txt"
-
-CONSTRAINTS=$(grep -E '# of Constraints:' "$OUT/r1cs-info.txt" | awk '{print $NF}' || true)
-echo "Constraint count: $CONSTRAINTS"
-echo "$CONSTRAINTS" > "$OUT/constraint-count.txt"
-
-# Gate: hard stop at 7.95M.
-if [[ -n "$CONSTRAINTS" ]] && [[ "$CONSTRAINTS" -gt 7950000 ]]; then
-  echo "FATAL: constraint count $CONSTRAINTS exceeds 7.95M cap — aborting ceremony." >&2
-  exit 2
+if [[ -f "$OUT/QKBPresentationEcdsa.r1cs" ]] && [[ -f "$OUT/compile.log" ]]; then
+  echo "[compile] SKIP — r1cs already present at $OUT/QKBPresentationEcdsa.r1cs"
+  ls -lh "$OUT/QKBPresentationEcdsa.r1cs" "$OUT/compile.log"
+else
+  echo "[compile] start $(date -Is)"
+  circom circuits/QKBPresentationEcdsa.circom \
+    --r1cs --wasm --sym \
+    -l circuits -l node_modules \
+    -o "$OUT" 2>&1 | tee "$OUT/compile.log"
+  echo "[compile] done $(date -Is)"
 fi
 
-# ---------------------------------------------------------------------------
-# 4. groth16 setup + contribute
-# ---------------------------------------------------------------------------
-echo "[setup] start $(date -Is)"
-snarkjs groth16 setup \
-  "$OUT/QKBPresentationEcdsa.r1cs" \
-  "$PTAU" \
-  "$OUT/qkb_0000.zkey" 2>&1 | tee "$OUT/setup.log"
-echo "[setup] done $(date -Is)"
+# Parse constraint count from the circom compile log. We skip
+# `snarkjs r1cs info` because it OOMs Node's JS heap on a 2.3 GB r1cs even
+# at --max-old-space-size=57344 (internal Node limit on ArrayBuffer sizes),
+# and the compile log contains the same information we need.
+CONSTRAINTS=$(grep -E 'non-linear constraints:' "$OUT/compile.log" \
+  | awk '{print $NF}' \
+  | tr -d ',' || true)
+echo "non-linear constraints: $CONSTRAINTS" | tee "$OUT/r1cs-info.txt"
+echo "$CONSTRAINTS" > "$OUT/constraint-count.txt"
+grep -E 'linear constraints|public inputs|private inputs|wires|labels|template instances' \
+  "$OUT/compile.log" | tee -a "$OUT/r1cs-info.txt" || true
 
-ENTROPY="$(head -c 64 /dev/urandom | base64 | tr -d '\n')"
-echo "[contribute] start $(date -Is)"
-snarkjs zkey contribute \
-  "$OUT/qkb_0000.zkey" \
-  "$OUT/qkb.zkey" \
-  --name="qkb-phase2-person-nullifier-$(date +%Y%m%d)" \
-  -e="$ENTROPY" 2>&1 | tee "$OUT/contribute.log"
-echo "[contribute] done $(date -Is)"
+# Gate: raised to 12M for the unified ECDSA circuit (leaf + chain + nullifier).
+# Phase-1 leaf-only was 7.63M; unified adds chain-validation (~3M) + nullifier
+# (~30k). Groth16 setup at 12M peaks ~55 GB, within the 64 GB envelope.
+GATE=12000000
+if [[ -z "$CONSTRAINTS" ]]; then
+  echo "FATAL: could not parse constraint count from $OUT/compile.log — aborting." >&2
+  exit 2
+fi
+if [[ "$CONSTRAINTS" -gt "$GATE" ]]; then
+  echo "FATAL: constraint count $CONSTRAINTS exceeds $GATE cap — aborting ceremony." >&2
+  exit 2
+fi
+echo "Constraint count $CONSTRAINTS ≤ $GATE — proceeding to setup."
+
+# ---------------------------------------------------------------------------
+# 4. groth16 setup + contribute (idempotent)
+# ---------------------------------------------------------------------------
+if [[ -f "$OUT/qkb_0000.zkey" ]]; then
+  echo "[setup] SKIP — $OUT/qkb_0000.zkey already exists"
+  ls -lh "$OUT/qkb_0000.zkey"
+else
+  echo "[setup] start $(date -Is)"
+  snarkjs groth16 setup \
+    "$OUT/QKBPresentationEcdsa.r1cs" \
+    "$PTAU" \
+    "$OUT/qkb_0000.zkey" 2>&1 | tee "$OUT/setup.log"
+  echo "[setup] done $(date -Is)"
+fi
+
+if [[ -f "$OUT/qkb.zkey" ]]; then
+  echo "[contribute] SKIP — $OUT/qkb.zkey already exists"
+  ls -lh "$OUT/qkb.zkey"
+else
+  ENTROPY="$(head -c 64 /dev/urandom | base64 | tr -d '\n')"
+  echo "[contribute] start $(date -Is)"
+  snarkjs zkey contribute \
+    "$OUT/qkb_0000.zkey" \
+    "$OUT/qkb.zkey" \
+    --name="qkb-phase2-person-nullifier-$(date +%Y%m%d)" \
+    -e="$ENTROPY" 2>&1 | tee "$OUT/contribute.log"
+  echo "[contribute] done $(date -Is)"
+fi
 
 # ---------------------------------------------------------------------------
 # 5. Export vkey + verifier
