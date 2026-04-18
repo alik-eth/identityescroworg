@@ -1,12 +1,14 @@
 /**
- * Phase-2 witness builder tests — validates the 14-signal layout + nullifier
- * (Poseidon(Poseidon(subjectSerialLimbs, issuerCertHash), ctxHash)) against
- * the canonical ordering frozen in orchestration §2 (circuits-eng commit
- * f4e8948) and spec §14.3/§14.4.
+ * Phase-2 witness builder tests — validates the 14-signal layout + person-level
+ * nullifier per the 2026-04-18 amendment (§14.4):
  *
- * Uses the same synthetic CAdES-P256 harness as `witness.test.ts`; we also
- * mint a synthetic intermediate CA cert so we have something to Poseidon-
- * hash for the `issuer_cert_hash` nullifier input.
+ *   secret    = Poseidon(subjectSerialLimbs[0..3], subjectSerialLen)
+ *   nullifier = Poseidon(secret, ctxHash)
+ *
+ * Uses a synthetic CAdES-P256 fixture where the leaf cert carries an
+ * ETSI-EN-319-412-1-compliant subject serialNumber attribute (OID 2.5.4.5,
+ * PrintableString). The fixture's serialNumber is the test-side source of
+ * truth for what X509SubjectSerial would extract inside the circuit.
  */
 import { describe, expect, it, beforeAll } from 'vitest';
 import * as asn1js from 'asn1js';
@@ -23,23 +25,26 @@ import {
   ALGORITHM_TAG_ECDSA_STR,
   buildPhase2Witness,
   computeNullifier,
-  extractSubjectSerialBytes,
+  extractSubjectSerial,
   publicSignalsFromPhase2Witness,
   subjectSerialToLimbs,
 } from '../../src/lib/witness';
-import { canonicalizeCertHash } from '../../src/lib/merkleLookup';
 
 pkijs.setEngine(
   'node-webcrypto',
   new pkijs.CryptoEngine({ name: 'node', crypto: globalThis.crypto }),
 );
 
+// ETSI EN 319 412-1 §5.1.3 semantics identifier: natural person, Germany,
+// Steuer-ID test value. 14 ASCII bytes.
+const FIXTURE_SUBJECT_SERIAL = 'PNODE-12345678';
+
 interface Fixture {
   binding: Binding;
   bindingBytes: Uint8Array;
   p7s: Uint8Array;
   intDer: Uint8Array;
-  leafSerialBytes: Uint8Array;
+  leafSubjectSerialAscii: string;
 }
 
 let f: Fixture;
@@ -55,7 +60,6 @@ describe('phase2 witness — shape', () => {
       parsed,
       binding: f.binding,
       bindingBytes: f.bindingBytes,
-      intermediateCertDer: f.intDer,
       trustedListRoot: 0n,
     });
     // Phase-1 superset — all existing witness fields are still present.
@@ -67,20 +71,8 @@ describe('phase2 witness — shape', () => {
     expect(typeof w.nullifier).toBe('string');
     expect(w.algorithmTag).toBe(ALGORITHM_TAG_ECDSA_STR);
     expect(w.subjectSerialLimbs).toHaveLength(4);
-    expect(w.issuerCertHash).toMatch(/^\d+$/);
-  });
-
-  it('rejects missing intermediate cert', async () => {
-    const parsed = parseCades(f.p7s);
-    await expect(
-      buildPhase2Witness({
-        parsed,
-        binding: f.binding,
-        bindingBytes: f.bindingBytes,
-        intermediateCertDer: new Uint8Array(),
-        trustedListRoot: 0n,
-      }),
-    ).rejects.toThrow(/witness\.offsetNotFound/);
+    expect(w.subjectSerialValueLength).toBe(String(FIXTURE_SUBJECT_SERIAL.length));
+    expect(w.subjectSerialValueOffset).toMatch(/^\d+$/);
   });
 
   it('accepts trustedListRoot as bigint, decimal string, or 0x-hex', async () => {
@@ -89,21 +81,18 @@ describe('phase2 witness — shape', () => {
       parsed,
       binding: f.binding,
       bindingBytes: f.bindingBytes,
-      intermediateCertDer: f.intDer,
       trustedListRoot: 0x1234n,
     });
     const w2 = await buildPhase2Witness({
       parsed,
       binding: f.binding,
       bindingBytes: f.bindingBytes,
-      intermediateCertDer: f.intDer,
       trustedListRoot: '4660',
     });
     const w3 = await buildPhase2Witness({
       parsed,
       binding: f.binding,
       bindingBytes: f.bindingBytes,
-      intermediateCertDer: f.intDer,
       trustedListRoot: '0x1234',
     });
     expect(w1.rTL).toBe('4660');
@@ -119,26 +108,17 @@ describe('phase2 witness — 14-signal public layout (frozen)', () => {
       parsed,
       binding: f.binding,
       bindingBytes: f.bindingBytes,
-      intermediateCertDer: f.intDer,
       trustedListRoot: 0n,
     });
     const ps = publicSignalsFromPhase2Witness(w);
     expect(ps.signals).toHaveLength(14);
-    // [0..3] pkX
     expect(ps.signals.slice(0, 4)).toEqual(w.pkX);
-    // [4..7] pkY
     expect(ps.signals.slice(4, 8)).toEqual(w.pkY);
-    // [8] ctxHash
     expect(ps.signals[8]).toBe(w.ctxHash);
-    // [9] rTL
     expect(ps.signals[9]).toBe(w.rTL);
-    // [10] declHash
     expect(ps.signals[10]).toBe(w.declHash);
-    // [11] timestamp
     expect(ps.signals[11]).toBe(w.timestamp);
-    // [12] algorithmTag — verifier dispatches on this
     expect(ps.signals[12]).toBe(w.algorithmTag);
-    // [13] nullifier
     expect(ps.signals[13]).toBe(w.nullifier);
   });
 
@@ -149,7 +129,6 @@ describe('phase2 witness — 14-signal public layout (frozen)', () => {
       parsed,
       binding: f.binding,
       bindingBytes: f.bindingBytes,
-      intermediateCertDer: f.intDer,
       trustedListRoot: 0n,
     });
     expect(w.algorithmTag).toBe('1');
@@ -161,7 +140,6 @@ describe('phase2 witness — 14-signal public layout (frozen)', () => {
       parsed,
       binding: f.binding,
       bindingBytes: f.bindingBytes,
-      intermediateCertDer: f.intDer,
       trustedListRoot: 0n,
     });
     const ps = publicSignalsFromPhase2Witness(w);
@@ -172,94 +150,106 @@ describe('phase2 witness — 14-signal public layout (frozen)', () => {
   });
 });
 
-describe('nullifier primitive (spec §14.4)', () => {
-  it('subject serial is packed as 4 × 64-bit LE limbs (least-significant first) zero-padded to 32', () => {
-    // Serial = 0x0102..20 (32 bytes ascending). Consistency with
-    // pkCoordToLimbs: limb[0] = bytes 24..31 (low 64 bits BE), limb[3] =
-    // bytes 0..7 (high 64 bits BE).
-    const serial = new Uint8Array(32);
-    for (let i = 0; i < 32; i++) serial[i] = i + 1;
-    const limbs = subjectSerialToLimbs(serial);
-    expect(limbs).toHaveLength(4);
-    expect(limbs[0]).toBe(BigInt('0x191a1b1c1d1e1f20').toString());
-    expect(limbs[3]).toBe(BigInt('0x0102030405060708').toString());
+describe('nullifier primitive (§14.4 amended)', () => {
+  it('subjectSerialToLimbs packs content bytes LSB-first — matches X509SubjectSerial.circom', () => {
+    // ETSI-format 14-byte identifier "PNODE-12345678".
+    // bytes[0..8] = 50 4E 4F 44 45 2D 31 32 → limb[0] = LE = 0x32312D45444F4E50
+    //                                        = 3616721751277260368
+    // bytes[8..14] = 33 34 35 36 37 38, bytes[14..16] = 00 00
+    //                                  → limb[1] = LE = 0x0000383736353433
+    //                                  = 61809783813171
+    const ascii = new TextEncoder().encode('PNODE-12345678');
+    const limbs = subjectSerialToLimbs(ascii);
+    expect(limbs).toEqual([
+      '3616721751277260368',
+      '61809783813171',
+      '0',
+      '0',
+    ]);
   });
 
-  it('short serial is left-padded with zeros before limb packing (LE limb order)', () => {
-    // Serial = 0x01 (1 byte) → padded to 32 bytes 0x00..0001 → limbs[0]=1, rest 0
-    const limbs = subjectSerialToLimbs(new Uint8Array([0x01]));
-    expect(limbs).toEqual(['1', '0', '0', '0']);
+  it('1-byte serial → limb[0] = that byte, rest zero', () => {
+    const limbs = subjectSerialToLimbs(new Uint8Array([0xab]));
+    expect(limbs).toEqual(['171', '0', '0', '0']);
   });
 
-  it('rejects serial > 32 bytes', () => {
+  it('rejects serial outside [1, 32] byte range', () => {
+    expect(() => subjectSerialToLimbs(new Uint8Array(0))).toThrow(/witness\.fieldTooLong/);
     expect(() => subjectSerialToLimbs(new Uint8Array(33))).toThrow(/witness\.fieldTooLong/);
   });
 
-  it('extractSubjectSerialBytes recovers the fixture serial from the leaf cert DER', async () => {
+  it('extractSubjectSerial recovers the fixture serialNumber + absolute offset', async () => {
     const parsed = parseCades(f.p7s);
-    const got = extractSubjectSerialBytes(parsed.leafCertDer);
-    expect(got).toEqual(f.leafSerialBytes);
+    const got = extractSubjectSerial(parsed.leafCertDer);
+    expect(new TextDecoder('ascii').decode(got.content)).toBe(FIXTURE_SUBJECT_SERIAL);
+    // Verify the offset points at content[0] inside the DER.
+    expect(parsed.leafCertDer[got.contentOffset]).toBe(
+      FIXTURE_SUBJECT_SERIAL.charCodeAt(0),
+    );
+    expect(
+      parsed.leafCertDer.slice(got.contentOffset, got.contentOffset + got.content.length),
+    ).toEqual(got.content);
   });
 
-  it('nullifier == Poseidon(Poseidon(serialLimbs, issuerHash), ctxHash) (reference implementation)', async () => {
+  it('nullifier == Poseidon(Poseidon(serialLimbs, serialLen), ctxHash) — reference', async () => {
     const parsed = parseCades(f.p7s);
     const w = await buildPhase2Witness({
       parsed,
       binding: f.binding,
       bindingBytes: f.bindingBytes,
-      intermediateCertDer: f.intDer,
       trustedListRoot: 0n,
     });
-    // Re-compute from primitives and compare.
     const serialLimbs = w.subjectSerialLimbs.map((s) => BigInt(s));
-    const issuerHash = await canonicalizeCertHash(f.intDer);
+    const serialLen = BigInt(w.subjectSerialValueLength);
     const ctxHash = BigInt(w.ctxHash);
-    const expected = await computeNullifier(serialLimbs, issuerHash, ctxHash);
+    const expected = await computeNullifier(serialLimbs, serialLen, ctxHash);
     expect(w.nullifier).toBe(expected.toString());
   });
 
-  it('same (pk, serial, issuer, ctx) → same nullifier (uniqueness-per-context)', async () => {
+  it('same inputs → same nullifier (uniqueness-per-context)', async () => {
     const parsed = parseCades(f.p7s);
     const w1 = await buildPhase2Witness({
       parsed,
       binding: f.binding,
       bindingBytes: f.bindingBytes,
-      intermediateCertDer: f.intDer,
       trustedListRoot: 0n,
     });
     const w2 = await buildPhase2Witness({
       parsed,
       binding: f.binding,
       bindingBytes: f.bindingBytes,
-      intermediateCertDer: f.intDer,
       trustedListRoot: 0n,
     });
     expect(w2.nullifier).toBe(w1.nullifier);
   });
 
   it('different ctxHash → different nullifier (unlinkability across contexts)', async () => {
-    const serialLimbs = [1n, 2n, 3n, 4n];
-    const issuerHash = 0xabcdefn;
-    const a = await computeNullifier(serialLimbs, issuerHash, 0n);
-    const b = await computeNullifier(serialLimbs, issuerHash, 1n);
+    const limbs = [1n, 2n, 3n, 4n];
+    const a = await computeNullifier(limbs, 10n, 0n);
+    const b = await computeNullifier(limbs, 10n, 1n);
     expect(a).not.toBe(b);
   });
 
-  it('different issuer → different nullifier (issuer-bound stability)', async () => {
-    const serialLimbs = [1n, 2n, 3n, 4n];
-    const a = await computeNullifier(serialLimbs, 0xabcdn, 42n);
-    const b = await computeNullifier(serialLimbs, 0xbcden, 42n);
+  it('different serialLen → different nullifier (padding-collision resistance)', async () => {
+    // Same limbs, different declared length → different secret (and nullifier).
+    const limbs = [7n, 0n, 0n, 0n];
+    const a = await computeNullifier(limbs, 8n, 42n);
+    const b = await computeNullifier(limbs, 14n, 42n);
+    expect(a).not.toBe(b);
+  });
+
+  it('different subject serial → different nullifier (cross-user unlinkability)', async () => {
+    const a = await computeNullifier([1n, 0n, 0n, 0n], 10n, 42n);
+    const b = await computeNullifier([2n, 0n, 0n, 0n], 10n, 42n);
     expect(a).not.toBe(b);
   });
 });
 
 // --- Synthetic CAdES + CA fixture ------------------------------------------
 //
-// Builds: (1) a root CA, (2) an intermediate CA signed by root,
-// (3) a leaf ECDSA-P256 cert signed by intermediate, (4) a detached CAdES-BES
-// over the real JCS-canonical binding bytes. We record the intermediate DER
-// explicitly so the nullifier's `issuer_cert_hash` input has a concrete
-// target.
+// Leaf carries the ETSI-compliant subject.serialNumber attribute (OID 2.5.4.5,
+// PrintableString "PNODE-12345678"). Intermediate is self-signed; chain
+// validity is not exercised here — only the leaf's DER parsing path.
 
 async function makeFixture(): Promise<Fixture> {
   const subtle = globalThis.crypto.subtle;
@@ -274,34 +264,27 @@ async function makeFixture(): Promise<Fixture> {
     ['sign', 'verify'],
   )) as CryptoKeyPair;
 
-  // Intermediate CA (self-signed for the harness; the leaf's issuer).
   const intCert = new pkijs.Certificate();
   intCert.version = 2;
   intCert.serialNumber = new asn1js.Integer({ value: 0x100 });
-  setName(intCert.subject, 'QKB Phase2 Test Intermediate');
-  setName(intCert.issuer, 'QKB Phase2 Test Intermediate');
+  setCommonName(intCert.subject, 'QKB Phase2 Test Intermediate');
+  setCommonName(intCert.issuer, 'QKB Phase2 Test Intermediate');
   intCert.notBefore.value = new Date(Date.now() - 60_000);
   intCert.notAfter.value = new Date(Date.now() + 365 * 24 * 60 * 60_000);
   await intCert.subjectPublicKeyInfo.importKey(intKp.publicKey);
   await intCert.sign(intKp.privateKey, 'SHA-256');
   const intDer = new Uint8Array(intCert.toSchema(true).toBER(false));
 
-  // Leaf: pick a distinctive serial so extractSubjectSerialBytes has a
-  // non-trivial value to recover. DER INTEGER will encode this as 0x42..EE.
-  const leafSerialBytes = new Uint8Array([0x42, 0xaa, 0xbb, 0xcc, 0xdd, 0xee]);
   const leaf = new pkijs.Certificate();
   leaf.version = 2;
-  leaf.serialNumber = new asn1js.Integer({
-    valueHex: leafSerialBytes.buffer.slice(0) as ArrayBuffer,
-  });
-  setName(leaf.subject, 'QKB Phase2 Test Leaf');
-  setName(leaf.issuer, 'QKB Phase2 Test Intermediate');
+  leaf.serialNumber = new asn1js.Integer({ value: 0x42 });
+  setSubjectWithSerialNumber(leaf.subject, 'QKB Phase2 Test Leaf', FIXTURE_SUBJECT_SERIAL);
+  setCommonName(leaf.issuer, 'QKB Phase2 Test Intermediate');
   leaf.notBefore.value = new Date(Date.now() - 60_000);
   leaf.notAfter.value = new Date(Date.now() + 365 * 24 * 60 * 60_000);
   await leaf.subjectPublicKeyInfo.importKey(leafKp.publicKey);
   await leaf.sign(intKp.privateKey, 'SHA-256');
 
-  // Binding.
   const bindingPriv = secp.utils.randomPrivateKey();
   const pkUncompressed = secp.getPublicKey(bindingPriv, false);
   const timestamp = 1_730_000_000;
@@ -352,14 +335,37 @@ async function makeFixture(): Promise<Fixture> {
   });
   const p7s = new Uint8Array(ci.toSchema().toBER(false));
 
-  return { binding, bindingBytes, p7s, intDer, leafSerialBytes };
+  return {
+    binding,
+    bindingBytes,
+    p7s,
+    intDer,
+    leafSubjectSerialAscii: FIXTURE_SUBJECT_SERIAL,
+  };
 }
 
-function setName(target: pkijs.RelativeDistinguishedNames, cn: string): void {
+function setCommonName(target: pkijs.RelativeDistinguishedNames, cn: string): void {
   target.typesAndValues = [
     new pkijs.AttributeTypeAndValue({
       type: '2.5.4.3',
       value: new asn1js.Utf8String({ value: cn }),
+    }),
+  ];
+}
+
+function setSubjectWithSerialNumber(
+  target: pkijs.RelativeDistinguishedNames,
+  cn: string,
+  serial: string,
+): void {
+  target.typesAndValues = [
+    new pkijs.AttributeTypeAndValue({
+      type: '2.5.4.3',
+      value: new asn1js.Utf8String({ value: cn }),
+    }),
+    new pkijs.AttributeTypeAndValue({
+      type: '2.5.4.5',
+      value: new asn1js.PrintableString({ value: serial }),
     }),
   ];
 }

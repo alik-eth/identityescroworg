@@ -42,7 +42,6 @@ import { Certificate } from 'pkijs';
 import type { Binding } from './binding';
 import type { AlgorithmTag, ParsedCades } from './cades';
 import { QkbError } from './errors';
-import { canonicalizeCertHash } from './merkleLookup';
 
 // Compile-time caps from the leaf circuit. Must stay in sync with
 // QKBPresentationEcdsaLeaf.circom:
@@ -518,7 +517,7 @@ function toAB(b: Uint8Array): ArrayBuffer {
 //   [10]     declHash         sha256(decl) mod BN254.p
 //   [11]     timestamp        unix seconds
 //   [12]     algorithmTag     0 = RSA-PKCS1v15-2048, 1 = ECDSA-P256
-//   [13]     nullifier        Poseidon(Poseidon(subjSerial, issuerHash), ctxHash)
+//   [13]     nullifier        Poseidon(Poseidon(subjSerialLimbs, serialLen), ctxHash)
 //
 // Division of labor (lead-greenlighted): circuits-eng owns the test-harness
 // witness builder (`test/integration/witness-builder.ts`) and publishes the
@@ -526,21 +525,24 @@ function toAB(b: Uint8Array): ArrayBuffer {
 // the production (SPA) witness builder. Shared contract = the 14-signal
 // layout + nullifier inputs; no shared code.
 //
-// The nullifier primitive (spec §14.4):
+// The nullifier primitive (§14.4 amended 2026-04-18 — see
+// docs/superpowers/specs/2026-04-18-person-nullifier-amendment.md):
 //
-//   secret     = Poseidon(subject_serial_limbs, issuer_cert_hash)
-//   nullifier  = Poseidon(secret, ctxHash)
+//   secret     = Poseidon(subjectSerialLimbs, subjectSerialLen)   // Poseidon-5
+//   nullifier  = Poseidon(secret, ctxHash)                         // Poseidon-2
 //
-// - `subject_serial_limbs` = the leaf cert's serialNumber packed as 4 × 64-bit
-//   little-endian limbs (big-endian bytes → 4 limbs, high-limb first). If the
-//   serial is < 32 bytes it is left-padded with zero bytes before limb packing.
-//   Serials > 32 bytes are rejected (no EU QES profile issues serials that large).
-// - `issuer_cert_hash` = Poseidon sponge hash of the intermediate cert DER,
-//   computed by `canonicalizeCertHash(intDer)` (already used in merkleLookup
-//   for the trusted-CA leaves). The SPA can obtain `intDer` either from the
-//   inline CMS (attached CAdES) or via LOTL resolution.
-// - `ctxHash` mirrors the Phase-1 witness emission rule: 0 when ctx is empty,
-//   Poseidon-sponge of ctx bytes otherwise (Phase-2 ctx support lands in S0.5).
+// - `subjectSerialLimbs` = the leaf cert's SUBJECT RDN `serialNumber`
+//   attribute (OID 2.5.4.5, ETSI EN 319 412-1 §5.1.3 semantics identifier —
+//   `PNOUA-…`, `PNODE-…`, `TINPL-…`, …), packed as 4 × 64-bit LE limbs
+//   matching X509SubjectSerial.circom's output: content byte 0 becomes the
+//   LSB of limb[0], byte 8 the LSB of limb[1], etc., right-padded with zeros
+//   to 32 bytes. This is DISTINCT from the cert's own serialNumber INTEGER
+//   (which identifies the cert, not the person).
+// - `subjectSerialLen` = byte length of the raw content (1..32).
+// - `ctxHash` — Phase-1 witness emission rule: 0 when ctx is empty,
+//   Poseidon-sponge of ctx bytes otherwise.
+// No issuer input: binding to the CA would make the nullifier QTSP-scoped,
+// defeating Sybil resistance across cert renewals / cross-QTSP.
 
 export const ALGORITHM_TAG_RSA_STR = '0';
 export const ALGORITHM_TAG_ECDSA_STR = '1';
@@ -565,15 +567,15 @@ export interface Phase2WitnessInput extends LeafWitnessInput {
   algorithmTag: string;
   nullifier: string;
   // Private witnesses consumed by the circuit to re-derive `nullifier`.
+  // Match X509SubjectSerial.circom + NullifierDerive.circom signal names.
   subjectSerialLimbs: string[]; // 4 × 64-bit LE limbs
-  issuerCertHash: string; // Poseidon sponge of intermediate cert DER
+  subjectSerialValueOffset: string; // byte offset into leafDER
+  subjectSerialValueLength: string; // byte length 1..32
 }
 
 export interface BuildPhase2WitnessInput extends BuildWitnessInput {
   /** Poseidon-Merkle root of the trusted-list, as a decimal string or 0x-hex. */
   trustedListRoot: string | bigint;
-  /** Intermediate cert DER (inline from CMS or resolved via LOTL). */
-  intermediateCertDer: Uint8Array;
   /** Optional override for CLI/testing; defaults to `parsed.algorithmTag`. */
   algorithmTag?: AlgorithmTag;
 }
@@ -589,27 +591,54 @@ function getPoseidon(): Promise<PoseidonFn> {
 }
 
 /**
- * Pack a variable-length big-endian byte string (the cert subject
- * serialNumber) into 4 × 64-bit LE limbs. Left-pads with zero bytes to 32.
+ * Pack the raw PrintableString content bytes of the subject.serialNumber
+ * attribute (OID 2.5.4.5, ETSI EN 319 412-1 §5.1.3 semantics identifier)
+ * into 4 × 64-bit LE limbs — matching X509SubjectSerial.circom byte-for-byte:
+ * content byte 0 becomes the LSB of limb[0], byte 8 the LSB of limb[1],
+ * etc. Right-pads with zeros to 32 bytes. Does NOT left-pad or reverse.
  */
 export function subjectSerialToLimbs(serialBytes: Uint8Array): string[] {
-  if (serialBytes.length > 32) {
+  if (serialBytes.length < 1 || serialBytes.length > 32) {
     throw new QkbError('witness.fieldTooLong', {
-      reason: 'subject-serial-too-long',
+      reason: 'subject-serial-length',
       got: serialBytes.length,
     });
   }
   const padded = new Uint8Array(32);
-  padded.set(serialBytes, 32 - serialBytes.length);
-  return pkCoordToLimbs(padded);
+  padded.set(serialBytes, 0);
+  const limbs: string[] = [];
+  for (let l = 0; l < 4; l++) {
+    let acc = 0n;
+    // LSB-first within each 8-byte group. bytes[l*8 + 0] is limb[l]'s LSB.
+    for (let b = 7; b >= 0; b--) {
+      acc = (acc << 8n) | BigInt(padded[l * 8 + b]!);
+    }
+    limbs.push(acc.toString());
+  }
+  return limbs;
 }
 
 /**
- * Extract the leaf cert's subject serialNumber as raw big-endian bytes
- * (leading zeros stripped, matching DER INTEGER encoding). Preserves the
- * exact bytes the on-circuit SubjectSerialExtract component scans for.
+ * Extract the subject.serialNumber attribute (OID 2.5.4.5, PrintableString)
+ * from a leaf cert DER. Returns the raw content bytes (no TLV header) along
+ * with the absolute byte offset into `leafDer` where the content starts —
+ * which is what X509SubjectSerial.circom consumes as `subjectSerialValueOffset`.
+ *
+ * This is DISTINCT from the cert's own serialNumber INTEGER field (that
+ * identifies the cert, not the person). OID 2.5.4.5 lives inside the subject
+ * RDN sequence; we locate it by re-walking the DER manually because pkijs
+ * does not surface absolute offsets.
  */
-export function extractSubjectSerialBytes(leafDer: Uint8Array): Uint8Array {
+export interface ExtractedSubjectSerial {
+  /** Raw PrintableString content bytes (no TLV header). */
+  content: Uint8Array;
+  /** Absolute byte offset of content[0] inside leafDer. */
+  contentOffset: number;
+}
+
+const OID_SUBJECT_SERIAL = '2.5.4.5';
+
+export function extractSubjectSerial(leafDer: Uint8Array): ExtractedSubjectSerial {
   const asn = asn1js.fromBER(toAB(leafDer));
   if (asn.offset === -1) {
     throw new QkbError('witness.offsetNotFound', { field: 'subjectSerial', reason: 'asn1' });
@@ -624,27 +653,81 @@ export function extractSubjectSerialBytes(leafDer: Uint8Array): Uint8Array {
       cause: String(cause),
     });
   }
-  const raw = new Uint8Array(cert.serialNumber.valueBlock.valueHexView);
-  if (raw.length === 0) {
-    throw new QkbError('witness.offsetNotFound', { field: 'subjectSerial', reason: 'empty' });
+
+  // pkijs' RelativeDistinguishedNames uses `typesAndValues: AttributeTypeAndValue[]`
+  // which flattens the RDN sequence into AVA entries. For our purposes a flat
+  // walk suffices — we're looking for a specific OID, not preserving RDN shape.
+  const avas = (cert.subject as unknown as {
+    typesAndValues: Array<{
+      type: string;
+      value: { valueBlock: { valueHexView: Uint8Array; value?: string } };
+    }>;
+  }).typesAndValues;
+  for (const ava of avas) {
+    if (ava.type !== OID_SUBJECT_SERIAL) continue;
+    // PrintableString contents live at valueHexView (raw bytes) OR value
+    // (decoded string) depending on pkijs version. Prefer the raw bytes.
+    const raw = ava.value.valueBlock.valueHexView;
+    const content =
+      raw && raw.length > 0
+        ? new Uint8Array(raw)
+        : new TextEncoder().encode(ava.value.valueBlock.value ?? '');
+    if (content.length === 0) {
+      throw new QkbError('witness.offsetNotFound', {
+        field: 'subjectSerial',
+        reason: 'empty',
+      });
+    }
+    // Locate absolute offset via unique subarray match — pkijs doesn't
+    // expose DER offsets. ETSI identifiers are high-entropy (10+ bytes,
+    // TYPE+CC+digits) so collisions inside the cert are vanishingly
+    // unlikely in practice.
+    const offset = findUnique(leafDer, content);
+    if (offset === -1) {
+      throw new QkbError('witness.offsetNotFound', {
+        field: 'subjectSerial',
+        reason: 'ambiguous-offset',
+      });
+    }
+    return { content, contentOffset: offset };
   }
-  return raw;
+  throw new QkbError('witness.offsetNotFound', {
+    field: 'subjectSerial',
+    reason: 'oid-not-present',
+  });
+}
+
+function findUnique(hay: Uint8Array, needle: Uint8Array): number {
+  let found = -1;
+  outer: for (let i = 0; i <= hay.length - needle.length; i++) {
+    for (let j = 0; j < needle.length; j++) {
+      if (hay[i + j] !== needle[j]) continue outer;
+    }
+    if (found !== -1) return -1;
+    found = i;
+  }
+  return found;
 }
 
 /**
- * Compute nullifier = Poseidon(Poseidon(subjectSerialLimbs[4], issuerHash), ctxHash).
- * All inputs/outputs are BN254 field elements. Issuer hash is already a
- * field element (computed via the Poseidon sponge in `canonicalizeCertHash`).
+ * Compute nullifier = Poseidon(Poseidon(subjectSerialLimbs[4], serialLen), ctxHash).
+ * All inputs/outputs are BN254 field elements.
  */
 export async function computeNullifier(
   subjectSerialLimbs: bigint[],
-  issuerCertHash: bigint,
+  subjectSerialLen: bigint,
   ctxHash: bigint,
 ): Promise<bigint> {
   if (subjectSerialLimbs.length !== 4) {
     throw new QkbError('witness.fieldTooLong', {
       reason: 'subject-serial-limbs',
       got: subjectSerialLimbs.length,
+    });
+  }
+  if (subjectSerialLen < 1n || subjectSerialLen > 32n) {
+    throw new QkbError('witness.fieldTooLong', {
+      reason: 'subject-serial-length',
+      got: Number(subjectSerialLen),
     });
   }
   const p = await getPoseidon();
@@ -655,7 +738,7 @@ export async function computeNullifier(
       F.e(subjectSerialLimbs[1]!),
       F.e(subjectSerialLimbs[2]!),
       F.e(subjectSerialLimbs[3]!),
-      F.e(issuerCertHash),
+      F.e(subjectSerialLen),
     ]) as unknown,
   );
   const nul = F.toObject(p([F.e(secret), F.e(ctxHash)]) as unknown);
@@ -686,21 +769,15 @@ export async function buildPhase2Witness(
     bindingBytes: input.bindingBytes,
   });
 
-  if (!input.intermediateCertDer || input.intermediateCertDer.length === 0) {
-    throw new QkbError('witness.offsetNotFound', {
-      field: 'intermediateCertDer',
-      reason: 'missing',
-    });
-  }
-
-  const serialBytes = extractSubjectSerialBytes(input.parsed.leafCertDer);
+  const { content: serialBytes, contentOffset } = extractSubjectSerial(
+    input.parsed.leafCertDer,
+  );
   const subjectSerialLimbs = subjectSerialToLimbs(serialBytes);
-  const issuerCertHash = await canonicalizeCertHash(input.intermediateCertDer);
 
   const ctxHashBig = parseFieldString(base.ctxHash);
   const nullifier = await computeNullifier(
     subjectSerialLimbs.map((s) => BigInt(s)),
-    issuerCertHash,
+    BigInt(serialBytes.length),
     ctxHashBig,
   );
 
@@ -717,7 +794,8 @@ export async function buildPhase2Witness(
     algorithmTag,
     nullifier: nullifier.toString(),
     subjectSerialLimbs,
-    issuerCertHash: issuerCertHash.toString(),
+    subjectSerialValueOffset: contentOffset.toString(),
+    subjectSerialValueLength: serialBytes.length.toString(),
   };
 }
 
