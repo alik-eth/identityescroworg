@@ -5,7 +5,7 @@ import { Test } from "forge-std/Test.sol";
 import { AuthorityArbitrator } from "../src/arbitrators/AuthorityArbitrator.sol";
 import { IArbitrator } from "../src/arbitrators/IArbitrator.sol";
 import { QKBRegistry } from "../src/QKBRegistry.sol";
-import { QKBVerifier, IGroth16Verifier } from "../src/QKBVerifier.sol";
+import { QKBVerifierV2, IGroth16VerifierV2 } from "../src/QKBVerifierV2.sol";
 import { DeclarationHashes } from "../src/constants/DeclarationHashes.sol";
 import { StubGroth16Verifier } from "../src/verifier/StubGroth16Verifier.sol";
 
@@ -52,8 +52,8 @@ contract AuthorityArbitratorTest is Test {
         rsa = new StubGroth16Verifier();
         ecdsa = new StubGroth16Verifier();
         registry = new QKBRegistry(
-            IGroth16Verifier(address(rsa)),
-            IGroth16Verifier(address(ecdsa)),
+            IGroth16VerifierV2(address(rsa)),
+            IGroth16VerifierV2(address(ecdsa)),
             INITIAL_ROOT,
             ADMIN
         );
@@ -78,7 +78,7 @@ contract AuthorityArbitratorTest is Test {
         out[3] = (v >> 192) & type(uint64).max;
     }
 
-    function _inputs(bytes32 nullifier) internal view returns (QKBVerifier.Inputs memory i) {
+    function _inputs(bytes32 nullifier) internal view returns (QKBVerifierV2.Inputs memory i) {
         i.pkX = _splitToLimbsLE(GX);
         i.pkY = _splitToLimbsLE(GY);
         i.ctxHash = CTX_HASH;
@@ -89,7 +89,7 @@ contract AuthorityArbitratorTest is Test {
         i.nullifier = nullifier;
     }
 
-    function _proof() internal pure returns (QKBVerifier.Proof memory p) {}
+    function _proof() internal pure returns (QKBVerifierV2.Proof memory p) {}
 
     function _pkAddr() internal pure returns (address) {
         return vm.addr(1);

@@ -3,12 +3,14 @@ pragma solidity 0.8.24;
 
 import { DeclarationHashes } from "./constants/DeclarationHashes.sol";
 
-/// @notice Interface implemented by the snarkjs-generated Groth16 verifier.
-///         Phase 2 restores the original 14-signal public layout per QIE
-///         spec §14.3 — the Phase-1 §5.4 split-proof fallback (12 signals,
-///         leaf-only) is collapsed back into a single proof that carries
-///         `rTL`, `algorithmTag`, and the new `nullifier` primitive.
-interface IGroth16Verifier {
+/// @notice Interface implemented by the snarkjs-generated Groth16 verifier
+///         for the V2 (abandoned on Sepolia) 14-signal unified presentation
+///         circuit. Preserved verbatim as `IGroth16VerifierV2` because V2's
+///         contract artefacts (registry + tests) remain in-tree for
+///         archival reference; the split-proof V3 pivot uses the two
+///         interfaces in `./QKBVerifier.sol`
+///         (`IGroth16LeafVerifier` + `IGroth16ChainVerifier`).
+interface IGroth16VerifierV2 {
     function verifyProof(
         uint256[2] calldata a,
         uint256[2][2] calldata b,
@@ -17,13 +19,11 @@ interface IGroth16Verifier {
     ) external view returns (bool);
 }
 
-/// @notice Wraps the Groth16 verifier with a typed `Inputs` struct that
-///         mirrors the unified `QKBPresentation` circuit's public-signal
-///         layout, plus a helper to derive the standard Ethereum address
-///         from a secp256k1 pubkey expressed as 4×64-bit little-endian
-///         limbs (the format the circuit exposes its pkX/pkY field
-///         elements in).
-library QKBVerifier {
+/// @notice V2 library — preserved for the V2 registry's archival build.
+///         Do NOT use in new code; the active verifier library for V3 is
+///         `QKBVerifier` in `./QKBVerifier.sol` with split leaf+chain
+///         interfaces per the 2026-04-18 split-proof pivot.
+library QKBVerifierV2 {
     struct Proof {
         uint256[2] a;
         uint256[2][2] b;
@@ -57,7 +57,7 @@ library QKBVerifier {
     ///         hard-coded canonical declaration digests. The declHash check is
     ///         defence-in-depth: the same constraint exists inside the circuit,
     ///         but enforcing on-chain protects against a misconfigured verifier.
-    function verify(IGroth16Verifier v, Proof memory p, Inputs memory i) internal view returns (bool) {
+    function verify(IGroth16VerifierV2 v, Proof memory p, Inputs memory i) internal view returns (bool) {
         if (!DeclarationHashes.isAllowed(i.declHash)) return false;
         uint256[14] memory arr;
         arr[0] = i.pkX[0];

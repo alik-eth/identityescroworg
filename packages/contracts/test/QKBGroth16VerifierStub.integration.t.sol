@@ -3,7 +3,7 @@ pragma solidity 0.8.24;
 
 import { Test } from "forge-std/Test.sol";
 import { stdJson } from "forge-std/StdJson.sol";
-import { IGroth16Verifier } from "../src/QKBVerifier.sol";
+import { IGroth16VerifierV2 } from "../src/QKBVerifierV2.sol";
 import { QKBGroth16VerifierStubEcdsa } from "../src/verifiers/QKBGroth16VerifierStubEcdsa.sol";
 import { QKBGroth16VerifierStubRsa } from "../src/verifiers/QKBGroth16VerifierStubRsa.sol";
 
@@ -109,11 +109,11 @@ contract QKBGroth16VerifierStubIntegrationTest is Test {
 
     function test_ecdsaStub_behindIGroth16VerifierInterface() public view {
         // Prove the ABI is correctly shaped: the same verifier works when
-        // called through the canonical IGroth16Verifier interface the
+        // called through the canonical IGroth16VerifierV2 interface the
         // registry dispatches on.
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = _loadProof("ecdsa");
         uint256[14] memory sigs = _loadPublicSignals("ecdsa");
-        IGroth16Verifier v = IGroth16Verifier(address(ecdsaVerifier));
+        IGroth16VerifierV2 v = IGroth16VerifierV2(address(ecdsaVerifier));
         assertTrue(v.verifyProof(a, b, c, sigs));
     }
 
@@ -145,7 +145,7 @@ contract QKBGroth16VerifierStubIntegrationTest is Test {
     function test_rsaStub_behindIGroth16VerifierInterface() public view {
         (uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c) = _loadProof("rsa");
         uint256[14] memory sigs = _loadPublicSignals("rsa");
-        IGroth16Verifier v = IGroth16Verifier(address(rsaVerifier));
+        IGroth16VerifierV2 v = IGroth16VerifierV2(address(rsaVerifier));
         assertTrue(v.verifyProof(a, b, c, sigs));
     }
 

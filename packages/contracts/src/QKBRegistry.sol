@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity 0.8.24;
 
-import { QKBVerifier, IGroth16Verifier } from "./QKBVerifier.sol";
+import { QKBVerifierV2, IGroth16VerifierV2 } from "./QKBVerifierV2.sol";
 import { IRegistryGate } from "./arbitrators/IRegistryGate.sol";
 
 /// @notice Reference register-then-authenticate registry for QKB-bound
@@ -45,8 +45,8 @@ contract QKBRegistry is IRegistryGate {
     ///      `register` time. Per spec §6.2.
     uint64 public constant MAX_AGE = 90 days;
 
-    IGroth16Verifier public rsaVerifier;
-    IGroth16Verifier public ecdsaVerifier;
+    IGroth16VerifierV2 public rsaVerifier;
+    IGroth16VerifierV2 public ecdsaVerifier;
     bytes32 public trustedListRoot;
     address public admin;
     mapping(address => Binding) public bindings;
@@ -145,8 +145,8 @@ contract QKBRegistry is IRegistryGate {
     }
 
     constructor(
-        IGroth16Verifier rsa_,
-        IGroth16Verifier ecdsa_,
+        IGroth16VerifierV2 rsa_,
+        IGroth16VerifierV2 ecdsa_,
         bytes32 initialRoot,
         address initialAdmin
     ) {
@@ -168,8 +168,8 @@ contract QKBRegistry is IRegistryGate {
     ///         `rsaVerifier` or `ecdsaVerifier` per the restored §2.0
     ///         convention. Unknown tags revert `UnknownAlgorithm`. `i.rTL`
     ///         must equal `trustedListRoot` (S0.3).
-    function register(QKBVerifier.Proof calldata p, QKBVerifier.Inputs calldata i) external {
-        IGroth16Verifier v;
+    function register(QKBVerifierV2.Proof calldata p, QKBVerifierV2.Inputs calldata i) external {
+        IGroth16VerifierV2 v;
         if (i.algorithmTag == ALG_RSA) {
             v = rsaVerifier;
         } else if (i.algorithmTag == ALG_ECDSA) {
@@ -179,12 +179,12 @@ contract QKBRegistry is IRegistryGate {
         }
 
         if (i.rTL != trustedListRoot) revert RootMismatch();
-        if (!QKBVerifier.verify(v, p, i)) revert InvalidProof();
+        if (!QKBVerifierV2.verify(v, p, i)) revert InvalidProof();
         if (i.timestamp > block.timestamp) revert BindingFromFuture();
         if (block.timestamp > uint256(i.timestamp) + MAX_AGE) revert BindingTooOld();
         if (usedNullifiers[i.nullifier]) revert NullifierUsed();
 
-        address pkAddr = QKBVerifier.toPkAddress(i.pkX, i.pkY);
+        address pkAddr = QKBVerifierV2.toPkAddress(i.pkX, i.pkY);
         if (bindings[pkAddr].status != Status.NONE) revert AlreadyBound();
 
         usedNullifiers[i.nullifier] = true;
@@ -281,7 +281,7 @@ contract QKBRegistry is IRegistryGate {
     ///         QKB binding. Authorisation is a fresh Phase-1 Groth16 proof
     ///         of the same pk — we re-run the full `register`-style check
     ///         (rTL + nullifier + algorithmTag dispatch + declHash
-    ///         whitelist inside QKBVerifier.verify) and then bind the
+    ///         whitelist inside QKBVerifierV2.verify) and then bind the
     ///         escrow under `pkAddr = toPkAddress(i.pkX, i.pkY)`.
     ///
     ///         Invariants enforced:
@@ -301,8 +301,8 @@ contract QKBRegistry is IRegistryGate {
         bytes32 escrowId,
         address arbitrator,
         uint64 expiry,
-        QKBVerifier.Proof calldata p,
-        QKBVerifier.Inputs calldata i
+        QKBVerifierV2.Proof calldata p,
+        QKBVerifierV2.Inputs calldata i
     ) external {
         if (arbitrator == address(0)) revert ZeroAddress();
         if (expiry <= block.timestamp) revert EscrowExpiryInPast();
@@ -327,8 +327,8 @@ contract QKBRegistry is IRegistryGate {
     ///         reference it to an off-chain justification if needed.
     function revokeEscrow(
         bytes32 reasonHash,
-        QKBVerifier.Proof calldata p,
-        QKBVerifier.Inputs calldata i
+        QKBVerifierV2.Proof calldata p,
+        QKBVerifierV2.Inputs calldata i
     ) external {
         address pkAddr = _authorizeBinding(p, i);
         EscrowEntry storage e = escrows[pkAddr];
@@ -380,8 +380,8 @@ contract QKBRegistry is IRegistryGate {
     ///         elapsed — after that the arbitrator's `finalizeRelease`
     ///         claim priority and cancel reverts `WrongState`.
     function cancelReleasePending(
-        QKBVerifier.Proof calldata p,
-        QKBVerifier.Inputs calldata i
+        QKBVerifierV2.Proof calldata p,
+        QKBVerifierV2.Inputs calldata i
     ) external {
         address pkAddr = _authorizeBinding(p, i);
         EscrowEntry storage e = escrows[pkAddr];
@@ -414,10 +414,10 @@ contract QKBRegistry is IRegistryGate {
     ///      `register()` performs minus the pk-uniqueness / timestamp-age
     ///      clauses (those apply only to first-time binding).
     function _authorizeBinding(
-        QKBVerifier.Proof calldata p,
-        QKBVerifier.Inputs calldata i
+        QKBVerifierV2.Proof calldata p,
+        QKBVerifierV2.Inputs calldata i
     ) internal view returns (address pkAddr) {
-        IGroth16Verifier v;
+        IGroth16VerifierV2 v;
         if (i.algorithmTag == ALG_RSA) {
             v = rsaVerifier;
         } else if (i.algorithmTag == ALG_ECDSA) {
@@ -426,9 +426,9 @@ contract QKBRegistry is IRegistryGate {
             revert UnknownAlgorithm();
         }
         if (i.rTL != trustedListRoot) revert RootMismatch();
-        if (!QKBVerifier.verify(v, p, i)) revert InvalidProof();
+        if (!QKBVerifierV2.verify(v, p, i)) revert InvalidProof();
 
-        pkAddr = QKBVerifier.toPkAddress(i.pkX, i.pkY);
+        pkAddr = QKBVerifierV2.toPkAddress(i.pkX, i.pkY);
         if (bindings[pkAddr].status != Status.ACTIVE) revert NotBound();
     }
 
@@ -436,14 +436,14 @@ contract QKBRegistry is IRegistryGate {
     // Admin verifier setters
     // ---------------------------------------------------------------------
 
-    function setRsaVerifier(IGroth16Verifier newVerifier) external onlyAdmin {
+    function setRsaVerifier(IGroth16VerifierV2 newVerifier) external onlyAdmin {
         if (address(newVerifier) == address(0)) revert ZeroAddress();
         address old = address(rsaVerifier);
         rsaVerifier = newVerifier;
         emit VerifierUpdated(ALG_RSA, old, address(newVerifier));
     }
 
-    function setEcdsaVerifier(IGroth16Verifier newVerifier) external onlyAdmin {
+    function setEcdsaVerifier(IGroth16VerifierV2 newVerifier) external onlyAdmin {
         if (address(newVerifier) == address(0)) revert ZeroAddress();
         address old = address(ecdsaVerifier);
         ecdsaVerifier = newVerifier;

@@ -3,7 +3,7 @@ pragma solidity 0.8.24;
 
 import { Test } from "forge-std/Test.sol";
 import { QKBRegistry } from "../src/QKBRegistry.sol";
-import { QKBVerifier, IGroth16Verifier } from "../src/QKBVerifier.sol";
+import { QKBVerifierV2, IGroth16VerifierV2 } from "../src/QKBVerifierV2.sol";
 import { DeclarationHashes } from "../src/constants/DeclarationHashes.sol";
 import { StubGroth16Verifier } from "../src/verifier/StubGroth16Verifier.sol";
 
@@ -45,8 +45,8 @@ contract QKBRegistryEscrowTest is Test {
         rsa = new StubGroth16Verifier();
         ecdsa = new StubGroth16Verifier();
         registry = new QKBRegistry(
-            IGroth16Verifier(address(rsa)),
-            IGroth16Verifier(address(ecdsa)),
+            IGroth16VerifierV2(address(rsa)),
+            IGroth16VerifierV2(address(ecdsa)),
             INITIAL_ROOT,
             ADMIN
         );
@@ -61,7 +61,7 @@ contract QKBRegistryEscrowTest is Test {
         out[3] = (v >> 192) & type(uint64).max;
     }
 
-    function _inputs(bytes32 nullifier) internal view returns (QKBVerifier.Inputs memory i) {
+    function _inputs(bytes32 nullifier) internal view returns (QKBVerifierV2.Inputs memory i) {
         i.pkX = _splitToLimbsLE(GX);
         i.pkY = _splitToLimbsLE(GY);
         i.ctxHash = CTX_HASH;
@@ -72,10 +72,10 @@ contract QKBRegistryEscrowTest is Test {
         i.nullifier = nullifier;
     }
 
-    function _proof() internal pure returns (QKBVerifier.Proof memory p) {}
+    function _proof() internal pure returns (QKBVerifierV2.Proof memory p) {}
 
     function _registerG() internal {
-        QKBVerifier.Inputs memory i = _inputs(NULLIFIER);
+        QKBVerifierV2.Inputs memory i = _inputs(NULLIFIER);
         registry.register(_proof(), i);
     }
 
@@ -149,7 +149,7 @@ contract QKBRegistryEscrowTest is Test {
 
     function test_registerEscrow_revertsOnRootMismatch() public {
         uint64 expiry = uint64(block.timestamp + 1 days);
-        QKBVerifier.Inputs memory i = _inputs(NULLIFIER);
+        QKBVerifierV2.Inputs memory i = _inputs(NULLIFIER);
         i.rTL = bytes32(uint256(0xDEAD));
         vm.expectRevert(QKBRegistry.RootMismatch.selector);
         registry.registerEscrow(ESCROW_ID, ARBITRATOR, expiry, _proof(), i);
@@ -157,7 +157,7 @@ contract QKBRegistryEscrowTest is Test {
 
     function test_registerEscrow_revertsOnUnknownAlgorithm() public {
         uint64 expiry = uint64(block.timestamp + 1 days);
-        QKBVerifier.Inputs memory i = _inputs(NULLIFIER);
+        QKBVerifierV2.Inputs memory i = _inputs(NULLIFIER);
         i.algorithmTag = 2;
         vm.expectRevert(QKBRegistry.UnknownAlgorithm.selector);
         registry.registerEscrow(ESCROW_ID, ARBITRATOR, expiry, _proof(), i);
@@ -166,8 +166,8 @@ contract QKBRegistryEscrowTest is Test {
     function test_registerEscrow_revertsWhenBindingNotActive() public {
         // Fresh registry with no prior binding for this pk.
         QKBRegistry r2 = new QKBRegistry(
-            IGroth16Verifier(address(rsa)),
-            IGroth16Verifier(address(ecdsa)),
+            IGroth16VerifierV2(address(rsa)),
+            IGroth16VerifierV2(address(ecdsa)),
             INITIAL_ROOT,
             ADMIN
         );
