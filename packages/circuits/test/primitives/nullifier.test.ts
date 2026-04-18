@@ -22,7 +22,7 @@ async function poseidonHash(inputs: bigint[]): Promise<bigint> {
   return p.F.toObject(p(inputs.map((v) => p.F.e(v))));
 }
 
-describe('NullifierDerive (Phase-2 QIE nullifier primitive)', function () {
+describe('NullifierDerive (Phase-2 QIE nullifier primitive, person-level)', function () {
   this.timeout(600000);
 
   let circuit: CompiledCircuit;
@@ -31,27 +31,26 @@ describe('NullifierDerive (Phase-2 QIE nullifier primitive)', function () {
     circuit = await compile('primitives/NullifierDeriveTest.circom');
   });
 
-  it('matches Poseidon(Poseidon(serial‖issuer), ctxHash) — KAT', async () => {
+  it('matches Poseidon(Poseidon(serialLimbs‖serialLen), ctxHash) — KAT', async () => {
     const subjectSerialLimbs: bigint[] = [
       0x1234567890abcdefn,
       0n,
       0n,
       0n,
     ];
-    const issuerCertHash =
-      0xdeadbeefcafebabe0123456789abcdef0123456789abcdef0123456789abcdefn;
+    const subjectSerialLen = 8n;
     const ctxHash = 42n;
 
     const expectedSecret = await poseidonHash([
       ...subjectSerialLimbs,
-      issuerCertHash,
+      subjectSerialLen,
     ]);
     const expectedNullifier = await poseidonHash([expectedSecret, ctxHash]);
 
     const witness = await circuit.calculateWitness(
       {
         subjectSerialLimbs: subjectSerialLimbs.map((x) => x.toString()),
-        issuerCertHash: issuerCertHash.toString(),
+        subjectSerialLen: subjectSerialLen.toString(),
         ctxHash: ctxHash.toString(),
       },
       true,
@@ -66,12 +65,12 @@ describe('NullifierDerive (Phase-2 QIE nullifier primitive)', function () {
 
   it('nullifier changes across contexts but secret is stable', async () => {
     const subjectSerialLimbs: bigint[] = [0x42n, 0n, 0n, 0n];
-    const issuerCertHash = 0xcafen;
+    const subjectSerialLen = 1n;
 
     const witnessA = await circuit.calculateWitness(
       {
         subjectSerialLimbs: subjectSerialLimbs.map((x) => x.toString()),
-        issuerCertHash: issuerCertHash.toString(),
+        subjectSerialLen: subjectSerialLen.toString(),
         ctxHash: '1',
       },
       true,
@@ -79,7 +78,7 @@ describe('NullifierDerive (Phase-2 QIE nullifier primitive)', function () {
     const witnessB = await circuit.calculateWitness(
       {
         subjectSerialLimbs: subjectSerialLimbs.map((x) => x.toString()),
-        issuerCertHash: issuerCertHash.toString(),
+        subjectSerialLen: subjectSerialLen.toString(),
         ctxHash: '2',
       },
       true,
@@ -92,13 +91,13 @@ describe('NullifierDerive (Phase-2 QIE nullifier primitive)', function () {
   });
 
   it('nullifier changes when subject serial differs — unlinkability across users', async () => {
-    const issuerCertHash = 0xaaaan;
+    const subjectSerialLen = 1n;
     const ctxHash = 0xbbbbn;
 
     const wA = await circuit.calculateWitness(
       {
         subjectSerialLimbs: ['1', '0', '0', '0'],
-        issuerCertHash: issuerCertHash.toString(),
+        subjectSerialLen: subjectSerialLen.toString(),
         ctxHash: ctxHash.toString(),
       },
       true,
@@ -106,7 +105,7 @@ describe('NullifierDerive (Phase-2 QIE nullifier primitive)', function () {
     const wB = await circuit.calculateWitness(
       {
         subjectSerialLimbs: ['2', '0', '0', '0'],
-        issuerCertHash: issuerCertHash.toString(),
+        subjectSerialLen: subjectSerialLen.toString(),
         ctxHash: ctxHash.toString(),
       },
       true,
@@ -114,14 +113,19 @@ describe('NullifierDerive (Phase-2 QIE nullifier primitive)', function () {
     expect(wA[2]).to.not.equal(wB[2]);
   });
 
-  it('nullifier changes when issuer differs — CA rotation invalidates old nullifiers', async () => {
+  it('nullifier changes when serialLen differs — padding-collision resistance', async () => {
+    // Same limbs, different declared length. This case protects against
+    // a hypothetical collision between the LE-limb packing of one ETSI
+    // identifier and the zero-padded suffix of a shorter identifier —
+    // e.g. an 8-byte EDRPOU and a 14-byte `PNODE-…` that happened to
+    // share their first 8 bytes would otherwise hash identically.
     const subjectSerialLimbs = ['7', '0', '0', '0'];
     const ctxHash = '99';
 
     const wA = await circuit.calculateWitness(
       {
         subjectSerialLimbs,
-        issuerCertHash: '100',
+        subjectSerialLen: '8',
         ctxHash,
       },
       true,
@@ -129,7 +133,7 @@ describe('NullifierDerive (Phase-2 QIE nullifier primitive)', function () {
     const wB = await circuit.calculateWitness(
       {
         subjectSerialLimbs,
-        issuerCertHash: '200',
+        subjectSerialLen: '14',
         ctxHash,
       },
       true,

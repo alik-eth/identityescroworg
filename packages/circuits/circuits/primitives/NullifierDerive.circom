@@ -2,27 +2,31 @@ pragma circom 2.1.9;
 
 // NullifierDerive — Phase-2 QIE nullifier primitive.
 //
-// Per spec §14 of `docs/superpowers/specs/2026-04-17-qie-phase2-design.md`,
-// the per-user-per-context nullifier is a two-step Poseidon:
+// Person-level construction, amended 2026-04-18 (see
+// `docs/superpowers/specs/2026-04-18-person-nullifier-amendment.md`):
 //
-//   secret    = Poseidon( subjectSerialLimbs[0..3], issuerCertHash )   // arity 5
-//   nullifier = Poseidon( secret, ctxHash )                            // arity 2
+//   secret    = Poseidon( subjectSerialLimbs[0..3], subjectSerialLen )  // arity 5
+//   nullifier = Poseidon( secret, ctxHash )                              // arity 2
 //
 // Rationale:
-//   * `subjectSerialLimbs` is the AlgorithmTag-independent per-user identifier
-//     extracted by `X509SubjectSerial`, packed as 4 × 64-bit LE limbs so it
-//     round-trips through BN254 without modular reduction (a 32-byte serial
-//     fits in 4 × 64 = 256 bits; real EU QES serials are ≤ 20 bytes).
-//   * `issuerCertHash` is the Poseidon hash of the intermediate cert DER
-//     (same construction as the flattener's `canonicalizeCertHash`) — it
-//     binds `secret` to the CA, so a revoked / rotated issuer forces a
-//     different nullifier universe even for the same subject.
-//   * `secret` is computed with a commit-before-context step so that
-//     callers can optionally expose `secret` for long-lived commitments
-//     while keeping the context-specific `nullifier` separate.
-//   * The two-step split (rather than a single 6-input hash) matches the
-//     spec exactly and lets the QIE aggregate secrets across contexts
-//     without recomputing the inner hash.
+//   * `subjectSerialLimbs` is the per-person identifier (ETSI EN 319 412-1
+//     §5.1.3 semantics identifier in OID 2.5.4.5 — `PNOUA-…`, `PNODE-…`,
+//     `TINPL-…`, etc.) extracted by `X509SubjectSerial`, packed as 4 × 64-bit
+//     LE limbs. Stable across QES renewals because the national identifier
+//     does not change when a cert is rotated.
+//   * `subjectSerialLen` is hashed alongside the limbs to prevent
+//     padding-collision attacks between identifiers of different natural
+//     byte-lengths (8-byte EDRPOU vs 10-byte РНОКПП vs 14-byte `PNODE-…`
+//     vs 16-byte `TINUA-…`). Without it, a hypothetical collision between
+//     the LE-limb packing of one identifier and the padded-zero suffix of
+//     a shorter identifier could produce identical nullifiers.
+//   * No `issuerCertHash` input (removed in the 2026-04-18 amendment):
+//     binding the nullifier to the issuing QTSP would make it QTSP-scoped,
+//     defeating Sybil resistance when a person switches between QTSPs
+//     (common in practice — e.g. Diia → PrivatBank → Masterkey in UA).
+//   * The two-step split (rather than a single 6-input hash) lets callers
+//     expose `secret` for long-lived commitments while keeping the
+//     context-specific `nullifier` separate.
 //
 // No domain-separation tags are added here: the outer context hash
 // (`ctxHash`) is itself already a hash of domain-specific bytes, and the
@@ -32,7 +36,7 @@ include "circomlib/circuits/poseidon.circom";
 
 template NullifierDerive() {
     signal input subjectSerialLimbs[4];
-    signal input issuerCertHash;
+    signal input subjectSerialLen;
     signal input ctxHash;
     signal output secret;
     signal output nullifier;
@@ -42,7 +46,7 @@ template NullifierDerive() {
     h1.inputs[1] <== subjectSerialLimbs[1];
     h1.inputs[2] <== subjectSerialLimbs[2];
     h1.inputs[3] <== subjectSerialLimbs[3];
-    h1.inputs[4] <== issuerCertHash;
+    h1.inputs[4] <== subjectSerialLen;
     secret <== h1.out;
 
     component h2 = Poseidon(2);
