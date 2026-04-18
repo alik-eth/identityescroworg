@@ -1,16 +1,28 @@
-// Witness builder for the QKBPresentationEcdsa main circuit.
+// Witness builders for the Phase-2 split-proof ECDSA circuits
+// (QKBPresentationEcdsaLeaf + QKBPresentationEcdsaChain). Loads a fixture
+// emitted by scripts/build-admin-ecdsa-fixture.ts and produces two witness
+// records, one per circuit, with every shared derivation (Bcanon offsets,
+// subject-serial RDN parse, leaf-SPKI offsets, leafSpkiCommit, intermediate
+// cert location) computed once in buildSharedInputs and threaded into both
+// builders.
 //
-// Reads a fixture emitted by scripts/build-admin-ecdsa-fixture.ts and
-// produces a record matching the circuit's signal-input layout. Handles
-// all off-circuit bookkeeping: SHA-256 pre-padding, byte→limb packing for
-// ECDSA inputs, bit-order conversion for declHash, and left-padding/zero-
-// extension to the compile-time MAX sizes.
+// Why split: the unified QKBPresentationEcdsa.circom couldn't be Groth16-
+// setup by snarkjs at 10.85 M constraints (§14 spec pivot). The leaf proof
+// carries R_QKB constraints 1, 2, 5, 6 + the person-nullifier; the chain
+// proof carries constraints 3, 4. On-chain the two are glued by asserting
+// their leafSpkiCommit outputs are equal (QKBVerifier §2.5).
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 
-// Compile-time caps the main circuit uses.
+// circomlibjs has no types.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { buildPoseidon } = require('circomlibjs');
+
+// -------------------------------------------------------------------------
+// Compile-time caps — MUST match the on-circuit var declarations.
+// -------------------------------------------------------------------------
 export const MAX_BCANON = 1024;
 export const MAX_SA = 1536;
 export const MAX_CERT = 1536;
@@ -18,6 +30,9 @@ export const MAX_CTX = 256;
 export const MAX_DECL = 960;
 export const MERKLE_DEPTH = 16;
 
+// -------------------------------------------------------------------------
+// Fixture schema (admin-ecdsa/fixture.json, v1).
+// -------------------------------------------------------------------------
 export interface AdminEcdsaFixture {
   leaf: {
     derLength: number;
@@ -52,14 +67,27 @@ export interface AdminEcdsaFixture {
   };
 }
 
-export interface EcdsaWitnessInput {
+// -------------------------------------------------------------------------
+// Witness-input shapes — one per circuit. FROZEN by orchestration §2.1/§2.2.
+// -------------------------------------------------------------------------
+
+// Leaf circuit: 13 public signals (pkX[4], pkY[4], ctxHash, declHash,
+// timestamp, nullifier, leafSpkiCommit) + private nullifier/binding/SA/leaf
+// inputs.
+export interface LeafWitnessInput {
+  // Public
   pkX: string[];
   pkY: string[];
   ctxHash: string;
-  rTL: string;
   declHash: string;
   timestamp: string;
-  algorithmTag: string;
+  nullifier: string;
+
+  // Private — nullifier extraction
+  subjectSerialValueOffset: number;
+  subjectSerialValueLength: number;
+
+  // Private — binding
   Bcanon: number[];
   BcanonLen: number;
   BcanonPaddedIn: number[];
@@ -72,37 +100,61 @@ export interface EcdsaWitnessInput {
   declValueLen: number;
   tsValueOffset: number;
   tsDigitCount: number;
+
+  // Private — declaration
   declPaddedIn: number[];
   declPaddedLen: number;
+
+  // Private — CMS signedAttrs
   signedAttrs: number[];
   signedAttrsLen: number;
   signedAttrsPaddedIn: number[];
   signedAttrsPaddedLen: number;
   mdOffsetInSA: number;
+
+  // Private — leaf cert + signature
   leafDER: number[];
-  leafDerLen: number;
-  leafTbsOffset: number;
-  leafTbsLen: number;
-  leafTbsPaddedIn: number[];
-  leafTbsPaddedLen: number;
   leafSpkiXOffset: number;
   leafSpkiYOffset: number;
-  leafNotBeforeOffset: number;
-  leafNotAfterOffset: number;
-  leafSigR: (string | number)[];
-  leafSigS: (string | number)[];
+  leafSigR: string[];
+  leafSigS: string[];
+}
+
+// Chain circuit: 5 public signals (rTL, algorithmTag, leafSpkiCommit) +
+// private leafDER/leafTBS/intermediate/Merkle inputs.
+export interface ChainWitnessInput {
+  // Public
+  rTL: string;
+  algorithmTag: string;
+
+  // Private — leaf cert (for leafSpkiCommit equality output)
+  leafDER: number[];
+  leafSpkiXOffset: number;
+  leafSpkiYOffset: number;
+
+  // Private — leaf TBS for sha256(leafTBS)
+  leafTbsPaddedIn: number[];
+  leafTbsPaddedLen: number;
+
+  // Private — intermediate cert + signature over leaf TBS
   intDER: number[];
   intDerLen: number;
   intSpkiXOffset: number;
   intSpkiYOffset: number;
-  intSigR: (string | number)[];
-  intSigS: (string | number)[];
+  intSigR: string[];
+  intSigS: string[];
+
+  // Private — Merkle inclusion under rTL
   merklePath: string[];
   merkleIndices: number[];
 }
 
-// FIPS 180-4 SHA-256 padding: one 0x80 byte, zero padding, 8-byte big-endian
-// bit-length trailer. Result length is a multiple of 64.
+// -------------------------------------------------------------------------
+// Shared helpers — byte/limb packing + SHA padding.
+// -------------------------------------------------------------------------
+
+// FIPS 180-4 SHA-256 padding: 0x80 byte, zero pad, 8-byte BE bit-length
+// trailer. Result length is a multiple of 64.
 export function sha256Pad(data: Uint8Array): Uint8Array {
   const msgBits = BigInt(data.length) * 8n;
   const minLen = data.length + 1 + 8;
@@ -117,8 +169,7 @@ export function sha256Pad(data: Uint8Array): Uint8Array {
   return out;
 }
 
-// Zero-extend a Uint8Array to exactly `max` bytes. Caller is responsible for
-// asserting data.length <= max.
+// Zero-extend a Uint8Array to exactly `max` bytes.
 export function zeroPadTo(data: Uint8Array, max: number): number[] {
   if (data.length > max) throw new Error(`${data.length} > max ${max}`);
   const out = new Array<number>(max).fill(0);
@@ -126,8 +177,8 @@ export function zeroPadTo(data: Uint8Array, max: number): number[] {
   return out;
 }
 
-// Pack 32 big-endian bytes into 6 × 43-bit limbs, LE across limbs. Matches
-// the `Bytes32ToLimbs643` template in the main circuit.
+// Pack 32 big-endian bytes into 6 × 43-bit LE limbs. Matches
+// `Bytes32ToLimbs643` in QKBPresentationEcdsa{Leaf,Chain}.circom verbatim.
 export function bytes32ToLimbs643(bytes: Uint8Array): bigint[] {
   if (bytes.length !== 32) throw new Error('expected 32 bytes');
   let v = 0n;
@@ -141,7 +192,7 @@ export function bytes32ToLimbs643(bytes: Uint8Array): bigint[] {
   return limbs;
 }
 
-// Pack pk X or Y coordinate (32 big-endian bytes) into 4 × 64-bit LE limbs
+// Pack a pk X or Y coordinate (32 BE bytes) into 4 × 64-bit LE limbs
 // matching the Secp256k1PkMatch layout.
 export function pkCoordToLimbs(bytes: Uint8Array): bigint[] {
   if (bytes.length !== 32) throw new Error('expected 32 bytes');
@@ -156,8 +207,7 @@ export function pkCoordToLimbs(bytes: Uint8Array): bigint[] {
 }
 
 // Pack a 32-byte SHA-256 digest (big-endian) into a single BN254 field
-// element interpreted as a 256-bit integer, matching the circuit's
-// Bits256ToField output.
+// element, matching Bits256ToField in the leaf circuit.
 export function digestToField(bytes: Uint8Array): bigint {
   if (bytes.length !== 32) throw new Error('expected 32 bytes');
   let v = 0n;
@@ -165,7 +215,140 @@ export function digestToField(bytes: Uint8Array): bigint {
   return v;
 }
 
-export function buildEcdsaWitness(fixtureDir: string): EcdsaWitnessInput {
+// Pack up to 32 bytes into 4 × uint64 LE limbs, zero-padded. Matches the
+// limb packing inside X509SubjectSerial.circom: byte[l*8+b] is at bit
+// positions [b*8..b*8+7] of limb[l].
+export function subjectSerialBytesToLimbs(bytes: Uint8Array): bigint[] {
+  if (bytes.length > 32) throw new Error('subject serial > 32 bytes');
+  const limbs: bigint[] = [0n, 0n, 0n, 0n];
+  for (let l = 0; l < 4; l++) {
+    let acc = 0n;
+    for (let b = 7; b >= 0; b--) {
+      const idx = l * 8 + b;
+      const byte = idx < bytes.length ? BigInt(bytes[idx]!) : 0n;
+      acc = acc * 256n + byte;
+    }
+    limbs[l] = acc;
+  }
+  return limbs;
+}
+
+// Extract the subject RDN's serialNumber (OID 2.5.4.5) VALUE byte range
+// from a DER-encoded X.509 certificate. Scans for the attribute-OID TLV
+// (06 03 55 04 05), steps past it to the AttributeValue CHOICE element
+// (PrintableString / UTF8String / IA5String / …), and returns the content
+// offset + length. The string-type tag byte itself is not returned because
+// X509SubjectSerial only consumes the content bytes.
+export function findSubjectSerialValue(der: Uint8Array): {
+  contentOffset: number;
+  contentLength: number;
+} {
+  // SEQUENCE { OID 2.5.4.5, <AttributeValue DirectoryString> }
+  // OID TLV: 06 03 55 04 05
+  const oidTlv = [0x06, 0x03, 0x55, 0x04, 0x05];
+  outer: for (let i = 0; i + oidTlv.length + 2 < der.length; i++) {
+    for (let j = 0; j < oidTlv.length; j++) {
+      if (der[i + j] !== oidTlv[j]) continue outer;
+    }
+    // AttributeValue tag: 0x13 (PrintableString), 0x0c (UTF8String),
+    // 0x16 (IA5String), 0x14 (TeletexString). Subject serialNumber is
+    // ≤ 32 content bytes in practice, so we only handle short-form length.
+    const tagPos = i + oidTlv.length;
+    const tag = der[tagPos]!;
+    if (tag !== 0x13 && tag !== 0x0c && tag !== 0x16 && tag !== 0x14) continue outer;
+    const lenByte = der[tagPos + 1]!;
+    if (lenByte & 0x80) {
+      throw new Error('subject serialNumber length is long-form (>127 bytes?)');
+    }
+    return { contentOffset: tagPos + 2, contentLength: lenByte };
+  }
+  throw new Error('subject serialNumber (OID 2.5.4.5) not found in DER');
+}
+
+// -------------------------------------------------------------------------
+// Poseidon reference — used to compute leafSpkiCommit + nullifier off-circuit
+// so tests can assert the circuit's outputs and so emit-stub-fixtures emits
+// matching public-signal arrays. Matches Poseidon arity choices in the
+// circuits exactly: Poseidon-6 over limbs, Poseidon-2 to combine X/Y, and
+// Poseidon-5 (subjectSerialLimbs ‖ len) then Poseidon-2 (secret ‖ ctxHash).
+// -------------------------------------------------------------------------
+
+interface PoseidonF {
+  F: { e: (v: bigint) => unknown; toObject: (v: unknown) => bigint };
+  (inputs: unknown[]): unknown;
+}
+let poseidonCache: PoseidonF | null = null;
+async function getPoseidon(): Promise<PoseidonF> {
+  if (poseidonCache !== null) return poseidonCache;
+  poseidonCache = (await buildPoseidon()) as unknown as PoseidonF;
+  return poseidonCache;
+}
+async function poseidonHash(inputs: bigint[]): Promise<bigint> {
+  const p = await getPoseidon();
+  return p.F.toObject(p(inputs.map((v) => p.F.e(v))));
+}
+
+export async function computeLeafSpkiCommit(
+  leafXBytes: Uint8Array,
+  leafYBytes: Uint8Array,
+): Promise<bigint> {
+  const xLimbs = bytes32ToLimbs643(leafXBytes);
+  const yLimbs = bytes32ToLimbs643(leafYBytes);
+  const pX = await poseidonHash(xLimbs);
+  const pY = await poseidonHash(yLimbs);
+  return poseidonHash([pX, pY]);
+}
+
+export async function computeNullifier(
+  subjectSerialLimbs: bigint[],
+  subjectSerialLen: bigint,
+  ctxHash: bigint,
+): Promise<{ secret: bigint; nullifier: bigint }> {
+  const secret = await poseidonHash([...subjectSerialLimbs, subjectSerialLen]);
+  const nullifier = await poseidonHash([secret, ctxHash]);
+  return { secret, nullifier };
+}
+
+// -------------------------------------------------------------------------
+// Shared derivations from fixture — computed once; threaded into both
+// builders so leafSpkiCommit, nullifier, and every offset match across
+// the two circuits exactly.
+// -------------------------------------------------------------------------
+
+export interface SharedInputs {
+  // Raw buffers
+  binding: Buffer;
+  leafDer: Buffer;
+  intDer: Buffer;
+  signedAttrs: Buffer;
+  leafTbs: Buffer;
+  declBytes: Buffer;
+  // Padded-for-SHA256 copies
+  bcanonPadded: Uint8Array;
+  saPadded: Uint8Array;
+  tbsPadded: Uint8Array;
+  declPadded: Uint8Array;
+  // Public-signal bigints
+  pkX: bigint[];
+  pkY: bigint[];
+  ctxHash: bigint;
+  declHash: bigint;
+  timestamp: bigint;
+  nullifier: bigint;
+  leafSpkiCommit: bigint;
+  // Offsets / lengths used by multiple builders
+  ctxHexLen: number;
+  tsDigitCount: number;
+  subjectSerial: {
+    contentOffset: number;
+    contentLength: number;
+    limbs: bigint[];
+  };
+  // Fixture passthrough
+  fix: AdminEcdsaFixture;
+}
+
+export async function buildSharedInputs(fixtureDir: string): Promise<SharedInputs> {
   const fix = JSON.parse(
     readFileSync(resolve(fixtureDir, 'fixture.json'), 'utf8'),
   ) as AdminEcdsaFixture;
@@ -174,10 +357,13 @@ export function buildEcdsaWitness(fixtureDir: string): EcdsaWitnessInput {
   const intDer = readFileSync(resolve(fixtureDir, fix.synthIntermediate.derPath));
   const signedAttrs = Buffer.from(fix.cms.signedAttrsHex, 'hex');
 
-  // SHA padding for each input fed to Sha256Var.
+  // SHA padding for each Sha256Var input.
   const bcanonPadded = sha256Pad(binding);
   const saPadded = sha256Pad(signedAttrs);
-  const leafTbs = leafDer.subarray(fix.leaf.tbs.offset, fix.leaf.tbs.offset + fix.leaf.tbs.length);
+  const leafTbs = leafDer.subarray(
+    fix.leaf.tbs.offset,
+    fix.leaf.tbs.offset + fix.leaf.tbs.length,
+  );
   const tbsPadded = sha256Pad(leafTbs);
   const declBytes = binding.subarray(
     fix.binding.offsets.declaration,
@@ -185,8 +371,8 @@ export function buildEcdsaWitness(fixtureDir: string): EcdsaWitnessInput {
   );
   const declPadded = sha256Pad(declBytes);
 
-  // pk coordinates: real Diia leaf binding stores pk = 0x04 || X || Y (65 bytes,
-  // hex-encoded after "pk":"0x"). Offset `pk` points at the '0' of '0x04...'.
+  // pk coordinates: real Diia binding stores pk = "0x04" || X || Y (65 bytes,
+  // hex-encoded after "pk":"0x"). Offset `pk` points at '0' of '0x04...'.
   const pkAsciiStart = fix.binding.offsets.pk + 4; // skip '0x04'
   const pkHex = binding.subarray(pkAsciiStart, pkAsciiStart + 128).toString('utf8');
   const xBytes = Buffer.from(pkHex.slice(0, 64), 'hex');
@@ -194,88 +380,172 @@ export function buildEcdsaWitness(fixtureDir: string): EcdsaWitnessInput {
   const pkX = pkCoordToLimbs(xBytes);
   const pkY = pkCoordToLimbs(yBytes);
 
-  // ctx field in admin binding is "0x" (empty). ctxHash = 0.
+  // ctx in admin binding is "0x" (empty) → ctxHash = 0 in-circuit.
   const ctxHash = 0n;
 
-  // declHash = packed SHA-256 digest over declBytes.
+  // declHash: packed SHA-256 of declBytes.
   const declDigest = new Uint8Array(createHash('sha256').update(declBytes).digest());
   const declHash = digestToField(declDigest);
 
-  // Timestamp integer.
+  // Timestamp (decimal ASCII in binding at offsets.timestamp).
   const tsStart = fix.binding.offsets.timestamp;
   let tsEnd = tsStart;
   while (tsEnd < binding.length && binding[tsEnd]! >= 0x30 && binding[tsEnd]! <= 0x39) tsEnd++;
-  const tsValue = BigInt(binding.subarray(tsStart, tsEnd).toString('utf8'));
+  const timestamp = BigInt(binding.subarray(tsStart, tsEnd).toString('utf8'));
   const tsDigitCount = tsEnd - tsStart;
 
-  // ctx hex length within "0x" prefix.
+  // ctx hex content length (between the opening "0x" and the closing quote).
   const ctxStart = fix.binding.offsets.context + 2;
   let ctxEnd = ctxStart;
   while (ctxEnd < binding.length && binding[ctxEnd] !== 0x22) ctxEnd++;
   const ctxHexLen = ctxEnd - ctxStart;
 
-  // SPKI x/y offsets within intermediate DER (compute from its bytes).
-  const intSpkiX = fix.synthIntermediate.spkiXOffset;
-  const intSpkiY = fix.synthIntermediate.spkiYOffset;
+  // Leaf SPKI X, Y bytes for leafSpkiCommit.
+  const leafXBytes = new Uint8Array(
+    leafDer.subarray(fix.leaf.spki.xOffset, fix.leaf.spki.xOffset + 32),
+  );
+  const leafYBytes = new Uint8Array(
+    leafDer.subarray(fix.leaf.spki.yOffset, fix.leaf.spki.yOffset + 32),
+  );
+  const leafSpkiCommit = await computeLeafSpkiCommit(leafXBytes, leafYBytes);
 
-  // Leaf sigR/sigS (hex) → 6×43-bit LE limbs.
-  const leafR = bytes32ToLimbs643(Buffer.from(fix.cms.leafSigR, 'hex'));
-  const leafS = bytes32ToLimbs643(Buffer.from(fix.cms.leafSigS, 'hex'));
-  const intR = bytes32ToLimbs643(Buffer.from(fix.synthIntermediate.sigROverRealLeafTbsHex, 'hex'));
-  const intS = bytes32ToLimbs643(Buffer.from(fix.synthIntermediate.sigSOverRealLeafTbsHex, 'hex'));
-
-  // Note: the circuit has `leafNotBeforeOffset`/`leafNotAfterOffset` inputs
-  // that are currently constraint-inert (validity check deferred). Supply
-  // any in-buffer offset to satisfy the no-op constraint.
-  const leafNotBeforeOffset = 0;
-  const leafNotAfterOffset = 0;
+  // Subject serialNumber — scan leafDER for OID 2.5.4.5, derive limbs.
+  const subjectSerial = findSubjectSerialValue(new Uint8Array(leafDer));
+  const serialBytes = new Uint8Array(
+    leafDer.subarray(
+      subjectSerial.contentOffset,
+      subjectSerial.contentOffset + subjectSerial.contentLength,
+    ),
+  );
+  const serialLimbs = subjectSerialBytesToLimbs(serialBytes);
+  const { nullifier } = await computeNullifier(
+    serialLimbs,
+    BigInt(subjectSerial.contentLength),
+    ctxHash,
+  );
 
   return {
-    pkX: pkX.map((v) => v.toString()),
-    pkY: pkY.map((v) => v.toString()),
-    ctxHash: ctxHash.toString(),
-    rTL: fix.merkle.root,
-    declHash: declHash.toString(),
-    timestamp: tsValue.toString(),
-    algorithmTag: '1',
-    Bcanon: zeroPadTo(binding, MAX_BCANON),
-    BcanonLen: binding.length,
-    BcanonPaddedIn: zeroPadTo(bcanonPadded, MAX_BCANON),
-    BcanonPaddedLen: bcanonPadded.length,
-    pkValueOffset: fix.binding.offsets.pk,
-    schemeValueOffset: fix.binding.offsets.scheme,
-    ctxValueOffset: fix.binding.offsets.context,
+    binding,
+    leafDer,
+    intDer,
+    signedAttrs,
+    leafTbs,
+    declBytes,
+    bcanonPadded,
+    saPadded,
+    tbsPadded,
+    declPadded,
+    pkX,
+    pkY,
+    ctxHash,
+    declHash,
+    timestamp,
+    nullifier,
+    leafSpkiCommit,
     ctxHexLen,
-    declValueOffset: fix.binding.offsets.declaration,
-    declValueLen: fix.binding.declarationBytesLength,
-    tsValueOffset: fix.binding.offsets.timestamp,
     tsDigitCount,
-    declPaddedIn: zeroPadTo(declPadded, MAX_DECL + 64),
-    declPaddedLen: declPadded.length,
-    signedAttrs: zeroPadTo(signedAttrs, MAX_SA),
-    signedAttrsLen: signedAttrs.length,
-    signedAttrsPaddedIn: zeroPadTo(saPadded, MAX_SA),
-    signedAttrsPaddedLen: saPadded.length,
-    mdOffsetInSA: fix.cms.messageDigestOffsetInSignedAttrs,
-    leafDER: zeroPadTo(leafDer, MAX_CERT),
-    leafDerLen: leafDer.length,
-    leafTbsOffset: fix.leaf.tbs.offset,
-    leafTbsLen: fix.leaf.tbs.length,
-    leafTbsPaddedIn: zeroPadTo(tbsPadded, MAX_CERT),
-    leafTbsPaddedLen: tbsPadded.length,
-    leafSpkiXOffset: fix.leaf.spki.xOffset,
-    leafSpkiYOffset: fix.leaf.spki.yOffset,
-    leafNotBeforeOffset,
-    leafNotAfterOffset,
+    subjectSerial: {
+      contentOffset: subjectSerial.contentOffset,
+      contentLength: subjectSerial.contentLength,
+      limbs: serialLimbs,
+    },
+    fix,
+  };
+}
+
+// -------------------------------------------------------------------------
+// Leaf witness builder.
+// -------------------------------------------------------------------------
+
+export async function buildLeafWitness(fixtureDir: string): Promise<LeafWitnessInput> {
+  const s = await buildSharedInputs(fixtureDir);
+  const leafR = bytes32ToLimbs643(Buffer.from(s.fix.cms.leafSigR, 'hex'));
+  const leafS = bytes32ToLimbs643(Buffer.from(s.fix.cms.leafSigS, 'hex'));
+
+  return {
+    // Public
+    pkX: s.pkX.map((v) => v.toString()),
+    pkY: s.pkY.map((v) => v.toString()),
+    ctxHash: s.ctxHash.toString(),
+    declHash: s.declHash.toString(),
+    timestamp: s.timestamp.toString(),
+    nullifier: s.nullifier.toString(),
+
+    // Nullifier extraction
+    subjectSerialValueOffset: s.subjectSerial.contentOffset,
+    subjectSerialValueLength: s.subjectSerial.contentLength,
+
+    // Binding
+    Bcanon: zeroPadTo(s.binding, MAX_BCANON),
+    BcanonLen: s.binding.length,
+    BcanonPaddedIn: zeroPadTo(s.bcanonPadded, MAX_BCANON),
+    BcanonPaddedLen: s.bcanonPadded.length,
+    pkValueOffset: s.fix.binding.offsets.pk,
+    schemeValueOffset: s.fix.binding.offsets.scheme,
+    ctxValueOffset: s.fix.binding.offsets.context,
+    ctxHexLen: s.ctxHexLen,
+    declValueOffset: s.fix.binding.offsets.declaration,
+    declValueLen: s.fix.binding.declarationBytesLength,
+    tsValueOffset: s.fix.binding.offsets.timestamp,
+    tsDigitCount: s.tsDigitCount,
+
+    // Declaration
+    declPaddedIn: zeroPadTo(s.declPadded, MAX_DECL + 64),
+    declPaddedLen: s.declPadded.length,
+
+    // CMS signedAttrs
+    signedAttrs: zeroPadTo(s.signedAttrs, MAX_SA),
+    signedAttrsLen: s.signedAttrs.length,
+    signedAttrsPaddedIn: zeroPadTo(s.saPadded, MAX_SA),
+    signedAttrsPaddedLen: s.saPadded.length,
+    mdOffsetInSA: s.fix.cms.messageDigestOffsetInSignedAttrs,
+
+    // Leaf cert + signature
+    leafDER: zeroPadTo(s.leafDer, MAX_CERT),
+    leafSpkiXOffset: s.fix.leaf.spki.xOffset,
+    leafSpkiYOffset: s.fix.leaf.spki.yOffset,
     leafSigR: leafR.map((v) => v.toString()),
     leafSigS: leafS.map((v) => v.toString()),
-    intDER: zeroPadTo(intDer, MAX_CERT),
-    intDerLen: intDer.length,
-    intSpkiXOffset: intSpkiX,
-    intSpkiYOffset: intSpkiY,
+  };
+}
+
+// -------------------------------------------------------------------------
+// Chain witness builder.
+// -------------------------------------------------------------------------
+
+export async function buildChainWitness(fixtureDir: string): Promise<ChainWitnessInput> {
+  const s = await buildSharedInputs(fixtureDir);
+  const intR = bytes32ToLimbs643(
+    Buffer.from(s.fix.synthIntermediate.sigROverRealLeafTbsHex, 'hex'),
+  );
+  const intS = bytes32ToLimbs643(
+    Buffer.from(s.fix.synthIntermediate.sigSOverRealLeafTbsHex, 'hex'),
+  );
+
+  return {
+    // Public
+    rTL: s.fix.merkle.root,
+    algorithmTag: '1',
+
+    // Leaf cert (for leafSpkiCommit output)
+    leafDER: zeroPadTo(s.leafDer, MAX_CERT),
+    leafSpkiXOffset: s.fix.leaf.spki.xOffset,
+    leafSpkiYOffset: s.fix.leaf.spki.yOffset,
+
+    // Leaf TBS padded
+    leafTbsPaddedIn: zeroPadTo(s.tbsPadded, MAX_CERT),
+    leafTbsPaddedLen: s.tbsPadded.length,
+
+    // Intermediate cert + signature
+    intDER: zeroPadTo(s.intDer, MAX_CERT),
+    intDerLen: s.intDer.length,
+    intSpkiXOffset: s.fix.synthIntermediate.spkiXOffset,
+    intSpkiYOffset: s.fix.synthIntermediate.spkiYOffset,
     intSigR: intR.map((v) => v.toString()),
     intSigS: intS.map((v) => v.toString()),
-    merklePath: fix.merkle.path,
-    merkleIndices: fix.merkle.indices,
+
+    // Merkle
+    merklePath: s.fix.merkle.path,
+    merkleIndices: s.fix.merkle.indices,
   };
 }
