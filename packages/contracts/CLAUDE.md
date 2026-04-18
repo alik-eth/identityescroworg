@@ -487,13 +487,24 @@ couldn't do this (the leaf proof didn't carry rTL); Phase 2's unified
 proof does, so the admin's LOTL-freshness duty is now enforced on-chain
 rather than solely off-chain.
 
-### 13.4 Nullifier primitive (§14.4)
+### 13.4 Nullifier primitive (§14.4) — amended 2026-04-18
 
-Construction (off-chain, in the circuit):
+Construction (off-chain, in the circuit). See
+`docs/superpowers/specs/2026-04-18-person-nullifier-amendment.md`:
+
 ```
-secret    = Poseidon(subject_serial_limbs, issuer_cert_hash)
-nullifier = Poseidon(secret, ctxHash)
+rnokppBytes  = subject.serialNumber attribute content (OID 2.5.4.5)
+rnokppLen    = byte length of that content (1..16)
+rnokppPadded = rnokppBytes ∥ 0x00 × (16 - rnokppLen)
+
+secret       = Poseidon(Poseidon(rnokppPadded), rnokppLen)
+nullifier    = Poseidon(secret, ctxHash)
 ```
+
+Derived from the eIDAS subject-serialNumber mandated by ETSI EN 319
+412-1 §5.1.3 (format `<TYPE><CC>-<national-id>`, e.g. `PNOUA-3456789012`,
+`PNODE-12345678`, `TINPL-1234567890`). Stable across cert renewals ⇒
+one-person-per-`ctxHash` Sybil resistance. On-chain surface unchanged.
 
 On-chain storage:
 - `mapping(bytes32 => bool) public usedNullifiers` — uniqueness guard.

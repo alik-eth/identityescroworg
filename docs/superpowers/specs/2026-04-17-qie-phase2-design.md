@@ -302,26 +302,31 @@ Registry-side changes:
 - `QKBRegistry` regains the `rTL == trustedListRoot` check dropped in
   Phase-1 T10, and gains the nullifier-uniqueness mapping in §14.4.
 
-### 14.4 Nullifier primitive
+### 14.4 Nullifier primitive — amended 2026-04-18
+
+> Superseded by `docs/superpowers/specs/2026-04-18-person-nullifier-amendment.md`. The prior `Poseidon(subject_serial_limbs, issuer_cert_hash)` construction bound to a specific certificate, not to a person — every QES renewal produced a fresh nullifier, breaking Sybil resistance at the DAO/regulated-entity layer. Replaced with the construction below.
 
 Construction:
 ```
-secret     = Poseidon(subject_serial_limbs, issuer_cert_hash)
-nullifier  = Poseidon(secret, ctxHash)
+rnokppBytes  = subject.serialNumber attribute content (OID 2.5.4.5)
+rnokppLen    = byte length of that content (1..16)
+rnokppPadded = rnokppBytes ∥ 0x00 × (16 - rnokppLen)
+
+secret       = Poseidon(Poseidon(rnokppPadded), rnokppLen)
+nullifier    = Poseidon(secret, ctxHash)
 ```
 
-- `subject_serial_limbs` — 4×64-bit LE limbs of the certificate's
-  subject `serialNumber` attribute, extracted from the leaf cert DER
-  inside the circuit. This is the PII-carrying stable identifier in
-  every EU QES cert (РНОКПП for UA Diia, PESEL for PL Szafir, Personal
-  Code for EE). The circuit never outputs it.
-- `issuer_cert_hash` — Poseidon hash of the intermediate cert DER
-  (already computed in the circuit for §2.2 of the R_QKB proof — the
-  Merkle-leaf preimage). Reusing it makes the nullifier stable across
-  certificate renewals under the same issuer: the Holder's tax ID
-  doesn't change when their cert rotates, but their cert serial number
-  does — binding against the **issuer** instead of the cert scoops up
-  renewals.
+- `rnokppBytes` — the raw PrintableString bytes of the subject
+  `serialNumber` attribute (OID 2.5.4.5), present in every
+  ETSI-EN-319-412-1-compliant eIDAS QES in the format
+  `<TYPE><CC>-<national-id>` (e.g. `PNOUA-3456789012`, `PNODE-12345678`,
+  `TINPL-1234567890`, `PASDE-C01X00T47`). The circuit never outputs it.
+  Stable across cert renewals (the national identifier does not change
+  when the QES rotates), which is the property that makes the nullifier
+  person-scoped rather than cert-scoped.
+- `rnokppLen` — hashed alongside the inner digest to prevent
+  padding-collision attacks between identifiers of different natural
+  lengths (8-byte EDRPOU vs 10-byte РНОКПП vs 12-byte passport).
 - `ctxHash` — the Phase 1 binding's existing context field. Reused
   unchanged. An empty context (`ctxHash = 0`) yields a global
   nullifier suitable for KYC; a per-dApp `ctxHash` yields a
