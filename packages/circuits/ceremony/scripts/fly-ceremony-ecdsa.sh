@@ -18,7 +18,7 @@ set -euo pipefail
 CEREMONY_BRANCH="${CEREMONY_BRANCH:-feat/qie-circuits}"
 REPO_URL="${REPO_URL:-https://github.com/alik-eth/identityescroworg.git}"
 CIRCOM_VERSION="${CIRCOM_VERSION:-v2.1.9}"
-PTAU_POWER="${PTAU_POWER:-23}"
+PTAU_POWER="${PTAU_POWER:-25}"
 
 echo "========================================================================"
 echo "QKB Phase 2 person-nullifier ceremony — $(date -Is)"
@@ -63,8 +63,9 @@ pnpm --filter @qkb/circuits install --frozen-lockfile
 # 2. Fetch ptau
 # ---------------------------------------------------------------------------
 cd /data/repo/packages/circuits
-bash ceremony/scripts/fetch-ptau.sh
+POWER="$PTAU_POWER" bash ceremony/scripts/fetch-ptau.sh
 PTAU="$(pwd)/ceremony/ptau/powersOfTau28_hez_final_${PTAU_POWER}.ptau"
+echo "PTAU path: $PTAU ($(du -h $PTAU | awk '{print $1}'))"
 echo "PTAU SHA256:"
 sha256sum "$PTAU"
 
@@ -116,15 +117,31 @@ echo "Constraint count $CONSTRAINTS ≤ $GATE — proceeding to setup."
 # ---------------------------------------------------------------------------
 # 4. groth16 setup + contribute (idempotent)
 # ---------------------------------------------------------------------------
-if [[ -f "$OUT/qkb_0000.zkey" ]]; then
+# Reject a 0-byte zkey left behind by a prior failed setup — else the
+# idempotent SKIP would falsely claim success.
+if [[ -f "$OUT/qkb_0000.zkey" ]] && [[ ! -s "$OUT/qkb_0000.zkey" ]]; then
+  echo "[setup] removing zero-byte $OUT/qkb_0000.zkey from prior failed run"
+  rm -f "$OUT/qkb_0000.zkey"
+fi
+
+if [[ -s "$OUT/qkb_0000.zkey" ]]; then
   echo "[setup] SKIP — $OUT/qkb_0000.zkey already exists"
   ls -lh "$OUT/qkb_0000.zkey"
 else
   echo "[setup] start $(date -Is)"
+  # Pipe-to-tee hides the real exit code via PIPESTATUS; capture it.
+  set -o pipefail
   snarkjs groth16 setup \
     "$OUT/QKBPresentationEcdsa.r1cs" \
     "$PTAU" \
     "$OUT/qkb_0000.zkey" 2>&1 | tee "$OUT/setup.log"
+  # Extra defence: fail loudly on a zero-byte or missing zkey.
+  if [[ ! -s "$OUT/qkb_0000.zkey" ]]; then
+    echo "FATAL: groth16 setup produced no zkey (or zero bytes). See setup.log." >&2
+    tail -20 "$OUT/setup.log" >&2
+    rm -f "$OUT/qkb_0000.zkey"
+    exit 3
+  fi
   echo "[setup] done $(date -Is)"
 fi
 
