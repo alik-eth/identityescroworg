@@ -1,3 +1,6 @@
+# Fly.io config for the QKB static SPA.
+# Production domain: identityescrow.org (attached out-of-band via `flyctl certs add`).
+
 app = "identityescrow"
 primary_region = "ams"
 
@@ -15,3 +18,5 @@ primary_region = "ams"
 [[vm]]
   size = "shared-cpu-1x"
   memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1
