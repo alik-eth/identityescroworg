@@ -21,11 +21,24 @@ const fixture = JSON.parse(
   readFileSync(resolve(fixtureDir, 'subject-serial-diia.fixture.json'), 'utf8'),
 ) as DiiaFixture;
 const derPath = resolve(fixtureDir, fixture.derPath);
+const synthDeFixture = JSON.parse(
+  readFileSync(
+    resolve(fixtureDir, 'subject-serial-synth-de.fixture.json'),
+    'utf8',
+  ),
+) as DiiaFixture;
+const synthDeDerPath = resolve(fixtureDir, synthDeFixture.derPath);
 const MAX_CERT = 2048;
 
 function derBytes(): number[] {
   const raw = readFileSync(derPath);
   expect(raw.length).to.equal(fixture.derLength);
+  return rightPadZero(new Uint8Array(raw), MAX_CERT);
+}
+
+function synthDeDerBytes(): number[] {
+  const raw = readFileSync(synthDeDerPath);
+  expect(raw.length).to.equal(synthDeFixture.derLength);
   return rightPadZero(new Uint8Array(raw), MAX_CERT);
 }
 
@@ -131,5 +144,28 @@ describe('X509SubjectSerial (MAX_CERT = 2048)', function () {
       threw = true;
     }
     expect(threw).to.equal(true);
+  });
+
+  it('extracts synthetic DE eIDAS "PNODE-12345678" (pan-eIDAS coverage)', async () => {
+    const leafDER = synthDeDerBytes();
+    const witness = await circuit.calculateWitness(
+      {
+        leafDER,
+        subjectSerialValueOffset: synthDeFixture.serialNumberValue.contentOffset,
+        subjectSerialValueLength: synthDeFixture.serialNumberValue.contentLength,
+      },
+      true,
+    );
+    await circuit.checkConstraints(witness);
+
+    // Layout mirrors the Diia case: witness[1..4] = subjectSerialLimbs[0..3].
+    for (let l = 0; l < 4; l++) {
+      expect(witness[1 + l]).to.equal(
+        BigInt(synthDeFixture.serialNumberValue.limbsLE64[l]!),
+      );
+    }
+    // 14-byte serial → limb[1] partially filled, limbs[2] and [3] zero.
+    expect(witness[3]).to.equal(0n);
+    expect(witness[4]).to.equal(0n);
   });
 });
