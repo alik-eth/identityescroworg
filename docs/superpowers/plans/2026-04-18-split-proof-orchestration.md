@@ -36,7 +36,7 @@ These shapes are immutable after dispatch. Any change requires lead sign-off + c
 | 11 | nullifier |
 | 12 | leafSpkiCommit |
 
-### 2.2 Chain public signals (`uint256[5]`)
+### 2.2 Chain public signals (`uint256[3]`)
 
 | idx | field |
 |---|---|
@@ -44,7 +44,7 @@ These shapes are immutable after dispatch. Any change requires lead sign-off + c
 | 1 | algorithmTag (0=RSA, 1=ECDSA) |
 | 2 | leafSpkiCommit |
 
-_Chain has no more public signals; RSA and ECDSA chain circuits share this layout._
+_Chain has exactly 3 public signals — amended 2026-04-18 after the initial `uint256[5]` estimate didn't survive a real snarkjs emit. `leafSpkiCommit` is a `signal input` (not output), declared last, constrained internally to equal Poseidon2(Poseidon6(leafXLimbs), Poseidon6(leafYLimbs)); this keeps the on-chain index layout stable vs snarkjs's output-first ordering. RSA and ECDSA chain circuits share this layout._
 
 ### 2.3 `leafSpkiCommit` derivation
 
@@ -64,7 +64,7 @@ interface IGroth16LeafVerifier {
         external view returns (bool);
 }
 interface IGroth16ChainVerifier {
-    function verifyProof(uint256[2] a, uint256[2][2] b, uint256[2] c, uint256[5] input)
+    function verifyProof(uint256[2] a, uint256[2][2] b, uint256[2] c, uint256[3] input)
         external view returns (bool);
 }
 ```

@@ -84,7 +84,7 @@ interface IGroth16LeafVerifier {
         external view returns (bool);
 }
 interface IGroth16ChainVerifier {
-    function verifyProof(uint256[2] a, uint256[2][2] b, uint256[2] c, uint256[5] input)
+    function verifyProof(uint256[2] a, uint256[2][2] b, uint256[2] c, uint256[3] input)
         external view returns (bool);
 }
 ```
