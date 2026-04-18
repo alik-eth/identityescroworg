@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Ukrainian Member State Trust List (synthetic, hand-authored).
+
+  Source data: http://ca.diia.gov.ua/uploads/certificates/diia_ecdsa.p7b
+  (fetched 2026-04-17). Only the two qualified-CA-for-QES subjects of
+  State enterprise "DIIA" (QTSP) are listed — TSA and OCSP responder
+  certificates are intentionally excluded since they are not CA/QC.
+
+  Both CAs are issued by the Ukrainian Central Certification Authority
+  (CZO / Центральний Засвідчувальний Орган) under the Ministry of
+  Digital Transformation. Status "granted" under eIDAS-equivalent
+  qualified trust service regime (Ukrainian Law 2155-VIII).
+-->
+<TrustServiceStatusList xmlns="http://uri.etsi.org/02231/v2#">
+  <SchemeInformation>
+    <TSLType>http://uri.etsi.org/TrstSvc/TrustedList/TSLType/EUgeneric</TSLType>
+    <SchemeTerritory>UA</SchemeTerritory>
+  </SchemeInformation>
+  <TrustServiceProviderList>
+    <TrustServiceProvider>
+      <TSPInformation>
+        <TSPName><Name xml:lang="en">State enterprise "DIIA"</Name></TSPName>
+      </TSPInformation>
+      <TSPServices>
+        <TSPService>
+          <ServiceInformation>
+            <ServiceTypeIdentifier>http://uri.etsi.org/TrstSvc/Svctype/CA/QC</ServiceTypeIdentifier>
+            <ServiceName><Name xml:lang="en">"DIIA". Qualified Trust Services Provider (UA-43395033-2311)</Name></ServiceName>
+            <ServiceDigitalIdentity>
+              <DigitalId>
+                <X509Certificate>MIIEbDCCBBGgAwIBAgIUXpKHtb9tW+oBAAAAAQAAADcBAAAwCgYIKoZIzj0EAwIwgdExNjA0BgNVBAoMLU1pbmlzdHJ5IG9mIGRpZ2l0YWwgdHJhbnNmb3JtYXRpb24gb2YgVWtyYWluZTEeMBwGA1UECwwVQWRtaW5pc3RyYXRvciBJVFMgQ0NBMSgwJgYDVQQDDB9DZW50cmFsIGNlcnRpZmljYXRpb24gYXV0aG9yaXR5MRgwFgYDVQQFDA9VQS00MzIyMDg1MS0yNTYxCzAJBgNVBAYTAlVBMQ0wCwYDVQQHDARLeWl2MRcwFQYDVQRhDA5OVFJVQS00MzIyMDg1MTAeFw0yMjExMjQxMTQ5MDBaFw0yNzExMjQxMTQ5MDBaMIHYMSAwHgYDVQQKDBdTdGF0ZSBlbnRlcnByaXNlICJESUlBIjEwMC4GA1UECwwnRGVwYXJ0bWVudCBvZiBFbGVjdHJvbmljIFRydXN0IFNlcnZpY2VzMTIwMAYDVQQDDCkiRElJQSIuIFF1YWxpZmllZCBUcnVzdCBTZXJ2aWNlcyBQcm92aWRlcjEZMBcGA1UEBRMQVUEtNDMzOTUwMzMtMjMxMTELMAkGA1UEBhMCVUExDTALBgNVBAcMBEt5aXYxFzAVBgNVBGEMDk5UUlVBLTQzMzk1MDMzMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEhQAEgmXpGcFzjoc1csH2RDiVoMA5hfxxvZam9ipTvMhp0jym5qKn3EQ7uyoLkU7jXxx04oLs2ObFKHx6PUruEKOCAbwwggG4MB0GA1UdDgQWBBRmaSQ9KwQzHR6Sq28/SttIIxs/xDAOBgNVHQ8BAf8EBAMCAQYwPAYDVR0gBDUwMzAxBgkqhiQCAQEBAgQwJDAiBggrBgEFBQcCARYWaHR0cHM6Ly9jem8uZ292LnVhL2NwczApBgNVHREEIjAggg5jYS5kaWlhLmdvdi51YYEOY2FAZGlpYS5nb3YudWEwEgYDVR0TAQH/BAgwBgEB/wIBADAYBggrBgEFBQcBAwQMMAowCAYGBACORgEBMB8GA1UdIwQYMBaAFF6Sh7W/bVvq6ekdohGT5F78UImRMEcGA1UdHwRAMD4wPKA6oDiGNmh0dHA6Ly9jem8uZ292LnVhL2Rvd25sb2FkL2NybHMvQ0EtRUNEU0EtMjAyMC1GdWxsLmNybDBIBgNVHS4EQTA/MD2gO6A5hjdodHRwOi8vY3pvLmdvdi51YS9kb3dubG9hZC9jcmxzL0NBLUVDRFNBLTIwMjAtRGVsdGEuY3JsMDwGCCsGAQUFBwEBBDAwLjAsBggrBgEFBQcwAYYgaHR0cDovL2N6by5nb3YudWEvc2VydmljZXMvb2NzcC8wCgYIKoZIzj0EAwIDSQAwRgIhALFobqGjXfRBV4NsBLWWEanevvoDJLXzW5zSiy1CP5DgAiEA4qBfYSPuuv7WWUFNW7NdxBj3Z0x8Tr7Jy+gF1sVFfRo=</X509Certificate>
+              </DigitalId>
+            </ServiceDigitalIdentity>
+            <ServiceStatus>http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/granted</ServiceStatus>
+            <StatusStartingTime>2022-11-24T11:49:00Z</StatusStartingTime>
+          </ServiceInformation>
+        </TSPService>
+        <TSPService>
+          <ServiceInformation>
+            <ServiceTypeIdentifier>http://uri.etsi.org/TrstSvc/Svctype/CA/QC</ServiceTypeIdentifier>
+            <ServiceName><Name xml:lang="en">"DIIA". Qualified Trust Services Provider (UA-43395033-2503)</Name></ServiceName>
+            <ServiceDigitalIdentity>
+              <DigitalId>
+                <X509Certificate>MIIEkzCCBDmgAwIBAgIUeEc2OukoAncBAAAAAQAAAKoBAAAwCgYIKoZIzj0EAwIwgdIxNjA0BgNVBAoMLU1pbmlzdHJ5IG9mIGRpZ2l0YWwgdHJhbnNmb3JtYXRpb24gb2YgVWtyYWluZTEeMBwGA1UECwwVQWRtaW5pc3RyYXRvciBJVFMgQ0NBMSgwJgYDVQQDDB9DZW50cmFsIGNlcnRpZmljYXRpb24gYXV0aG9yaXR5MRkwFwYDVQQFExBVQS00MzIyMDg1MS0yNTAzMQswCQYDVQQGEwJVQTENMAsGA1UEBwwES3lpdjEXMBUGA1UEYQwOTlRSVUEtNDMyMjA4NTEwHhcNMjUxMDEzMTIzMjAwWhcNMzAxMDEzMTIzMjAwWjCB2DEgMB4GA1UECgwXU3RhdGUgZW50ZXJwcmlzZSAiRElJQSIxMDAuBgNVBAsMJ0RlcGFydG1lbnQgb2YgRWxlY3Ryb25pYyBUcnVzdCBTZXJ2aWNlczEyMDAGA1UEAwwpIkRJSUEiLiBRdWFsaWZpZWQgVHJ1c3QgU2VydmljZXMgUHJvdmlkZXIxGTAXBgNVBAUTEFVBLTQzMzk1MDMzLTI1MDMxCzAJBgNVBAYTAlVBMQ0wCwYDVQQHDARLeWl2MRcwFQYDVQRhDA5OVFJVQS00MzM5NTAzMzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABMizVG9KNMAhoxs1eAV9HeMEy/F0OjkbIDLNW303GEFIwkQOovuhCHKwvJCpI3GtUPWdDpwCFu1S/SWbiozJ7lSjggHjMIIB3zAdBgNVHQ4EFgQU7A2+gl0BMkrrMj9YrsdOP1wAnxEwDgYDVR0PAQH/BAQDAgEGMDwGA1UdIAQ1MDMwMQYJKoYkAgEBAQIEMCQwIgYIKwYBBQUHAgEWFmh0dHBzOi8vY3pvLmdvdi51YS9jcHMwKQYDVR0RBCIwIIIOY2EuZGlpYS5nb3YudWGBDmNhQGRpaWEuZ292LnVhMBIGA1UdEwEB/wQIMAYBAf8CAQAwPwYIKwYBBQUHAQMEMzAxMAgGBgQAjkYBATAOBgYEAI5GAQcwBBMCVUEwFQYIKwYBBQUHCwIwCQYHBACL7EkBAjAfBgNVHSMEGDAWgBR4RzY66SgCdyJhPEQaUtVivLdfTDBHBgNVHR8EQDA+MDygOqA4hjZodHRwOi8vY3pvLmdvdi51YS9kb3dubG9hZC9jcmxzL0NBLUVDRFNBLTIwMjUtRnVsbC5jcmwwSAYDVR0uBEEwPzA9oDugOYY3aHR0cDovL2N6by5nb3YudWEvZG93bmxvYWQvY3Jscy9DQS1FQ0RTQS0yMDI1LURlbHRhLmNybDA8BggrBgEFBQcBAQQwMC4wLAYIKwYBBQUHMAGGIGh0dHA6Ly9jem8uZ292LnVhL3NlcnZpY2VzL29jc3AvMAoGCCqGSM49BAMCA0gAMEUCIDAQ0r5s2WtdD6wAXpkvu3N6RWJwFTm+sfWrlturt3flAiEA/vzSFSmTgkmLxlasMXsfp/DawVPMpLhqXPN3JhJ/g1Q=</X509Certificate>
+              </DigitalId>
+            </ServiceDigitalIdentity>
+            <ServiceStatus>http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/granted</ServiceStatus>
+            <StatusStartingTime>2025-10-13T12:32:00Z</StatusStartingTime>
+          </ServiceInformation>
+        </TSPService>
+      </TSPServices>
+    </TrustServiceProvider>
+  </TrustServiceProviderList>
+</TrustServiceStatusList>

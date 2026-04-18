@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Synthetic LOTL referencing a single Ukrainian Member State Trust List.
+  Mimics the EU4DigitalUA bridge recognition structure: Ukraine's national
+  QTSP register (oversight.gov.ua / czo.gov.ua) is mapped as an
+  eIDAS-recognised scheme for the purposes of QES validation.
+
+  Produced by hand from public data; every CA below was extracted from
+  http://ca.diia.gov.ua/uploads/certificates/diia_ecdsa.p7b on
+  2026-04-17 (see fixtures/diia/certs/).
+-->
+<TrustServiceStatusList xmlns="http://uri.etsi.org/02231/v2#">
+  <SchemeInformation>
+    <TSLType>http://uri.etsi.org/TrstSvc/TrustedList/TSLType/EUlistofthelists</TSLType>
+    <PointersToOtherTSL>
+      <OtherTSLPointer>
+        <TSLLocation>ua-msTl.xml</TSLLocation>
+        <AdditionalInformation>
+          <OtherInformation>
+            <SchemeTerritory>UA</SchemeTerritory>
+            <MimeType>application/vnd.etsi.tsl+xml</MimeType>
+          </OtherInformation>
+        </AdditionalInformation>
+      </OtherTSLPointer>
+    </PointersToOtherTSL>
+  </SchemeInformation>
+</TrustServiceStatusList>
