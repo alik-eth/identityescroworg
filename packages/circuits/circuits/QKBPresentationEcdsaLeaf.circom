@@ -10,14 +10,15 @@ pragma circom 2.1.9;
 // on-chain alongside this proof, per the §5.4 split-proof fallback (both
 // verifies in one circuit exceed the 22 GB compile budget on dev HW).
 //
-// Public signals (subset of the full 13 — leaf proof doesn't need rTL or
-// algorithmTag, both supplied by the chain proof's public signals):
+// Public signals (13 total — orchestration §2.1):
 //   [0..3]  pkX[4]
 //   [4..7]  pkY[4]
 //   [8]     ctxHash
 //   [9]     declHash
 //   [10]    timestamp
-//   [11]    leafSpkiCommit   Poseidon(Poseidon(leafXLimbs), Poseidon(leafYLimbs))
+//   [11]    nullifier        Poseidon(Poseidon-5(subjectSerialLimbs, len), ctxHash)
+//                            — person-level Sybil gate, §14.4.
+//   [12]    leafSpkiCommit   Poseidon(Poseidon(leafXLimbs), Poseidon(leafYLimbs))
 //                            — binds this proof's leaf SPKI to the chain
 //                              proof's leaf SPKI via an on-chain equality
 //                              check between the two public signals.
@@ -27,6 +28,8 @@ include "./binding/DeclarationWhitelist.circom";
 include "./primitives/Sha256Var.circom";
 include "./primitives/EcdsaP256Verify.circom";
 include "./primitives/PoseidonChunkHashVar.circom";
+include "./primitives/NullifierDerive.circom";
+include "./primitives/X509SubjectSerial.circom";
 include "./secp/Secp256k1PkMatch.circom";
 include "circomlib/circuits/bitify.circom";
 include "circomlib/circuits/poseidon.circom";
@@ -85,7 +88,16 @@ template QKBPresentationEcdsaLeaf() {
     signal input ctxHash;
     signal input declHash;
     signal input timestamp;
+    // Person-level nullifier (§14.4 amendment, 2026-04-18). Public input;
+    // the circuit derives it in §7 below and constrains equality.
+    signal input nullifier;
     signal output leafSpkiCommit;
+
+    // === Private (nullifier extraction) ===
+    // Byte offset into leafDER where the subject.serialNumber (OID 2.5.4.5)
+    // PrintableString content starts, plus its content length (1..32).
+    signal input subjectSerialValueOffset;
+    signal input subjectSerialValueLength;
 
     // === Private ===
     signal input Bcanon[MAX_BCANON];
@@ -277,7 +289,28 @@ template QKBPresentationEcdsaLeaf() {
     packXY.inputs[0] <== packX.out;
     packXY.inputs[1] <== packY.out;
     leafSpkiCommit <== packXY.out;
+
+    // =========================================================================
+    // 7. Person-level nullifier (§14.4 amendment, 2026-04-18).
+    //    Extract the subject.serialNumber (OID 2.5.4.5) value bytes from the
+    //    leaf cert DER, pack into 4 × uint64 LE limbs, derive
+    //        nullifier = Poseidon(Poseidon-5(limbs[0..3], len), ctxHash).
+    //    The limbs never leak; only the ctx-bound nullifier is public.
+    // =========================================================================
+    component subjectSerial = X509SubjectSerial(MAX_CERT);
+    for (var i = 0; i < MAX_CERT; i++) subjectSerial.leafDER[i] <== leafDER[i];
+    subjectSerial.subjectSerialValueOffset <== subjectSerialValueOffset;
+    subjectSerial.subjectSerialValueLength <== subjectSerialValueLength;
+
+    component nullifierDerive = NullifierDerive();
+    for (var i = 0; i < 4; i++) {
+        nullifierDerive.subjectSerialLimbs[i] <== subjectSerial.subjectSerialLimbs[i];
+    }
+    nullifierDerive.subjectSerialLen <== subjectSerialValueLength;
+    nullifierDerive.ctxHash <== ctxHash;
+
+    nullifierDerive.nullifier === nullifier;
 }
 
-component main {public [pkX, pkY, ctxHash, declHash, timestamp]}
+component main {public [pkX, pkY, ctxHash, declHash, timestamp, nullifier]}
     = QKBPresentationEcdsaLeaf();
