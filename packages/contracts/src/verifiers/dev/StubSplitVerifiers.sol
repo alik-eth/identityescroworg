@@ -26,9 +26,10 @@ contract StubGroth16LeafVerifier {
     }
 }
 
-/// @notice DEV-ONLY stub for the split-proof **chain** verifier (5 public
-///         signals). See `StubGroth16LeafVerifier` for the deployment
-///         warning — identical policy.
+/// @notice DEV-ONLY stub for the split-proof **chain** verifier (3 public
+///         signals: rTL, algorithmTag, leafSpkiCommit). See
+///         `StubGroth16LeafVerifier` for the deployment warning —
+///         identical policy.
 contract StubGroth16ChainVerifier {
     bool public accept = true;
 
@@ -40,7 +41,7 @@ contract StubGroth16ChainVerifier {
         uint256[2] calldata,
         uint256[2][2] calldata,
         uint256[2] calldata,
-        uint256[5] calldata
+        uint256[3] calldata
     ) external view returns (bool) {
         return accept;
     }

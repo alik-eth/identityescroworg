@@ -22,19 +22,25 @@ interface IGroth16LeafVerifier {
 }
 
 /// @notice Split-proof Groth16 verifier interface — chain side.
-///         Emitted by `QKBPresentationEcdsaChain.circom` (5 public signals):
+///         Emitted by `QKBPresentationEcdsaChain.circom` (3 public signals):
 ///           [0]     rTL              (trusted-list Merkle root)
 ///           [1]     algorithmTag     (0 = RSA, 1 = ECDSA)
-///           [2]     leafSpkiCommit   (glue output; must equal leaf's)
+///           [2]     leafSpkiCommit   (must equal leaf's; enforced on-chain)
 ///
 ///         RSA and ECDSA chain circuits share this layout; the registry
 ///         dispatches the correct chain verifier via `algorithmTag`.
+///
+///         Width note: orchestration §2.2 originally said uint256[5]; that
+///         was a planning slip. The real snarkjs-generated verifier takes
+///         exactly 3 public signals. Flipped after the stub pump
+///         (`git show 7388df2`) confirmed the width. Spec + orchestration
+///         corrected on main at commit 015503d.
 interface IGroth16ChainVerifier {
     function verifyProof(
         uint256[2] calldata a,
         uint256[2][2] calldata b,
         uint256[2] calldata c,
-        uint256[5] calldata input
+        uint256[3] calldata input
     ) external view returns (bool);
 }
 
@@ -119,7 +125,7 @@ library QKBVerifier {
         leafArr[11] = uint256(inputsLeaf.nullifier);
         leafArr[12] = uint256(inputsLeaf.leafSpkiCommit);
 
-        uint256[5] memory chainArr;
+        uint256[3] memory chainArr;
         chainArr[0] = uint256(inputsChain.rTL);
         chainArr[1] = uint256(inputsChain.algorithmTag);
         chainArr[2] = uint256(inputsChain.leafSpkiCommit);
