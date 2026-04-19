@@ -1,14 +1,21 @@
 /**
- * Phase-2 witness builder tests — validates the 14-signal layout + person-level
- * nullifier per the 2026-04-18 amendment (§14.4):
+ * Phase-2 split-proof witness builder tests.
+ *
+ * Validates the `{leaf, chain, shared}` bundle emitted by buildPhase2Witness
+ * against the orchestration-§2 frozen layouts:
+ *
+ *   Leaf  (13 public signals): pkX[4], pkY[4], ctxHash, declHash, timestamp,
+ *                              nullifier, leafSpkiCommit.
+ *   Chain ( 3 public signals): rTL, algorithmTag, leafSpkiCommit.
+ *
+ * Plus the §14.4 person-level nullifier primitive (2026-04-18 amendment):
  *
  *   secret    = Poseidon(subjectSerialLimbs[0..3], subjectSerialLen)
  *   nullifier = Poseidon(secret, ctxHash)
  *
  * Uses a synthetic CAdES-P256 fixture where the leaf cert carries an
- * ETSI-EN-319-412-1-compliant subject serialNumber attribute (OID 2.5.4.5,
- * PrintableString). The fixture's serialNumber is the test-side source of
- * truth for what X509SubjectSerial would extract inside the circuit.
+ * ETSI-EN-319-412-1-compliant subject serialNumber (OID 2.5.4.5) and a
+ * self-signed intermediate so the chain witness has every slot populated.
  */
 import { describe, expect, it, beforeAll } from 'vitest';
 import * as asn1js from 'asn1js';
@@ -23,10 +30,15 @@ import {
 import { parseCades } from '../../src/lib/cades';
 import {
   ALGORITHM_TAG_ECDSA_STR,
+  MAX_BCANON,
+  MAX_CERT,
+  MAX_SA,
+  MERKLE_DEPTH,
   buildPhase2Witness,
+  chainPublicSignals,
   computeNullifier,
   extractSubjectSerial,
-  publicSignalsFromPhase2Witness,
+  leafPublicSignals,
   subjectSerialToLimbs,
 } from '../../src/lib/witness';
 
@@ -53,8 +65,12 @@ beforeAll(async () => {
   f = await makeFixture();
 }, 60_000);
 
-describe('phase2 witness — shape', () => {
-  it('emits LeafWitnessInput fields + rTL + algorithmTag + nullifier + private inputs', async () => {
+// -------------------------------------------------------------------------
+// Bundle shape — {leaf, chain, shared}
+// -------------------------------------------------------------------------
+
+describe('buildPhase2Witness — split bundle', () => {
+  it('emits leaf + chain witnesses with matching leafSpkiCommit', async () => {
     const parsed = parseCades(f.p7s);
     const w = await buildPhase2Witness({
       parsed,
@@ -62,17 +78,74 @@ describe('phase2 witness — shape', () => {
       bindingBytes: f.bindingBytes,
       trustedListRoot: 0n,
     });
-    // Phase-1 superset — all existing witness fields are still present.
-    expect(w.pkX).toHaveLength(4);
-    expect(w.pkY).toHaveLength(4);
-    expect(w.Bcanon).toHaveLength(1024);
-    // Phase-2 additions.
-    expect(typeof w.rTL).toBe('string');
-    expect(typeof w.nullifier).toBe('string');
-    expect(w.algorithmTag).toBe(ALGORITHM_TAG_ECDSA_STR);
-    expect(w.subjectSerialLimbs).toHaveLength(4);
-    expect(w.subjectSerialValueLength).toBe(String(FIXTURE_SUBJECT_SERIAL.length));
-    expect(w.subjectSerialValueOffset).toMatch(/^\d+$/);
+    expect(w.leaf).toBeDefined();
+    expect(w.chain).toBeDefined();
+    expect(w.shared).toBeDefined();
+
+    // leafSpkiCommit must be identical across leaf + chain + shared —
+    // this is the single glue-signal the on-chain verifier asserts on.
+    expect(w.leaf.leafSpkiCommit).toBe(w.chain.leafSpkiCommit);
+    expect(w.shared.leafSpkiCommit).toBe(w.leaf.leafSpkiCommit);
+
+    // Shared derivations are the same values the circuit-level witnesses
+    // already carry; re-exposing them just saves the submit layer a
+    // rummage through the witness object.
+    expect(w.shared.pkX).toEqual(w.leaf.pkX);
+    expect(w.shared.pkY).toEqual(w.leaf.pkY);
+    expect(w.shared.ctxHash).toBe(w.leaf.ctxHash);
+    expect(w.shared.declHash).toBe(w.leaf.declHash);
+    expect(w.shared.timestamp).toBe(w.leaf.timestamp);
+    expect(w.shared.nullifier).toBe(w.leaf.nullifier);
+    expect(w.shared.rTL).toBe(w.chain.rTL);
+    expect(w.shared.algorithmTag).toBe(w.chain.algorithmTag);
+
+    // leafDER must be identical on both sides — the chain circuit's
+    // leafSpkiCommit equality constraint re-reads leafDER at the same
+    // offsets, so any drift would break the proof.
+    expect(w.leaf.leafDER).toEqual(w.chain.leafDER);
+    expect(w.leaf.leafSpkiXOffset).toBe(w.chain.leafSpkiXOffset);
+    expect(w.leaf.leafSpkiYOffset).toBe(w.chain.leafSpkiYOffset);
+  });
+
+  it('leaf witness: array widths match the leaf circuit signal shapes', async () => {
+    const parsed = parseCades(f.p7s);
+    const { leaf } = await buildPhase2Witness({
+      parsed,
+      binding: f.binding,
+      bindingBytes: f.bindingBytes,
+      trustedListRoot: 0n,
+    });
+    expect(leaf.pkX).toHaveLength(4);
+    expect(leaf.pkY).toHaveLength(4);
+    expect(leaf.Bcanon).toHaveLength(MAX_BCANON);
+    expect(leaf.BcanonPaddedIn).toHaveLength(MAX_BCANON);
+    expect(leaf.signedAttrs).toHaveLength(MAX_SA);
+    expect(leaf.signedAttrsPaddedIn).toHaveLength(MAX_SA);
+    expect(leaf.leafDER).toHaveLength(MAX_CERT);
+    expect(leaf.leafSigR).toHaveLength(6);
+    expect(leaf.leafSigS).toHaveLength(6);
+    expect(leaf.subjectSerialValueLength).toBe(FIXTURE_SUBJECT_SERIAL.length);
+    expect(leaf.subjectSerialValueOffset).toBeGreaterThan(0);
+  });
+
+  it('chain witness: array widths match the chain circuit signal shapes', async () => {
+    const parsed = parseCades(f.p7s);
+    const { chain } = await buildPhase2Witness({
+      parsed,
+      binding: f.binding,
+      bindingBytes: f.bindingBytes,
+      trustedListRoot: 0n,
+    });
+    expect(chain.leafDER).toHaveLength(MAX_CERT);
+    expect(chain.leafTbsPaddedIn).toHaveLength(MAX_CERT);
+    expect(chain.intDER).toHaveLength(MAX_CERT);
+    expect(chain.intSigR).toHaveLength(6);
+    expect(chain.intSigS).toHaveLength(6);
+    expect(chain.merklePath).toHaveLength(MERKLE_DEPTH);
+    expect(chain.merkleIndices).toHaveLength(MERKLE_DEPTH);
+    expect(chain.intDerLen).toBe(f.intDer.length);
+    expect(chain.intSpkiXOffset).toBeGreaterThan(0);
+    expect(chain.intSpkiYOffset).toBe(chain.intSpkiXOffset + 32);
   });
 
   it('accepts trustedListRoot as bigint, decimal string, or 0x-hex', async () => {
@@ -95,60 +168,126 @@ describe('phase2 witness — shape', () => {
       bindingBytes: f.bindingBytes,
       trustedListRoot: '0x1234',
     });
-    expect(w1.rTL).toBe('4660');
-    expect(w2.rTL).toBe('4660');
-    expect(w3.rTL).toBe('4660');
+    expect(w1.chain.rTL).toBe('4660');
+    expect(w2.chain.rTL).toBe('4660');
+    expect(w3.chain.rTL).toBe('4660');
+    expect(w1.shared.rTL).toBe('4660');
   });
-});
 
-describe('phase2 witness — 14-signal public layout (frozen)', () => {
-  it('publicSignalsFromPhase2Witness emits 14 signals in orchestration §2 order', async () => {
+  it('defaults merkle path + indices to all-zero when no override supplied', async () => {
     const parsed = parseCades(f.p7s);
-    const w = await buildPhase2Witness({
+    const { chain } = await buildPhase2Witness({
       parsed,
       binding: f.binding,
       bindingBytes: f.bindingBytes,
       trustedListRoot: 0n,
     });
-    const ps = publicSignalsFromPhase2Witness(w);
-    expect(ps.signals).toHaveLength(14);
-    expect(ps.signals.slice(0, 4)).toEqual(w.pkX);
-    expect(ps.signals.slice(4, 8)).toEqual(w.pkY);
-    expect(ps.signals[8]).toBe(w.ctxHash);
-    expect(ps.signals[9]).toBe(w.rTL);
-    expect(ps.signals[10]).toBe(w.declHash);
-    expect(ps.signals[11]).toBe(w.timestamp);
-    expect(ps.signals[12]).toBe(w.algorithmTag);
-    expect(ps.signals[13]).toBe(w.nullifier);
+    expect(chain.merklePath.every((v) => v === '0')).toBe(true);
+    expect(chain.merkleIndices.every((v) => v === 0)).toBe(true);
+  });
+
+  it('threads caller-supplied merkle path + indices into the chain witness', async () => {
+    const parsed = parseCades(f.p7s);
+    const path = Array.from({ length: MERKLE_DEPTH }, (_, i) => BigInt(i + 1));
+    const indices = Array.from({ length: MERKLE_DEPTH }, (_, i) => (i % 2) as 0 | 1);
+    const { chain } = await buildPhase2Witness({
+      parsed,
+      binding: f.binding,
+      bindingBytes: f.bindingBytes,
+      trustedListRoot: 0n,
+      merklePath: path,
+      merkleIndices: indices,
+    });
+    expect(chain.merklePath).toEqual(path.map((v) => v.toString()));
+    expect(chain.merkleIndices).toEqual(indices);
+  });
+
+  it('falls back to the CMS-bundled intermediate when no override is passed', async () => {
+    const parsed = parseCades(f.p7s);
+    expect(parsed.intermediateCertDer).not.toBeNull();
+    const { chain } = await buildPhase2Witness({
+      parsed,
+      binding: f.binding,
+      bindingBytes: f.bindingBytes,
+      trustedListRoot: 0n,
+    });
+    // First intDerLen bytes should equal the raw intermediate DER.
+    const intBytes = chain.intDER.slice(0, chain.intDerLen);
+    expect(intBytes).toEqual(Array.from(parsed.intermediateCertDer!));
+  });
+});
+
+// -------------------------------------------------------------------------
+// Public-signal packers (leaf[13], chain[3])
+// -------------------------------------------------------------------------
+
+describe('public-signal packers', () => {
+  it('leafPublicSignals emits 13 signals in orchestration §2.1 order', async () => {
+    const parsed = parseCades(f.p7s);
+    const { leaf } = await buildPhase2Witness({
+      parsed,
+      binding: f.binding,
+      bindingBytes: f.bindingBytes,
+      trustedListRoot: 0n,
+    });
+    const ps = leafPublicSignals(leaf);
+    expect(ps.signals).toHaveLength(13);
+    expect(ps.signals.slice(0, 4)).toEqual(leaf.pkX);
+    expect(ps.signals.slice(4, 8)).toEqual(leaf.pkY);
+    expect(ps.signals[8]).toBe(leaf.ctxHash);
+    expect(ps.signals[9]).toBe(leaf.declHash);
+    expect(ps.signals[10]).toBe(leaf.timestamp);
+    expect(ps.signals[11]).toBe(leaf.nullifier);
+    expect(ps.signals[12]).toBe(leaf.leafSpkiCommit);
+  });
+
+  it('chainPublicSignals emits 3 signals in orchestration §2.2 order', async () => {
+    const parsed = parseCades(f.p7s);
+    const { chain } = await buildPhase2Witness({
+      parsed,
+      binding: f.binding,
+      bindingBytes: f.bindingBytes,
+      trustedListRoot: '0xdeadbeef',
+    });
+    const ps = chainPublicSignals(chain);
+    expect(ps.signals).toHaveLength(3);
+    expect(ps.signals[0]).toBe(chain.rTL);
+    expect(ps.signals[1]).toBe(chain.algorithmTag);
+    expect(ps.signals[2]).toBe(chain.leafSpkiCommit);
   });
 
   it('algorithmTag is "1" for ECDSA-P256 leaf', async () => {
     const parsed = parseCades(f.p7s);
     expect(parsed.algorithmTag).toBe(1);
-    const w = await buildPhase2Witness({
+    const { shared, chain } = await buildPhase2Witness({
       parsed,
       binding: f.binding,
       bindingBytes: f.bindingBytes,
       trustedListRoot: 0n,
     });
-    expect(w.algorithmTag).toBe('1');
+    expect(shared.algorithmTag).toBe(ALGORITHM_TAG_ECDSA_STR);
+    expect(chain.algorithmTag).toBe('1');
   });
 
-  it('every signal is a decimal-string field element', async () => {
+  it('every leaf public signal is a decimal-string field element', async () => {
     const parsed = parseCades(f.p7s);
-    const w = await buildPhase2Witness({
+    const { leaf } = await buildPhase2Witness({
       parsed,
       binding: f.binding,
       bindingBytes: f.bindingBytes,
       trustedListRoot: 0n,
     });
-    const ps = publicSignalsFromPhase2Witness(w);
+    const ps = leafPublicSignals(leaf);
     for (const s of ps.signals) {
       expect(typeof s).toBe('string');
       expect(s).toMatch(/^\d+$/);
     }
   });
 });
+
+// -------------------------------------------------------------------------
+// Person-level nullifier primitive (§14.4)
+// -------------------------------------------------------------------------
 
 describe('nullifier primitive (§14.4 amended)', () => {
   it('subjectSerialToLimbs packs content bytes LSB-first — matches X509SubjectSerial.circom', () => {
@@ -193,17 +332,18 @@ describe('nullifier primitive (§14.4 amended)', () => {
 
   it('nullifier == Poseidon(Poseidon(serialLimbs, serialLen), ctxHash) — reference', async () => {
     const parsed = parseCades(f.p7s);
-    const w = await buildPhase2Witness({
+    const { leaf } = await buildPhase2Witness({
       parsed,
       binding: f.binding,
       bindingBytes: f.bindingBytes,
       trustedListRoot: 0n,
     });
-    const serialLimbs = w.subjectSerialLimbs.map((s) => BigInt(s));
-    const serialLen = BigInt(w.subjectSerialValueLength);
-    const ctxHash = BigInt(w.ctxHash);
+    const serialBytes = new TextEncoder().encode(FIXTURE_SUBJECT_SERIAL);
+    const serialLimbs = subjectSerialToLimbs(serialBytes).map((s) => BigInt(s));
+    const serialLen = BigInt(leaf.subjectSerialValueLength);
+    const ctxHash = BigInt(leaf.ctxHash);
     const expected = await computeNullifier(serialLimbs, serialLen, ctxHash);
-    expect(w.nullifier).toBe(expected.toString());
+    expect(leaf.nullifier).toBe(expected.toString());
   });
 
   it('same inputs → same nullifier (uniqueness-per-context)', async () => {
@@ -220,7 +360,7 @@ describe('nullifier primitive (§14.4 amended)', () => {
       bindingBytes: f.bindingBytes,
       trustedListRoot: 0n,
     });
-    expect(w2.nullifier).toBe(w1.nullifier);
+    expect(w2.leaf.nullifier).toBe(w1.leaf.nullifier);
   });
 
   it('different ctxHash → different nullifier (unlinkability across contexts)', async () => {
@@ -248,8 +388,9 @@ describe('nullifier primitive (§14.4 amended)', () => {
 // --- Synthetic CAdES + CA fixture ------------------------------------------
 //
 // Leaf carries the ETSI-compliant subject.serialNumber attribute (OID 2.5.4.5,
-// PrintableString "PNODE-12345678"). Intermediate is self-signed; chain
-// validity is not exercised here — only the leaf's DER parsing path.
+// PrintableString "PNODE-12345678") and an intermediate-signed cert chain
+// so the chain witness has intDER + outer-cert signature slots populated.
+// Merkle proof is caller-supplied; not exercised here.
 
 async function makeFixture(): Promise<Fixture> {
   const subtle = globalThis.crypto.subtle;

@@ -13,12 +13,23 @@
  * pick the matching `public/circuits/{rsa,ecdsa}/{wasm,zkey}` pair before
  * calling `prove()`; the prover itself just consumes the URLs handed in.
  *
+ * Split-proof (2026-04-18 pivot): each QES presentation needs TWO proofs —
+ * leaf (13 public signals) + chain (3 public signals). Both are Groth16
+ * against their own zkey. A browser tab cannot hold both zkeys resident
+ * simultaneously (leaf ≈ 5.5 GB, chain ≈ 2.3 GB → ~8 GB peak = OOM on
+ * most devices), so `proveSplit` drives them SERIALLY and terminates the
+ * worker between runs so the VM reclaims the leaf zkey's heap before
+ * chain proving starts. Trade-off: wall time is ~60 s instead of ~40 s
+ * parallel, but the tab doesn't crash.
+ *
  * snarkjs does not emit fine-grained progress; we synthesize a heartbeat
  * every 2s on the worker side so the UI shows elapsed-time progress
  * during the prove stage.
  */
 import type { AlgorithmTag } from './cades';
 import { QkbError } from './errors';
+import type { ChainWitnessInput, LeafWitnessInput, Phase2Witness } from './witness';
+import type { AlgorithmArtifactUrls, CircuitArtifactUrls } from './prover.config';
 
 export type ProofStage = 'witness' | 'prove' | 'finalize';
 
@@ -237,4 +248,91 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 
 function checkAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new QkbError('prover.cancelled');
+}
+
+// ---------------------------------------------------------------------------
+// Split-proof orchestration — leaf + chain Groth16 proofs in sequence.
+// ---------------------------------------------------------------------------
+
+export type ProofSide = 'leaf' | 'chain';
+
+export interface SplitProgress extends ProofProgress {
+  side: ProofSide;
+}
+
+export interface SplitProveOptions {
+  /** Swappable IProver (defaults to SnarkjsProver). Same instance runs both
+   *  proofs; `SnarkjsProver` terminates its worker after each prove so the
+   *  zkey heap is reclaimed before the next zkey loads. */
+  readonly prover: IProver;
+  /** Leaf + chain artifact URLs from prover.config.ts (keyed per algorithm). */
+  readonly artifacts: AlgorithmArtifactUrls;
+  readonly algorithmTag?: AlgorithmTag;
+  readonly signal?: AbortSignal;
+  readonly onProgress?: (p: SplitProgress) => void;
+}
+
+export interface SplitProveResult {
+  readonly proofLeaf: Groth16Proof;
+  readonly publicLeaf: string[]; // 13 decimal-string field elements
+  readonly proofChain: Groth16Proof;
+  readonly publicChain: string[]; // 3 decimal-string field elements
+}
+
+/**
+ * Run the two Groth16 provers serially (leaf first, chain second). Running
+ * in parallel would blow a browser tab's RAM (each zkey is several GB);
+ * serial trades ~15 s of wall time for reliability. The progress callback
+ * tags each event with `side: 'leaf'|'chain'` so the UI can render a
+ * two-step spinner.
+ */
+export async function proveSplit(
+  witness: Phase2Witness,
+  opts: SplitProveOptions,
+): Promise<SplitProveResult> {
+  const { prover, artifacts, algorithmTag, signal, onProgress } = opts;
+  const leaf = await runSide(
+    prover,
+    'leaf',
+    witness.leaf,
+    artifacts.leaf,
+    algorithmTag,
+    signal,
+    onProgress,
+  );
+  const chain = await runSide(
+    prover,
+    'chain',
+    witness.chain,
+    artifacts.chain,
+    algorithmTag,
+    signal,
+    onProgress,
+  );
+  return {
+    proofLeaf: leaf.proof,
+    publicLeaf: leaf.publicSignals,
+    proofChain: chain.proof,
+    publicChain: chain.publicSignals,
+  };
+}
+
+async function runSide(
+  prover: IProver,
+  side: ProofSide,
+  witness: LeafWitnessInput | ChainWitnessInput,
+  urls: CircuitArtifactUrls,
+  algorithmTag: AlgorithmTag | undefined,
+  signal: AbortSignal | undefined,
+  onProgress: ((p: SplitProgress) => void) | undefined,
+): Promise<ProveResult> {
+  const input = witness as unknown as Record<string, unknown>;
+  const opts: ProveOptions = {
+    wasmUrl: urls.wasmUrl,
+    zkeyUrl: urls.zkeyUrl,
+    onProgress: (p) => onProgress?.({ ...p, side }),
+  };
+  if (algorithmTag !== undefined) opts.algorithmTag = algorithmTag;
+  if (signal !== undefined) opts.signal = signal;
+  return prover.prove(input, opts);
 }

@@ -19,16 +19,15 @@ import { useNavigate } from '@tanstack/react-router';
 import { PhaseCard } from '../components/PhaseCard';
 import { parseCades } from '../lib/cades';
 import { verifyQes, type TrustedCasFile, type VerifyInput, type VerifyOk } from '../lib/qesVerify';
-import { buildLeafWitness } from '../lib/witness';
+import { buildPhase2Witness } from '../lib/witness';
 import {
   MockProver,
+  proveSplit,
   type IProver,
-  type ProofProgress,
   type ProofStage,
-  type ProveResult,
+  type SplitProgress,
 } from '../lib/prover';
-import { loadArtifacts, validateUrlsJson } from '../lib/circuitArtifacts';
-import urlsJson from '../../fixtures/circuits/urls.json';
+import { getProverConfig } from '../lib/prover.config';
 import {
   loadSession,
   saveSession,
@@ -64,6 +63,10 @@ export function UploadScreen() {
 
   const [status, setStatus] = useState<Status>('idle');
   const [stage, setStage] = useState<ProofStage | null>(null);
+  // Split-proof UX: track whether we're currently working on the leaf or
+  // chain proof so the progress banner can render "1 / 2 leaf" / "2 / 2
+  // chain" copy.
+  const [proofSide, setProofSide] = useState<'leaf' | 'chain' | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -130,11 +133,20 @@ export function UploadScreen() {
         trustedCas,
       });
 
-      // Build witness for the leaf circuit.
-      const witness = buildLeafWitness({
+      // Split-proof pivot (2026-04-18): build leaf + chain witnesses from
+      // the same shared derivations (Bcanon offsets, RDN subject-serial
+      // scan, leaf SPKI offsets, leafSpkiCommit, nullifier). trustedListRoot
+      // comes from the flattener-pumped trusted-cas.json. Merkle path +
+      // indices default to all-zero here until the /upload flow starts
+      // fetching layers.json — the MockProver path ignores them, and the
+      // real SnarkjsProver path will need them before the chain proof
+      // actually verifies (post-ceremony).
+      const trustedListRoot = trustedCas.cas[0]?.poseidonHash ?? '0x0';
+      const witness = await buildPhase2Witness({
         parsed,
         binding: session.binding!,
         bindingBytes,
+        trustedListRoot,
       });
 
       setStatus('proving');
@@ -143,21 +155,21 @@ export function UploadScreen() {
       abortRef.current = controller;
       const start = Date.now();
 
-      let wasmUrl = '';
-      let zkeyUrl = '';
-      if (window.__QKB_REAL_PROVER__) {
-        const urls = validateUrlsJson(urlsJson, 'ecdsa');
-        const artifacts = await loadArtifacts('ecdsa', urls, { signal: controller.signal });
-        wasmUrl = blobUrl(artifacts.wasmBytes, 'application/wasm');
-        zkeyUrl = blobUrl(artifacts.zkeyBytes, 'application/octet-stream');
-      }
+      // Artifact URLs per orchestration §7 + prover.config.ts placeholders.
+      // Lead pumps real R2 sha256s + URLs after the leaf / chain ceremonies
+      // complete on Fly. Until then the MockProver is the default and
+      // never actually fetches the zkey.
+      const algo = verified.algorithmTag === 1 ? 'ecdsa' : 'rsa';
+      const artifacts = getProverConfig(algo);
 
-      const result: ProveResult = await prover.prove(witness as unknown as Record<string, unknown>, {
-        wasmUrl,
-        zkeyUrl,
+      const result = await proveSplit(witness, {
+        prover,
+        artifacts,
+        algorithmTag: verified.algorithmTag,
         signal: controller.signal,
-        onProgress: (p: ProofProgress) => {
+        onProgress: (p: SplitProgress) => {
           setStage(p.stage);
+          setProofSide(p.side);
           if (p.elapsedMs !== undefined) setElapsedMs(p.elapsedMs);
           else setElapsedMs(Date.now() - start);
         },
@@ -165,14 +177,14 @@ export function UploadScreen() {
 
       saveSession({
         cadesB64: bytesToB64(p7sBuf),
-        proof: result.proof,
-        publicSignals: result.publicSignals,
+        proofLeaf: result.proofLeaf,
+        publicLeaf: result.publicLeaf,
+        proofChain: result.proofChain,
+        publicChain: result.publicChain,
         leafCertDerB64: bytesToB64(parsed.leafCertDer),
         intCertDerB64: bytesToB64(parsed.intermediateCertDer ?? new Uint8Array()),
-        trustedListRoot: trustedCas.cas[0]?.poseidonHash ?? '0x',
-        circuitVersion:
-          (urlsJson as { ceremony?: { circuit?: string } }).ceremony?.circuit ??
-          'QKBPresentationEcdsaLeaf',
+        trustedListRoot: typeof trustedListRoot === 'string' ? trustedListRoot : String(trustedListRoot),
+        circuitVersion: 'QKBPresentationEcdsaLeaf+Chain',
         algorithmTag: verified.algorithmTag,
       });
       setStatus('done');
@@ -235,6 +247,14 @@ export function UploadScreen() {
         <div className="mt-5 space-y-2" data-testid="upload-proving">
           <p className="text-sm text-slate-300">{t('upload.proving')}</p>
           <div className="flex items-center gap-3 text-xs font-mono text-slate-400">
+            {proofSide && (
+              <>
+                <span data-testid="prove-side">
+                  {proofSide === 'leaf' ? '1 / 2 leaf' : '2 / 2 chain'}
+                </span>
+                <span>·</span>
+              </>
+            )}
             <span data-testid="prove-stage">{stage && t(`upload.stage${cap(stage)}`)}</span>
             <span>·</span>
             <span>
@@ -294,12 +314,6 @@ async function fetchTrustedCas(): Promise<TrustedCasFile> {
   const res = await fetch('./trusted-cas/trusted-cas.json');
   if (!res.ok) throw new Error(`trusted-cas fetch failed: ${res.status}`);
   return (await res.json()) as TrustedCasFile;
-}
-
-function blobUrl(bytes: Uint8Array, type: string): string {
-  const ab = new ArrayBuffer(bytes.byteLength);
-  new Uint8Array(ab).set(bytes);
-  return URL.createObjectURL(new Blob([ab], { type }));
 }
 
 function cap(s: string): string {

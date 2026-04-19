@@ -204,24 +204,71 @@ test('upload — parse → verify (stubbed) → mock-prove → /register handoff
   await expect(page).toHaveURL(/\/register$/);
 });
 
-test('register — missing-bundle fallback when session has no proof', async ({ page }) => {
+test('register — missing-bundle fallback when session has no split proofs', async ({ page }) => {
+  // Split-proof pivot (2026-04-18): /register renders the missing-bundle
+  // banner unless proofLeaf, publicLeaf, proofChain, AND publicChain are
+  // all present. A partial session (only one side) still trips this guard.
   await page.goto('/register');
   await expect(page.getByTestId('register-missing')).toBeVisible();
 });
 
 test('register — connect wallet + submit register() via mocked EIP-1193', async ({ page }) => {
-  // Seed session with a mock proof/publicSignals so /register renders the
-  // connect/submit surface, then inject a stub EIP-1193 provider + submit
-  // callback so the assertion chain doesn't depend on a real chain.
+  // Seed session with a mock SPLIT-PROOF bundle so /register renders the
+  // connect/submit surface. Split-proof pivot (2026-04-18): V3's register()
+  // takes a leaf proof (13-signal public output) AND a chain proof
+  // (3-signal public output); the route guard requires all four session
+  // keys (proofLeaf + publicLeaf + proofChain + publicChain) to be present
+  // before rendering the submit path, falling through to the missing-bundle
+  // banner otherwise.
+  //
+  // Shapes:
+  //   - Groth16Proof: {pi_a:[string,string,'1'], pi_b:[[s,s],[s,s],['1','0']], pi_c:[s,s,'1']}
+  //     The third element is the normalized Jacobian z-coord; packProof
+  //     projects to the first two per element.
+  //   - publicLeaf (13): pkX[0..3], pkY[0..3], ctxHash[8], declHash[9],
+  //     timestamp[10], nullifier[11], leafSpkiCommit[12] — all decimal
+  //     strings.
+  //   - publicChain (3): rTL[0], algorithmTag[1] ('1' = ECDSA),
+  //     leafSpkiCommit[2] — must equal publicLeaf[12] for the V3 on-chain
+  //     equality check. The __QKB_SUBMIT_TX__ stub below bypasses real ABI
+  //     encoding so strict equality isn't verified in-test, but the test
+  //     data mirrors the invariant to stay faithful.
   const mockAddress = '0x00000000000000000000000000000000000000aa';
   const mockTx = '0xdeadbeef'.padEnd(66, '0');
+  const mockCommit = '99';
   await page.addInitScript(
-    ({ addr, tx }) => {
+    ({ addr, tx, commit }) => {
+      const mockProof = {
+        pi_a: ['0x1', '0x2', '1'],
+        pi_b: [
+          ['0x3', '0x4'],
+          ['0x5', '0x6'],
+          ['1', '0'],
+        ],
+        pi_c: ['0x7', '0x8', '1'],
+        protocol: 'groth16',
+        curve: 'bn128',
+      };
       sessionStorage.setItem(
         'qkb.session.v1',
         JSON.stringify({
-          proof: { pi_a: ['0x1'], pi_b: [['0x2']], pi_c: ['0x3'] },
-          publicSignals: ['1', '2', '3'],
+          proofLeaf: mockProof,
+          publicLeaf: [
+            '1', '2', '3', '4',      // pkX
+            '5', '6', '7', '8',      // pkY
+            '0',                     // ctxHash (empty context)
+            '1234',                  // declHash
+            '1730000000',            // timestamp
+            '42',                    // nullifier
+            commit,                  // leafSpkiCommit
+          ],
+          proofChain: mockProof,
+          publicChain: [
+            '4660',                  // rTL (0x1234)
+            '1',                     // algorithmTag (ECDSA)
+            commit,                  // leafSpkiCommit — matches publicLeaf[12]
+          ],
+          algorithmTag: 1,
         }),
       );
       (window as unknown as { __QKB_ETHEREUM__: unknown }).__QKB_ETHEREUM__ = {
@@ -234,7 +281,7 @@ test('register — connect wallet + submit register() via mocked EIP-1193', asyn
       (window as unknown as { __QKB_SUBMIT_TX__: unknown }).__QKB_SUBMIT_TX__ =
         async (input: { from: string }) => ({ txHash: tx, pkAddr: input.from });
     },
-    { addr: mockAddress, tx: mockTx },
+    { addr: mockAddress, tx: mockTx, commit: mockCommit },
   );
 
   await page.goto('/register');
