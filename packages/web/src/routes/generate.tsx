@@ -22,7 +22,6 @@ import { saveSession, bytesToHex, bytesToB64 } from '../lib/session';
 import { localizeError } from '../lib/errors';
 import { recoverPubkeyFromWallet, WalletPubkeyError } from '../lib/walletPubkey';
 import { pkAddressFromHex } from '../lib/pkAddress';
-import { MAX_BCANON } from '../lib/witness';
 
 type KeySource = 'fresh' | 'wallet';
 
@@ -91,16 +90,6 @@ export function GenerateScreen() {
             })
           : buildBinding({ pk, timestamp, nonce, locale });
       const bcanon = canonicalizeBinding(binding);
-      if (bcanon.length > MAX_BCANON) {
-        setError(
-          t('generate.bcanonTooLarge', {
-            got: bcanon.length,
-            max: MAX_BCANON,
-            over: bcanon.length - MAX_BCANON,
-          }),
-        );
-        return;
-      }
       saveSession({
         ...(privkeyHex ? { privkeyHex } : {}),
         pubkeyUncompressedHex: pubkeyHex,
