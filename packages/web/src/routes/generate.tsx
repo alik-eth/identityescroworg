@@ -26,16 +26,16 @@ import { pkAddressFromHex } from '../lib/pkAddress';
 type KeySource = 'fresh' | 'wallet';
 
 export function GenerateScreen() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const navigate = useNavigate();
 
   const [pubkeyHex, setPubkeyHex] = useState<string | null>(null);
   const [privkeyHex, setPrivkeyHex] = useState<string | null>(null);
   const [keySource, setKeySource] = useState<KeySource | null>(null);
   const [walletAddress, setWalletAddress] = useState<`0x${string}` | null>(null);
-  const [locale, setLocale] = useState<Locale>(
-    (i18n.language.startsWith('uk') ? 'uk' : 'en') as Locale,
-  );
+  // UK declaration (905 B Cyrillic) overflows MAX_BCANON=1024 in the current
+  // leaf ceremony. Force EN until the re-ceremony with a larger buffer ships.
+  const [locale, setLocale] = useState<Locale>('en');
   const [contextText, setContextText] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -182,7 +182,9 @@ export function GenerateScreen() {
             className="bg-slate-900 border border-slate-700 text-slate-200 text-sm rounded px-2 py-1"
           >
             <option value="en">{t('lang.en')}</option>
-            <option value="uk">{t('lang.uk')}</option>
+            <option value="uk" disabled>
+              {t('lang.uk')} (pending re-ceremony)
+            </option>
           </select>
         </div>
 

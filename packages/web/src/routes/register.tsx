@@ -34,6 +34,8 @@ import sepoliaV3 from '../../fixtures/contracts/sepolia.json';
 // surface as a loud boot-time assert here rather than a silent calldata
 // mismatch at submit time.
 const REGISTRY_ADDRESS_SEPOLIA = sepoliaV3.registry as `0x${string}`;
+const REGISTRY_CHAIN_ID = sepoliaV3.chainId as number;
+const REGISTRY_CHAIN_ID_HEX = `0x${REGISTRY_CHAIN_ID.toString(16)}`;
 if (sepoliaV3.registryVersion !== 'v3') {
   // Throw at module load — if this SPA bundle was built against a stale
   // sepolia.json, /register would otherwise send V3-shaped calldata to a
@@ -122,6 +124,19 @@ export function RegisterScreen() {
     try {
       const accounts = (await provider.request({ method: 'eth_requestAccounts' })) as string[];
       setAddress(accounts[0] ?? null);
+      // Pin the wallet to Sepolia so the V3 registry calldata lands on the
+      // right chain. wallet_switchEthereumChain is idempotent — a no-op if
+      // already on Sepolia, switches or prompts if not.
+      try {
+        await provider.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: REGISTRY_CHAIN_ID_HEX }],
+        });
+      } catch (switchErr) {
+        // Non-fatal: surface as a warning so the user knows the submit path
+        // will refuse if the chain is wrong.
+        console.warn('[qkb] wallet_switchEthereumChain failed', switchErr);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -154,6 +169,22 @@ export function RegisterScreen() {
 
     setSubmitting(true);
     try {
+      // Hard-gate on chainId BEFORE encoding calldata — if the wallet is on
+      // mainnet or a local chain, the tx would land at a random address.
+      const currentChain = (await provider.request({ method: 'eth_chainId' })) as string;
+      const currentChainId = parseInt(currentChain, 16);
+      console.info('[qkb] register chainId check', {
+        walletChainId: currentChainId,
+        expected: REGISTRY_CHAIN_ID,
+        registry: REGISTRY_ADDRESS_SEPOLIA,
+      });
+      if (currentChainId !== REGISTRY_CHAIN_ID) {
+        setError(
+          `Wrong network — switch wallet to Sepolia (chainId ${REGISTRY_CHAIN_ID}). Currently on chainId ${currentChainId}.`,
+        );
+        setSubmitting(false);
+        return;
+      }
       const submit =
         window.__QKB_SUBMIT_TX__ ??
         (async (input: SubmitTxInput): Promise<SubmitTxResult> => {
@@ -198,9 +229,20 @@ export function RegisterScreen() {
       // Map V3 custom-error selectors (NullifierUsed, RootMismatch,
       // AlreadyBound, BindingTooOld, AgeExceeded) to localized QkbError copy
       // before falling back to the raw wallet message.
+      console.error('[qkb] register failure:', err);
+      if (err && typeof err === 'object' && 'details' in err) {
+        console.error('[qkb] register failure details:', (err as { details?: unknown }).details);
+      }
       const classified = classifyWalletRevert(err);
       if (classified) {
         setError(localizeError(classified, { t }));
+      } else if (err && typeof err === 'object' && 'details' in err) {
+        const details = (err as { details?: Record<string, unknown> }).details ?? {};
+        const tag = [details.reason, details.field, details.got, details.max]
+          .filter((v) => v !== undefined && v !== null)
+          .join('/');
+        const msg = err instanceof Error ? err.message : String(err);
+        setError(tag ? `${msg} [${tag}]` : msg);
       } else {
         setError(err instanceof Error ? err.message : String(err));
       }
