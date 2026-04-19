@@ -47,6 +47,7 @@
     "derivedFromWallet": "from {{address}}",
     "pkAddressLabel": "On-chain address bound to this key",
     "pkAddressHelp": "This is the Ethereum address that register() will bind on Sepolia. It's derived from the public key above as keccak256(X‖Y)[-20:] (EIP-55 checksum).",
+    "bcanonTooLarge": "Canonical binding is {{got}} bytes, circuit limit is {{max}} ({{over}} bytes over). The Ukrainian declaration is too long for the current circuit parameters. Switch to English and try again.",
     "walletError": {
       "default": "Could not get public key from wallet.",
       "no-provider": "No wallet detected. Install MetaMask or another EIP-1193 wallet.",
