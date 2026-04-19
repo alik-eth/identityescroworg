@@ -1,14 +1,25 @@
 {
   "chainId": 11155111,
-  "registry": "0xcac30ff7B0566b6E991061cAA5C169c82A4319a4",
+  "registry": "0x3D17F9012259bf1E3F01Ae0b78DEDF7da4b8E846",
+  "registryVersion": "v3",
+  "ecdsaLeafVerifier": "0x6e1ad26505ef9bc6877fb4c97378beda93cf670b",
+  "ecdsaChainVerifier": "0xc1a0fd1e620398b019ff3941b6c601afe81b33b8",
+  "ecdsaVerifierKind": "real",
+  "rsaLeafVerifier": "0xc7d772ce369d75cf03a7d9c73a786937996edc47",
+  "rsaChainVerifier": "0x41ae864ffc792581871ea3621e40268216f91ecd",
+  "rsaVerifierKind": "stub",
   "authorityArbitrator": "0x4820730b5E1c7110217E6b42Be547011ab57dD84",
   "authorityArbitratorAuthority": "0xB8d121CD0B2D0AB3df2aFF0B45B2fD354FF4c1f7",
-  "trustedListRoot": "0x25ce7bfa7693e391a7e1d5df666caa5b622bf709cc6797289a74bfc272462b3e",
-  "deployedAt": "2026-04-18T10:31:00Z",
-  "rsaVerifier": "0x6E35F1F913f288e85d4F659A1f89840A9f92d5cb",
-  "ecdsaVerifier": "0x0ae36B29ef7f0D3E53eE5B904B582dC91D2E3287",
-  "verifierKind": "stub",
+  "trustedListRoot": "0x2aabe358cd38fe2859cdc57d62d611d76bce881ec49ecefa2d26f9338ff0228f",
   "admin": "0xB8d121CD0B2D0AB3df2aFF0B45B2fD354FF4c1f7",
+  "deployedAt": "2026-04-19T12:00:00Z",
   "phase1RegistryDeprecated": "0x7F36aF783538Ae8f981053F2b0E45421a1BF4815",
-  "notes": "Phase 2 QIE v2 deploy. Stub Groth16 verifiers on-chain pending real ceremony; rotate via setRsaVerifier/setEcdsaVerifier when real verifier contracts land. trustedListRoot is the real Diia LOTL Poseidon-Merkle root."
+  "phase2V2RegistryDeprecated": "0xcac30ff7B0566b6E991061cAA5C169c82A4319a4",
+  "ceremony": {
+    "source": "2026-04-19-split-proof-ecdsa",
+    "leafZkeySha256": "0fdbc671e087ae2d7cad58e7c33191251622f5d2b687f7f91827a8b1641299fb",
+    "chainZkeySha256": "8d1aed8e30a76770a8480e203a86c362f4421b6d800147d0ff4f960472ca9933",
+    "publicSignals": { "leaf": 13, "chain": 3 }
+  },
+  "notes": "Phase 2 split-proof V3 deploy. ECDSA leaf + chain verifiers are REAL Groth16 from the 2026-04-19 ceremony. RSA slots are stubs (no RSA ceremony — defer until real non-Diia QES test material is available). trustedListRoot is the real Diia LOTL Poseidon-Merkle root; rotate via setRsaLeafVerifier/setRsaChainVerifier when a real RSA ceremony lands."
 }
