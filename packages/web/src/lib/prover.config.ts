@@ -51,12 +51,12 @@ export const PROVER_CONFIG: ProverConfig = {
     leaf: {
       wasmUrl: 'https://prove.identityescrow.org/ecdsa-leaf/QKBPresentationEcdsaLeaf.wasm',
       zkeyUrl: 'https://prove.identityescrow.org/ecdsa-leaf/qkb-leaf.zkey',
-      zkeySha256: '<pending-ceremony>',
+      zkeySha256: '0fdbc671e087ae2d7cad58e7c33191251622f5d2b687f7f91827a8b1641299fb',
     },
     chain: {
       wasmUrl: 'https://prove.identityescrow.org/ecdsa-chain/QKBPresentationEcdsaChain.wasm',
       zkeyUrl: 'https://prove.identityescrow.org/ecdsa-chain/qkb-chain.zkey',
-      zkeySha256: '<pending-ceremony>',
+      zkeySha256: '8d1aed8e30a76770a8480e203a86c362f4421b6d800147d0ff4f960472ca9933',
     },
   },
   // rsa: deferred — add `leaf` + `chain` entries when real RSA QES material
