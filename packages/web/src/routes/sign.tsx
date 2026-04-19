@@ -16,6 +16,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { sha256 } from '@noble/hashes/sha256';
 import { PhaseCard } from '../components/PhaseCard';
 import { loadSession, b64ToBytes, bytesToHex } from '../lib/session';
+import { pkAddressFromHex } from '../lib/pkAddress';
 
 export function SignScreen() {
   const { t } = useTranslation();
@@ -39,6 +40,9 @@ export function SignScreen() {
 
   const preview = new TextDecoder().decode(bcanon);
   const hashHex = bytesToHex(sha256(bcanon));
+  const pkAddr = session.pubkeyUncompressedHex
+    ? pkAddressFromHex(session.pubkeyUncompressedHex)
+    : null;
 
   const onDownload = (): void => {
     // Copy into a fresh ArrayBuffer so the BlobPart type is unambiguous.
@@ -58,6 +62,18 @@ export function SignScreen() {
   return (
     <PhaseCard step={2} total={4} accent="blue" title={t('sign.heading')}>
       <p className="text-slate-400 mb-5">{t('sign.intro')}</p>
+
+      {pkAddr && (
+        <div className="mb-5 space-y-1" data-testid="sign-pk-address">
+          <label className="block text-xs font-mono text-slate-500 uppercase tracking-widest">
+            {t('sign.pkAddressLabel')}
+          </label>
+          <div className="font-mono text-[12px] text-slate-100 break-all rounded border border-slate-700 bg-slate-900/50 px-3 py-2">
+            {pkAddr}
+          </div>
+          <p className="text-[11px] text-slate-500">{t('sign.pkAddressHelp')}</p>
+        </div>
+      )}
 
       <button
         type="button"

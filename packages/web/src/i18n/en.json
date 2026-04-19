@@ -45,6 +45,8 @@
     "useWalletButton": "Use connected wallet",
     "generatedFresh": "fresh",
     "derivedFromWallet": "from {{address}}",
+    "pkAddressLabel": "On-chain address bound to this key",
+    "pkAddressHelp": "This is the Ethereum address that register() will bind on Sepolia. It's derived from the public key above as keccak256(X‖Y)[-20:] (EIP-55 checksum).",
     "walletError": {
       "default": "Could not get public key from wallet.",
       "no-provider": "No wallet detected. Install MetaMask or another EIP-1193 wallet.",
@@ -66,7 +68,9 @@
     "toolsEeSkDesc": "Sign with ID-card or Mobile-ID via DigiDoc4 and export the .p7s container.",
     "toolsPl": "Poland — Szafir",
     "toolsPlDesc": "Use Szafir SDK to emit a detached CAdES-BES signature.",
-    "missingBinding": "No binding to sign. Return to Generate."
+    "missingBinding": "No binding to sign. Return to Generate.",
+    "pkAddressLabel": "On-chain address bound to this key",
+    "pkAddressHelp": "Verify this matches the wallet address you expect. The binding JSON below commits to the public key, from which this address is derived."
   },
   "upload": {
     "heading": "Upload signed binding",

@@ -21,6 +21,7 @@ import { buildBinding, canonicalizeBinding, type Locale } from '../lib/binding';
 import { saveSession, bytesToHex, bytesToB64 } from '../lib/session';
 import { localizeError } from '../lib/errors';
 import { recoverPubkeyFromWallet, WalletPubkeyError } from '../lib/walletPubkey';
+import { pkAddressFromHex } from '../lib/pkAddress';
 
 type KeySource = 'fresh' | 'wallet';
 
@@ -152,6 +153,20 @@ export function GenerateScreen() {
               className="font-mono text-[11px] text-emerald-300 break-all rounded border border-slate-700 bg-slate-900/50 px-3 py-2"
             >
               0x{pubkeyHex}
+            </div>
+            <div className="pt-2 space-y-1">
+              <label className="block text-xs font-mono text-slate-500 uppercase tracking-widest">
+                {t('generate.pkAddressLabel')}
+              </label>
+              <div
+                data-testid="pk-address"
+                className="font-mono text-[12px] text-slate-100 break-all rounded border border-slate-700 bg-slate-900/50 px-3 py-2"
+              >
+                {pkAddressFromHex(pubkeyHex)}
+              </div>
+              <p className="text-[11px] text-slate-500">
+                {t('generate.pkAddressHelp')}
+              </p>
             </div>
           </div>
         )}
