@@ -1,19 +1,34 @@
 {
-  "variant": "ecdsa",
-  "wasmUrl": "https://prove.identityescrow.org/QKBPresentationEcdsaLeaf.wasm",
-  "zkeyUrl": "https://prove.identityescrow.org/qkb.zkey",
-  "wasmSha256": "d9ee0881a9f9ae0f82881a5c7a13c4e466468acb5967e41071b12903f5c2a8b0",
-  "zkeySha256": "015e61e0737eaa4d5e5de1db5c2cc86c9dcca8504a9a3b480f7d67a2bf9358fe",
-  "wasmBytes": 42582216,
-  "zkeyBytes": 4419368711,
-  "uploadedAt": "2026-04-17T14:31:56Z",
-  "ceremony": {
+  "schema": "split-proof-v1",
+  "variant": "ecdsa-split",
+  "uploadedAt": "2026-04-19T11:43:28Z",
+  "leaf": {
     "circuit": "QKBPresentationEcdsaLeaf",
-    "constraints": 7633285,
-    "wires": 7589268,
-    "publicSignals": 12,
-    "powersOfTau": 23,
-    "contributor": "qkb-dev-fly-1",
-    "contributionHash": "bdbe80e803a9b81260517d55c7c9c133618eaaa1ebf60ed70c7d2117da723416 8392c68daa09ee5182ecd3ab818b5d5800ad2303149eee812ff580f1625a1c3b"
+    "wasmUrl": "https://prove.identityescrow.org/ecdsa-leaf/QKBPresentationEcdsaLeaf.wasm",
+    "zkeyUrl": "https://prove.identityescrow.org/ecdsa-leaf/qkb-leaf.zkey",
+    "vkeyUrl": "https://prove.identityescrow.org/ecdsa-leaf/verification_key.json",
+    "wasmSha256": "10e5b18915248c545f40a4ad8152aa14b43d5526095783417f9c68a523084197",
+    "zkeySha256": "0fdbc671e087ae2d7cad58e7c33191251622f5d2b687f7f91827a8b1641299fb",
+    "vkeySha256": "0c84511fb667a7eff84a67215ac6bfce2ba9864056bca50d02df4d6953fa1f7a",
+    "verifierSolSha256": "9295e633438970e952d84a28c3ae452ddd3b661e2da49fc1ce5846f02054376c",
+    "wasmBytes": 43757018,
+    "zkeyBytes": 4466785632,
+    "publicSignals": 13,
+    "powersOfTau": 24
+  },
+  "chain": {
+    "circuit": "QKBPresentationEcdsaChain",
+    "wasmUrl": "https://prove.identityescrow.org/ecdsa-chain/QKBPresentationEcdsaChain.wasm",
+    "zkeyUrl": "https://prove.identityescrow.org/ecdsa-chain/qkb-chain.zkey",
+    "vkeyUrl": "https://prove.identityescrow.org/ecdsa-chain/verification_key.json",
+    "wasmSha256": "6e3976792705939ad705d503099adc368738928c9f87776ef6954b663f512af6",
+    "zkeySha256": "8d1aed8e30a76770a8480e203a86c362f4421b6d800147d0ff4f960472ca9933",
+    "vkeySha256": "249524591323d0d08f3d4ccdfcf8ea63d36ed4d3fc56c840c5dd48576e72b1c0",
+    "verifierSolSha256": "dd37b414788ddd36e73ca09393375fc02f6b330208048cded93c84bb9975e885",
+    "wasmBytes": 24671034,
+    "zkeyBytes": 2004855257,
+    "publicSignals": 3,
+    "powersOfTau": 22,
+    "constraints": 3152159
   }
 }
