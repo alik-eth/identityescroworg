@@ -62,6 +62,15 @@ export interface VerifyOk {
   ok: true;
   algorithmTag: AlgorithmTag;
   caMerkleIndex: number;
+  /**
+   * The intermediate certificate DER used during verification. For
+   * leaf-only CAdES (Diia) this is the LOTL-resolved CA; for CMS bundles
+   * that ship with an intermediate it's that bundled one. Downstream
+   * consumers (witness builder, session storage) read from here instead
+   * of re-resolving, so the off-circuit verify and the witness agree
+   * byte-for-byte on the same intermediate.
+   */
+  intermediateCertDer: Uint8Array;
 }
 
 export async function verifyQes(input: VerifyInput): Promise<VerifyOk> {
@@ -126,7 +135,12 @@ export async function verifyQes(input: VerifyInput): Promise<VerifyOk> {
     throw new QkbError('qes.sigInvalid', { reason: 'chain' });
   }
 
-  return { ok: true, algorithmTag: parsed.algorithmTag, caMerkleIndex };
+  return {
+    ok: true,
+    algorithmTag: parsed.algorithmTag,
+    caMerkleIndex,
+    intermediateCertDer: intermediateDer,
+  };
 }
 
 function resolveIntermediateFromLotl(

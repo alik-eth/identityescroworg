@@ -147,6 +147,11 @@ export function UploadScreen() {
         binding: session.binding!,
         bindingBytes,
         trustedListRoot,
+        // qesVerify LOTL-resolves the intermediate for leaf-only CAdES
+        // (Diia). Thread it through so the witness builder doesn't re-
+        // resolve or trip the `no-intermediate` guard when the CMS
+        // shipped leaf-only.
+        intermediateCertDer: verified.intermediateCertDer,
       });
 
       setStatus('proving');
@@ -182,7 +187,7 @@ export function UploadScreen() {
         proofChain: result.proofChain,
         publicChain: result.publicChain,
         leafCertDerB64: bytesToB64(parsed.leafCertDer),
-        intCertDerB64: bytesToB64(parsed.intermediateCertDer ?? new Uint8Array()),
+        intCertDerB64: bytesToB64(verified.intermediateCertDer),
         trustedListRoot: typeof trustedListRoot === 'string' ? trustedListRoot : String(trustedListRoot),
         circuitVersion: 'QKBPresentationEcdsaLeaf+Chain',
         algorithmTag: verified.algorithmTag,
