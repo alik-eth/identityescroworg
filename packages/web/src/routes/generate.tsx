@@ -20,6 +20,9 @@ import { generateKeypair } from '../lib/keygen';
 import { buildBinding, canonicalizeBinding, type Locale } from '../lib/binding';
 import { saveSession, bytesToHex, bytesToB64 } from '../lib/session';
 import { localizeError } from '../lib/errors';
+import { recoverPubkeyFromWallet, WalletPubkeyError } from '../lib/walletPubkey';
+
+type KeySource = 'fresh' | 'wallet';
 
 export function GenerateScreen() {
   const { t, i18n } = useTranslation();
@@ -27,6 +30,8 @@ export function GenerateScreen() {
 
   const [pubkeyHex, setPubkeyHex] = useState<string | null>(null);
   const [privkeyHex, setPrivkeyHex] = useState<string | null>(null);
+  const [keySource, setKeySource] = useState<KeySource | null>(null);
+  const [walletAddress, setWalletAddress] = useState<`0x${string}` | null>(null);
   const [locale, setLocale] = useState<Locale>(
     (i18n.language.startsWith('uk') ? 'uk' : 'en') as Locale,
   );
@@ -39,12 +44,31 @@ export function GenerateScreen() {
     const uncompressed = secp.getPublicKey(kp.privkey, false); // 65 bytes, 0x04||X||Y
     setPrivkeyHex(bytesToHex(kp.privkey));
     setPubkeyHex(bytesToHex(uncompressed));
+    setKeySource('fresh');
+    setWalletAddress(null);
+  };
+
+  const onUseWallet = async (): Promise<void> => {
+    setError(null);
+    try {
+      const { pubkeyHex: recovered, address } = await recoverPubkeyFromWallet();
+      setPrivkeyHex(null);
+      setPubkeyHex(recovered);
+      setKeySource('wallet');
+      setWalletAddress(address);
+    } catch (err) {
+      if (err instanceof WalletPubkeyError) {
+        setError(t(`generate.walletError.${err.code}`, t('generate.walletError.default')));
+      } else {
+        setError(localizeError(err, { t }));
+      }
+    }
   };
 
   const onCreateBinding = (): void => {
     setError(null);
     try {
-      if (!pubkeyHex || !privkeyHex) {
+      if (!pubkeyHex) {
         setError(t('generate.missingKey'));
         return;
       }
@@ -66,7 +90,7 @@ export function GenerateScreen() {
           : buildBinding({ pk, timestamp, nonce, locale });
       const bcanon = canonicalizeBinding(binding);
       saveSession({
-        privkeyHex,
+        ...(privkeyHex ? { privkeyHex } : {}),
         pubkeyUncompressedHex: pubkeyHex,
         locale,
         binding,
@@ -83,19 +107,45 @@ export function GenerateScreen() {
       <p className="text-slate-400 mb-6">{t('generate.intro')}</p>
 
       <div className="space-y-4">
-        <button
-          type="button"
-          onClick={onGenerate}
-          data-testid="generate-key"
-          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-md transition-colors"
-        >
-          {t('generate.generateButton')}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onGenerate}
+            data-testid="generate-key"
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-md transition-colors"
+          >
+            {t('generate.generateButton')}
+          </button>
+          <button
+            type="button"
+            onClick={() => void onUseWallet()}
+            data-testid="use-wallet-key"
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-100 text-sm font-semibold rounded-md transition-colors"
+          >
+            {t('generate.useWalletButton')}
+          </button>
+        </div>
 
         {pubkeyHex && (
           <div className="space-y-1" data-testid="pubkey-block">
             <label className="block text-xs font-mono text-slate-500 uppercase tracking-widest">
               {t('generate.pubkeyLabel')}
+              {keySource === 'wallet' && walletAddress && (
+                <span
+                  data-testid="pubkey-source-wallet"
+                  className="ml-2 inline-block rounded bg-amber-500/10 border border-amber-500/40 px-2 py-[1px] text-[10px] text-amber-300 normal-case tracking-normal"
+                >
+                  {t('generate.derivedFromWallet', { address: walletAddress })}
+                </span>
+              )}
+              {keySource === 'fresh' && (
+                <span
+                  data-testid="pubkey-source-fresh"
+                  className="ml-2 inline-block rounded bg-emerald-500/10 border border-emerald-500/40 px-2 py-[1px] text-[10px] text-emerald-300 normal-case tracking-normal"
+                >
+                  {t('generate.generatedFresh')}
+                </span>
+              )}
             </label>
             <div
               data-testid="pubkey-hex"

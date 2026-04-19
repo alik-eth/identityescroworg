@@ -41,7 +41,17 @@
     "timestampLabel": "Binding timestamp",
     "localeLabel": "Declaration language",
     "createBinding": "Create binding statement",
-    "missingKey": "Please generate a keypair first."
+    "missingKey": "Please generate a keypair first.",
+    "useWalletButton": "Use connected wallet",
+    "generatedFresh": "fresh",
+    "derivedFromWallet": "from {{address}}",
+    "walletError": {
+      "default": "Could not get public key from wallet.",
+      "no-provider": "No wallet detected. Install MetaMask or another EIP-1193 wallet.",
+      "no-account": "Wallet returned no accounts. Unlock it and try again.",
+      "rejected": "Wallet request was rejected.",
+      "recover-mismatch": "Recovered key had an unexpected shape. Try again."
+    }
   },
   "sign": {
     "heading": "Sign binding",
