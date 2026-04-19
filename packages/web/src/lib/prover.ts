@@ -57,6 +57,10 @@ export interface ProveOptions {
   wasmUrl: string;
   zkeyUrl: string;
   algorithmTag?: AlgorithmTag;
+  /** Split-proof side — only consumed by MockProver to shape publicSignals
+   *  to the circuit-specific length (leaf=13, chain=3). SnarkjsProver
+   *  ignores it; the real circuit emits the correct length natively. */
+  side?: 'leaf' | 'chain';
   onProgress?: (p: ProofProgress) => void;
   signal?: AbortSignal;
 }
@@ -94,9 +98,9 @@ const DEFAULT_MOCK_RESULT: ProveResult = {
 export class MockProver implements IProver {
   constructor(private readonly cfg: MockProverOptions = {}) {}
 
-  async prove(_input: Record<string, unknown>, opts: ProveOptions): Promise<ProveResult> {
+  async prove(input: Record<string, unknown>, opts: ProveOptions): Promise<ProveResult> {
     const totalDelay = this.cfg.delayMs ?? 30;
-    const result = this.cfg.result ?? DEFAULT_MOCK_RESULT;
+    const base = this.cfg.result ?? DEFAULT_MOCK_RESULT;
     const stages: ProofStage[] = ['witness', 'prove', 'finalize'];
     const start = Date.now();
     for (let i = 0; i < stages.length; i++) {
@@ -110,7 +114,14 @@ export class MockProver implements IProver {
       });
     }
     checkAborted(opts.signal);
-    return result;
+    // If the caller supplied a canned `result`, honor it verbatim — tests
+    // rely on bit-for-bit determinism. Otherwise derive publicSignals from
+    // the actual witness so downstream shape + equality asserts
+    // (leaf-spki-commit-mismatch, hex32, lengths) pass in local dev.
+    if (this.cfg.result) return base;
+    const signals = derivePublicSignalsFromWitness(input, opts.side);
+    if (!signals) return base;
+    return { proof: base.proof, publicSignals: signals };
   }
 }
 
@@ -330,9 +341,83 @@ async function runSide(
   const opts: ProveOptions = {
     wasmUrl: urls.wasmUrl,
     zkeyUrl: urls.zkeyUrl,
+    side,
     onProgress: (p) => onProgress?.({ ...p, side }),
   };
   if (algorithmTag !== undefined) opts.algorithmTag = algorithmTag;
   if (signal !== undefined) opts.signal = signal;
   return prover.prove(input, opts);
+}
+
+/**
+ * Mirror the circuit's public-signal ordering so MockProver can emit a
+ * shape + content that downstream registry asserts accept. Returns null
+ * when the input doesn't match a recognized witness shape (tests pass
+ * `Record<string, unknown>` fixtures) so the caller falls back to the
+ * canned default.
+ *
+ * Leaf signals order (13): pkX[0..3], pkY[0..3], ctxHash, declHash,
+ *   timestamp, nullifier, leafSpkiCommit — matches registry.ts
+ *   leafInputsFromPublicSignals.
+ * Chain signals order (3): rTL, algorithmTag, leafSpkiCommit — matches
+ *   registry.ts chainInputsFromPublicSignals.
+ */
+function derivePublicSignalsFromWitness(
+  input: Record<string, unknown>,
+  side: 'leaf' | 'chain' | undefined,
+): string[] | null {
+  if (side === 'leaf') {
+    const pkX = input.pkX;
+    const pkY = input.pkY;
+    if (!Array.isArray(pkX) || pkX.length !== 4 || !Array.isArray(pkY) || pkY.length !== 4) {
+      return null;
+    }
+    const ctxHash = stringify(input.ctxHash);
+    const declHash = stringify(input.declHash);
+    const timestamp = stringify(input.timestamp);
+    const nullifier = stringify(input.nullifier);
+    const leafSpkiCommit = stringify(input.leafSpkiCommit);
+    if (
+      ctxHash === null ||
+      declHash === null ||
+      timestamp === null ||
+      nullifier === null ||
+      leafSpkiCommit === null
+    ) {
+      return null;
+    }
+    return [
+      stringifyOrZero(pkX[0]),
+      stringifyOrZero(pkX[1]),
+      stringifyOrZero(pkX[2]),
+      stringifyOrZero(pkX[3]),
+      stringifyOrZero(pkY[0]),
+      stringifyOrZero(pkY[1]),
+      stringifyOrZero(pkY[2]),
+      stringifyOrZero(pkY[3]),
+      ctxHash,
+      declHash,
+      timestamp,
+      nullifier,
+      leafSpkiCommit,
+    ];
+  }
+  if (side === 'chain') {
+    const rTL = stringify(input.rTL);
+    const algorithmTag = stringify(input.algorithmTag);
+    const leafSpkiCommit = stringify(input.leafSpkiCommit);
+    if (rTL === null || algorithmTag === null || leafSpkiCommit === null) return null;
+    return [rTL, algorithmTag, leafSpkiCommit];
+  }
+  return null;
+}
+
+function stringify(v: unknown): string | null {
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' || typeof v === 'bigint') return String(v);
+  return null;
+}
+
+function stringifyOrZero(v: unknown): string {
+  return stringify(v) ?? '0';
 }

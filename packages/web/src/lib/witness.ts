@@ -937,13 +937,24 @@ function buildLeafFromShared(
     BcanonLen: bindingBytes.length,
     BcanonPaddedIn: zeroPadTo(s.bcanonPadded, MAX_BCANON),
     BcanonPaddedLen: s.bcanonPadded.length,
-    pkValueOffset: s.pkKeyOff,
-    schemeValueOffset: s.schemeKeyOff,
-    ctxValueOffset: s.ctxKeyOff,
+    // findJcsKeyValueOffset returns the position of the OPENING QUOTE of the
+    // key literal (e.g. the `"` in `"pk":"`). The circuit's BindingKeyAt
+    // expects `offset` to point to the first byte of the VALUE, so that
+    // bytes[offset - KEY_LEN .. offset - 1] equals the key literal. Add
+    // each key literal's length (including the `:` and — for string values
+    // — the opening `"`) to convert.
+    //   "pk":"          →  6 bytes
+    //   "scheme":"      → 10
+    //   "context":"     → 11
+    //   "declaration":" → 15
+    //   "timestamp":    → 12 (no opening `"` on the numeric value)
+    pkValueOffset: s.pkKeyOff + 6,
+    schemeValueOffset: s.schemeKeyOff + 10,
+    ctxValueOffset: s.ctxKeyOff + 11,
     ctxHexLen: s.ctxHexLen,
-    declValueOffset: s.declKeyOff,
+    declValueOffset: s.declKeyOff + 15,
     declValueLen: s.declBytes.length,
-    tsValueOffset: s.tsKeyOff,
+    tsValueOffset: s.tsKeyOff + 12,
     tsDigitCount: s.tsDigitCount,
 
     // Declaration

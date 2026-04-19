@@ -19,6 +19,7 @@ import { useNavigate } from '@tanstack/react-router';
 import { PhaseCard } from '../components/PhaseCard';
 import { parseCades } from '../lib/cades';
 import { verifyQes, type TrustedCasFile, type VerifyInput, type VerifyOk } from '../lib/qesVerify';
+import { buildInclusionPath, type LayersFile } from '../lib/merkleLookup';
 import { buildPhase2Witness } from '../lib/witness';
 import {
   MockProver,
@@ -36,8 +37,22 @@ import {
   hexToBytes,
 } from '../lib/session';
 import { localizeError, QkbError } from '../lib/errors';
+import {
+  buildWitnessBundle,
+  downloadJson,
+  parseProofBundle,
+} from '../lib/witnessExport';
 
-type Status = 'idle' | 'parsing' | 'verifying' | 'proving' | 'done' | 'error';
+type Status =
+  | 'idle'
+  | 'parsing'
+  | 'verifying'
+  | 'proving'
+  | 'awaiting-offline-proof'
+  | 'done'
+  | 'error';
+
+type ProveMode = 'mock' | 'offline';
 
 declare global {
   interface Window {
@@ -70,6 +85,8 @@ export function UploadScreen() {
   const [elapsedMs, setElapsedMs] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const [proveMode, setProveMode] = useState<ProveMode>('offline');
+  const proofImportRef = useRef<HTMLInputElement>(null);
 
   if (!session.bcanonB64 || !session.pubkeyUncompressedHex) {
     return (
@@ -92,6 +109,13 @@ export function UploadScreen() {
 
       const p7sBuf = new Uint8Array(await file.arrayBuffer());
       const parsed = parseCades(p7sBuf);
+      console.info('[qkb] upload sizes', {
+        p7s: p7sBuf.length,
+        embeddedContent: parsed.embeddedContent?.length ?? null,
+        sessionBinding: sessionBindingBytes.length,
+        signedAttrsDer: parsed.signedAttrsDer.length,
+        leafCertDer: parsed.leafCertDer.length,
+      });
 
       // If the user's QES tool produced an *attached* CAdES (Diia default,
       // many Szafir variants), the binding JSON lives inside the CMS as
@@ -135,13 +159,16 @@ export function UploadScreen() {
 
       // Split-proof pivot (2026-04-18): build leaf + chain witnesses from
       // the same shared derivations (Bcanon offsets, RDN subject-serial
-      // scan, leaf SPKI offsets, leafSpkiCommit, nullifier). trustedListRoot
-      // comes from the flattener-pumped trusted-cas.json. Merkle path +
-      // indices default to all-zero here until the /upload flow starts
-      // fetching layers.json — the MockProver path ignores them, and the
-      // real SnarkjsProver path will need them before the chain proof
-      // actually verifies (post-ceremony).
-      const trustedListRoot = trustedCas.cas[0]?.poseidonHash ?? '0x0';
+      // scan, leaf SPKI offsets, leafSpkiCommit, nullifier).
+      //
+      // trustedListRoot is the Merkle tree root from flattener's
+      // `root.json` (rTL), NOT any individual CA's leaf hash. The chain
+      // circuit proves MerkleProofPoseidon(intPoseidon, path, indices) ===
+      // rTL; the proof only verifies when all three pieces come from the
+      // same committed flattener snapshot.
+      const { rTL: treeRoot, merklePath, merkleIndices } =
+        await fetchMerkleProofForIntermediate(verified.intermediateCertDer);
+      const trustedListRoot = treeRoot;
       const witness = await buildPhase2Witness({
         parsed,
         binding: session.binding!,
@@ -152,7 +179,37 @@ export function UploadScreen() {
         // resolve or trip the `no-intermediate` guard when the CMS
         // shipped leaf-only.
         intermediateCertDer: verified.intermediateCertDer,
+        merklePath,
+        merkleIndices,
       });
+
+      // Shared context saved regardless of mode — /register consumes these
+      // fields independent of how the proofs were produced.
+      const sharedSave = {
+        cadesB64: bytesToB64(p7sBuf),
+        leafCertDerB64: bytesToB64(parsed.leafCertDer),
+        intCertDerB64: bytesToB64(verified.intermediateCertDer),
+        trustedListRoot:
+          typeof trustedListRoot === 'string' ? trustedListRoot : String(trustedListRoot),
+        circuitVersion: 'QKBPresentationEcdsaLeaf+Chain',
+        algorithmTag: verified.algorithmTag,
+      } as const;
+
+      if (proveMode === 'offline') {
+        // Offline proving path: write a witness bundle the user feeds to
+        // `qkb prove` on their host, then re-imports the proofs. The
+        // browser prover path OOMs on the 4.5 GB leaf zkey; qkb-cli with
+        // --max-old-space-size=16384 handles it fine.
+        saveSession(sharedSave);
+        const bundle = buildWitnessBundle({
+          witness,
+          algorithmTag: verified.algorithmTag,
+          circuitVersion: 'QKBPresentationEcdsaLeaf+Chain',
+        });
+        downloadJson('witness.json', bundle);
+        setStatus('awaiting-offline-proof');
+        return;
+      }
 
       setStatus('proving');
       const prover = await pickProver();
@@ -160,10 +217,6 @@ export function UploadScreen() {
       abortRef.current = controller;
       const start = Date.now();
 
-      // Artifact URLs per orchestration §7 + prover.config.ts placeholders.
-      // Lead pumps real R2 sha256s + URLs after the leaf / chain ceremonies
-      // complete on Fly. Until then the MockProver is the default and
-      // never actually fetches the zkey.
       const algo = verified.algorithmTag === 1 ? 'ecdsa' : 'rsa';
       const artifacts = getProverConfig(algo);
 
@@ -181,16 +234,11 @@ export function UploadScreen() {
       });
 
       saveSession({
-        cadesB64: bytesToB64(p7sBuf),
+        ...sharedSave,
         proofLeaf: result.proofLeaf,
         publicLeaf: result.publicLeaf,
         proofChain: result.proofChain,
         publicChain: result.publicChain,
-        leafCertDerB64: bytesToB64(parsed.leafCertDer),
-        intCertDerB64: bytesToB64(verified.intermediateCertDer),
-        trustedListRoot: typeof trustedListRoot === 'string' ? trustedListRoot : String(trustedListRoot),
-        circuitVersion: 'QKBPresentationEcdsaLeaf+Chain',
-        algorithmTag: verified.algorithmTag,
       });
       setStatus('done');
     } catch (err) {
@@ -199,13 +247,20 @@ export function UploadScreen() {
       // parse failures can be diagnosed (QkbError stores the specific
       // reason in .details which the localized banner swallows).
       console.error('[qkb] upload failure:', err);
+      if (err && typeof err === 'object' && 'details' in err) {
+        console.error('[qkb] upload failure details:', (err as { details?: unknown }).details);
+      }
       const base = localizeError(err, { t });
       const details =
         err && typeof err === 'object' && 'details' in err
           ? (err as { details?: Record<string, unknown> }).details
           : undefined;
-      const reason = details && typeof details.reason === 'string' ? details.reason : undefined;
-      setError(reason ? `${base} [${reason}]` : base);
+      const tag = details
+        ? [details.reason, details.field, details.got, details.max]
+            .filter((v) => v !== undefined && v !== null)
+            .join('/')
+        : '';
+      setError(tag ? `${base} [${tag}]` : base);
     } finally {
       abortRef.current = null;
     }
@@ -213,9 +268,81 @@ export function UploadScreen() {
 
   const onCancel = (): void => abortRef.current?.abort();
 
+  const onImportProofFile = async (file: File): Promise<void> => {
+    setError(null);
+    try {
+      const raw = await file.text();
+      const bundle = parseProofBundle(raw);
+      saveSession({
+        proofLeaf: bundle.proofLeaf as never,
+        publicLeaf: bundle.publicLeaf,
+        proofChain: bundle.proofChain as never,
+        publicChain: bundle.publicChain,
+        circuitVersion: bundle.circuitVersion,
+        algorithmTag: bundle.algorithmTag,
+      });
+      setStatus('done');
+    } catch (err) {
+      console.error('[qkb] import proof failure:', err);
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const onPickProof = (): void => proofImportRef.current?.click();
+
   return (
     <PhaseCard step={3} total={4} accent="amber" title={t('upload.heading')}>
       <p className="text-slate-400 mb-5">{t('upload.intro')}</p>
+
+      <fieldset className="mb-5 rounded-lg border border-slate-700 px-4 py-3 text-xs">
+        <legend className="px-2 text-slate-400 uppercase tracking-widest text-[10px]">
+          Proving mode
+        </legend>
+        <div className="flex flex-col gap-2 mt-1">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="radio"
+              name="prove-mode"
+              data-testid="prove-mode-offline"
+              checked={proveMode === 'offline'}
+              onChange={() => setProveMode('offline')}
+              className="mt-[3px] accent-emerald-500"
+            />
+            <span>
+              <strong className="font-semibold text-emerald-200">
+                Offline proving (real)
+              </strong>
+              <br />
+              <span className="text-slate-400">
+                Download a witness bundle, run <code className="text-emerald-300">qkb prove</code>{' '}
+                locally, re-upload the proof. Required for real Sepolia submits —
+                browser tabs OOM on the 4.5 GB leaf zkey.
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="radio"
+              name="prove-mode"
+              data-testid="prove-mode-mock"
+              checked={proveMode === 'mock'}
+              onChange={() => setProveMode('mock')}
+              className="mt-[3px] accent-amber-500"
+            />
+            <span>
+              <strong className="font-semibold text-amber-200">
+                Mock prover (UI testing only)
+              </strong>
+              <br />
+              <span className="text-slate-400">
+                Emits fake Groth16 points. On-chain register{' '}
+                <strong>will revert with InvalidProof</strong>. Use for local
+                /register UI checks, not real submits.
+              </span>
+            </span>
+          </label>
+        </div>
+      </fieldset>
 
       <div
         data-testid="drop-zone"
@@ -276,6 +403,47 @@ export function UploadScreen() {
         </div>
       )}
 
+      {status === 'awaiting-offline-proof' && (
+        <div
+          data-testid="upload-awaiting-offline"
+          className="mt-5 space-y-3 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100"
+        >
+          <p className="font-semibold">
+            Witness bundle downloaded. Run the CLI to produce real proofs:
+          </p>
+          <pre className="overflow-x-auto rounded bg-slate-900/70 border border-slate-700 px-3 py-2 text-[11px] text-emerald-300 font-mono">
+{`NODE_OPTIONS=--max-old-space-size=16384 \\
+  pnpm --filter @qkb/cli start -- prove ~/Downloads/witness.json`}
+          </pre>
+          <p className="text-xs text-slate-400">
+            Outputs <code className="text-emerald-300">./proofs/proof-bundle.json</code>.
+            First run downloads ~6.4 GB of ceremony artifacts; subsequent runs hit the
+            local cache. Plan for ~6–20 min proving time depending on CPU.
+          </p>
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={onPickProof}
+              data-testid="import-proof-pick"
+              className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-900 text-xs font-semibold rounded"
+            >
+              Import proof bundle
+            </button>
+            <input
+              ref={proofImportRef}
+              type="file"
+              accept=".json,application/json"
+              data-testid="proof-import-input"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void onImportProofFile(f);
+              }}
+            />
+          </div>
+        </div>
+      )}
+
       {status === 'done' && (
         <div data-testid="upload-done" className="mt-5 space-y-3">
           <p className="text-emerald-300 text-sm">{t('upload.proofReady')}</p>
@@ -319,6 +487,72 @@ async function fetchTrustedCas(): Promise<TrustedCasFile> {
   const res = await fetch('./trusted-cas/trusted-cas.json');
   if (!res.ok) throw new Error(`trusted-cas fetch failed: ${res.status}`);
   return (await res.json()) as TrustedCasFile;
+}
+
+/**
+ * Match the verified intermediate to a flattener-committed CA entry and
+ * derive the Merkle inclusion path + indices + tree root the chain
+ * circuit expects. All three must come from the same flattener snapshot —
+ * mixing a cached `root.json` with a newer `layers.json` produces a proof
+ * that looks valid locally but reverts on-chain with RootMismatch.
+ */
+async function fetchMerkleProofForIntermediate(
+  intermediateDer: Uint8Array,
+): Promise<{ rTL: string; merklePath: string[]; merkleIndices: number[] }> {
+  const [rootRes, trustedCasRes, layersRes] = await Promise.all([
+    fetch('./trusted-cas/root.json'),
+    fetch('./trusted-cas/trusted-cas.json'),
+    fetch('./trusted-cas/layers.json'),
+  ]);
+  if (!rootRes.ok) throw new Error(`root.json fetch failed: ${rootRes.status}`);
+  if (!trustedCasRes.ok) throw new Error(`trusted-cas.json fetch failed: ${trustedCasRes.status}`);
+  if (!layersRes.ok) throw new Error(`layers.json fetch failed: ${layersRes.status}`);
+
+  const root = (await rootRes.json()) as { rTL: string; treeDepth: number };
+  const trustedCas = (await trustedCasRes.json()) as TrustedCasFile;
+  const layers = (await layersRes.json()) as LayersFile;
+
+  if (layers.depth !== root.treeDepth) {
+    throw new Error(
+      `flattener depth mismatch: root.json=${root.treeDepth} vs layers.json=${layers.depth}`,
+    );
+  }
+
+  const intB64 = toBase64(intermediateDer);
+  const entry = trustedCas.cas.find((c) => c.certDerB64 === intB64);
+  if (!entry) {
+    throw new Error(
+      `intermediate cert not found in trusted-cas.json — cannot build Merkle proof (is the flattener snapshot stale?)`,
+    );
+  }
+
+  const leafHash = layers.layers[0]?.[entry.merkleIndex];
+  const entryHash = entry.poseidonHash;
+  if (!leafHash || !entryHash || leafHash.toLowerCase() !== entryHash.toLowerCase()) {
+    throw new Error(
+      `layers[0][${entry.merkleIndex}] (${leafHash}) disagrees with trusted-cas.cas.poseidonHash (${entryHash}) — stale pump`,
+    );
+  }
+
+  // Delegate to merkleLookup — it fills missing siblings with zero-subtree
+  // hashes (zero[level] = Poseidon(zero[level-1], zero[level-1])), not
+  // literal 0, matching MerkleProofPoseidon's on-circuit expectation.
+  const proof = await buildInclusionPath(entry.merkleIndex, layers);
+
+  const computedRootHex = proof.rootHex.toLowerCase();
+  if (computedRootHex !== root.rTL.toLowerCase()) {
+    throw new Error(
+      `computed inclusion-path root ${computedRootHex} disagrees with committed root ${root.rTL} — stale layers.json`,
+    );
+  }
+
+  return { rTL: root.rTL, merklePath: proof.pathHex, merkleIndices: proof.indices };
+}
+
+function toBase64(bytes: Uint8Array): string {
+  let s = '';
+  for (const b of bytes) s += String.fromCharCode(b);
+  return btoa(s);
 }
 
 function cap(s: string): string {
