@@ -2,9 +2,11 @@
 # Runs INSIDE a Fly machine at /data (root). Parameterized runner for both
 # split-proof ECDSA ceremonies (leaf + chain). Compiles the circuit named
 # by $CIRCUIT_NAME, runs groth16 setup + contribute, exports vkey +
-# Verifier.sol, computes hashes, and uploads zkey + .wasm + vkey to R2
-# under $R2_SUBPATH/. Idempotent — safe to re-run on a volume that
-# already has compiled r1cs / fetched ptau / an in-progress setup output.
+# Verifier.sol, computes hashes. Artifacts stay on the attached volume;
+# the operator pulls them via SFTP from a laptop and uploads to R2 from
+# there — R2 credentials are local-scoped and MUST NOT travel to a Fly VM.
+# Idempotent — safe to re-run on a volume that already has compiled r1cs
+# / fetched ptau / an in-progress setup output.
 #
 # Required env vars:
 #   CIRCUIT_NAME       one of QKBPresentationEcdsaLeaf or
@@ -14,10 +16,6 @@
 #                      chain = 22 (3.2M constraints).
 #   CONSTRAINT_GATE    fail-loud if circom reports > this many non-linear
 #                      constraints. Leaf = 8000000, chain = 4000000.
-#   R2_SUBPATH         R2 key prefix for uploads. Leaf = ecdsa-leaf,
-#                      chain = ecdsa-chain.
-#   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
-#                      Cloudflare R2 S3-compat creds for zkey + wasm upload.
 #
 # Optional env vars:
 #   CEREMONY_BRANCH    (default: main) — git branch to clone from.
@@ -31,15 +29,32 @@
 # Sized for performance-4x with --vm-memory 16384 (4 vCPU / 16 GB). Peak
 # memory is groth16 setup: ~10 GB for leaf, ~4 GB for chain. If setup OOMs,
 # bump VM to performance-8x/32768 and re-run (volume persists across runs).
+#
+# IMPORTANT — machine lifecycle contract:
+#   The caller MUST launch the machine with `--restart no` (NOT with a
+#   `-- sleep 86400` sticky tail). This script exits 0 on success and
+#   non-zero on failure; with `--restart no` the machine transitions to
+#   `stopped` either way and stops billing CPU. The operator destroys the
+#   stopped machine after pulling artifacts:
+#     fly machine destroy <id>
+#   The attached volume is preserved across destroy, so re-running the
+#   ceremony is a matter of attaching a fresh machine to the same volume.
+#   See feedback_fly_destroy_immediately.md + feedback_fly_sticky_command.md
+#   in lead memory — a sticky-sleep machine left idle on performance-16x
+#   burned $4 of Fly credits in 6 hours on 2026-04-19. Do not repeat.
 
 set -euo pipefail
+
+# Log every exit (success OR failure) with a visible banner, so `fly logs`
+# always tells the operator whether the script reached COMPLETE or bailed
+# early. Lead-side polling keys off these strings — silence is not success.
+trap 'rc=$?; if [[ $rc -eq 0 ]]; then echo "[exit] CEREMONY SCRIPT EXIT rc=0 $(date -Is)"; else echo "[exit] CEREMONY SCRIPT FAILED rc=$rc $(date -Is)" >&2; fi' EXIT
 
 # ---------------------------------------------------------------------------
 # Required inputs — fail loudly if missing.
 # ---------------------------------------------------------------------------
 
-for var in CIRCUIT_NAME PTAU_POWER CONSTRAINT_GATE R2_SUBPATH \
-           R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET; do
+for var in CIRCUIT_NAME PTAU_POWER CONSTRAINT_GATE; do
   if [[ -z "${!var:-}" ]]; then
     echo "FATAL: required env var $var is unset." >&2
     exit 1
@@ -57,6 +72,13 @@ REPO_URL="${REPO_URL:-https://github.com/alik-eth/identityescroworg.git}"
 CIRCOM_VERSION="${CIRCOM_VERSION:-v2.1.9}"
 NODE_HEAP_MB="${NODE_HEAP_MB:-12288}"
 
+# Minimum reasonable size in bytes for a non-stub zkey. Real setup output
+# is 100s of MB to several GB; a 700-byte corrupt stub from a prior
+# restart-loop would pass the cheap `[[ -s ... ]]` test and then cause
+# "Missing section 10" inside `zkey contribute`. 10 MiB is comfortably
+# below any real ceremony output and well above any garbage.
+ZKEY_MIN_BYTES=10485760  # 10 MiB
+
 echo "========================================================================"
 echo "QKB Phase 2 split-proof ceremony — $(date -Is)"
 echo "Circuit:         $CIRCUIT_NAME"
@@ -64,8 +86,8 @@ echo "Branch:          $CEREMONY_BRANCH"
 echo "Circom:          $CIRCOM_VERSION"
 echo "Ptau:            2^$PTAU_POWER"
 echo "Constraint gate: $CONSTRAINT_GATE"
-echo "R2 subpath:      $R2_SUBPATH"
 echo "Node heap cap:   ${NODE_HEAP_MB} MiB"
+echo "Zkey min bytes:  ${ZKEY_MIN_BYTES}"
 echo "========================================================================"
 
 # ---------------------------------------------------------------------------
@@ -75,8 +97,9 @@ echo "========================================================================"
 if ! command -v circom >/dev/null 2>&1; then
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -qq
-  apt-get install -y -qq curl git build-essential ca-certificates \
-    awscli jq python3
+  # No awscli — R2 upload happens from the operator's laptop after SFTP
+  # pull; R2 creds are local-scoped and MUST NOT travel to this VM.
+  apt-get install -y -qq curl git build-essential ca-certificates jq
 
   curl -fsSL -o /usr/local/bin/circom \
     "https://github.com/iden3/circom/releases/download/${CIRCOM_VERSION}/circom-linux-amd64"
@@ -182,22 +205,27 @@ echo "Constraint count $CONSTRAINTS ≤ $CONSTRAINT_GATE — proceeding to setup
 ZKEY0="$OUT/qkb_0000.zkey"
 ZKEY="$OUT/${ZKEY_NAME}"
 
-# Reject a 0-byte zkey left behind by a prior failed setup — else the
-# idempotent SKIP would falsely claim success.
-if [[ -f "$ZKEY0" ]] && [[ ! -s "$ZKEY0" ]]; then
-  echo "[setup] removing zero-byte $ZKEY0 from prior failed run"
+zkey_size() { [[ -f "$1" ]] && stat -c%s "$1" || echo 0; }
+
+# Reject a too-small zkey left behind by a prior failed/interrupted setup.
+# Bare `[[ -s ... ]]` only checks non-zero — a 700-byte garbage stub from
+# a restart-loop passes that, gets SKIPPED as "already done", and then
+# blows up inside `zkey contribute` with "Missing section 10". Enforce a
+# real byte floor so corruption is caught here, not three steps downstream.
+if [[ -f "$ZKEY0" ]] && (( $(zkey_size "$ZKEY0") < ZKEY_MIN_BYTES )); then
+  echo "[setup] removing undersized ($(zkey_size "$ZKEY0") bytes, need ≥${ZKEY_MIN_BYTES}) $ZKEY0 from prior failed run"
   rm -f "$ZKEY0"
 fi
 
-if [[ -s "$ZKEY0" ]]; then
-  echo "[setup] SKIP — $ZKEY0 already exists"
+if (( $(zkey_size "$ZKEY0") >= ZKEY_MIN_BYTES )); then
+  echo "[setup] SKIP — $ZKEY0 already exists ($(zkey_size "$ZKEY0") bytes)"
   ls -lh "$ZKEY0"
 else
   echo "[setup] start $(date -Is)"
   set -o pipefail
   snarkjs groth16 setup "$R1CS" "$PTAU" "$ZKEY0" 2>&1 | tee "$OUT/setup.log"
-  if [[ ! -s "$ZKEY0" ]]; then
-    echo "FATAL: groth16 setup produced no zkey (or zero bytes). See setup.log." >&2
+  if (( $(zkey_size "$ZKEY0") < ZKEY_MIN_BYTES )); then
+    echo "FATAL: groth16 setup produced a zkey below the ${ZKEY_MIN_BYTES}-byte floor (actual: $(zkey_size "$ZKEY0")). See setup.log." >&2
     tail -20 "$OUT/setup.log" >&2
     rm -f "$ZKEY0"
     exit 3
@@ -205,8 +233,15 @@ else
   echo "[setup] done $(date -Is)"
 fi
 
-if [[ -s "$ZKEY" ]]; then
-  echo "[contribute] SKIP — $ZKEY already exists"
+# Same floor check on the contributed zkey — restart/kill during contribute
+# can leave a partial file that would get SKIPPED on next run.
+if [[ -f "$ZKEY" ]] && (( $(zkey_size "$ZKEY") < ZKEY_MIN_BYTES )); then
+  echo "[contribute] removing undersized ($(zkey_size "$ZKEY") bytes, need ≥${ZKEY_MIN_BYTES}) $ZKEY from prior failed run"
+  rm -f "$ZKEY"
+fi
+
+if (( $(zkey_size "$ZKEY") >= ZKEY_MIN_BYTES )); then
+  echo "[contribute] SKIP — $ZKEY already exists ($(zkey_size "$ZKEY") bytes)"
   ls -lh "$ZKEY"
 else
   ENTROPY="$(head -c 64 /dev/urandom | base64 | tr -d '\n')"
@@ -214,8 +249,8 @@ else
   snarkjs zkey contribute "$ZKEY0" "$ZKEY" \
     --name="qkb-phase2-split-$(echo "$CIRCUIT_NAME" | tr '[:upper:]' '[:lower:]')-$(date +%Y%m%d)" \
     -e="$ENTROPY" 2>&1 | tee "$OUT/contribute.log"
-  if [[ ! -s "$ZKEY" ]]; then
-    echo "FATAL: zkey contribute produced no output. See contribute.log." >&2
+  if (( $(zkey_size "$ZKEY") < ZKEY_MIN_BYTES )); then
+    echo "FATAL: zkey contribute produced output below the ${ZKEY_MIN_BYTES}-byte floor (actual: $(zkey_size "$ZKEY")). See contribute.log." >&2
     tail -20 "$OUT/contribute.log" >&2
     rm -f "$ZKEY"
     exit 3
@@ -248,31 +283,37 @@ sha256sum \
   | tee zkey.sha256
 
 # ---------------------------------------------------------------------------
-# 7. Upload to R2 via S3 API
+# 7. SFTP pull manifest (NO R2 upload — creds are local-scoped)
 # ---------------------------------------------------------------------------
+#
+# R2 upload happens from the operator's laptop, NOT from this VM. All the
+# artifacts the operator needs live at /data/out-${CIRCUIT_NAME}. Pull
+# pattern (run on laptop after this script exits):
+#
+#   fly ssh sftp get /data/out-${CIRCUIT_NAME}/${ZKEY_NAME}          ./
+#   fly ssh sftp get /data/out-${CIRCUIT_NAME}/verification_key.json ./
+#   fly ssh sftp get /data/out-${CIRCUIT_NAME}/${VERIFIER_CLASS}.sol ./
+#   fly ssh sftp get /data/out-${CIRCUIT_NAME}/zkey.sha256           ./
+#   fly ssh sftp get /data/out-${CIRCUIT_NAME}/${CIRCUIT_NAME}_js/${CIRCUIT_NAME}.wasm ./
+#
+# Then destroy the stopped machine:  fly machine destroy <id>
+# Volume is preserved; re-attach a fresh machine to re-run.
 
-export AWS_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
-export AWS_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
-ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
-
-echo "[r2-upload] ${ZKEY_NAME} $(du -h "${ZKEY_NAME}" | awk '{print $1}')"
-aws s3 cp "${ZKEY_NAME}" "s3://${R2_BUCKET}/${R2_SUBPATH}/${ZKEY_NAME}" \
-  --endpoint-url "$ENDPOINT"
-
-echo "[r2-upload] ${CIRCUIT_NAME}.wasm $(du -h "${CIRCUIT_NAME}_js/${CIRCUIT_NAME}.wasm" | awk '{print $1}')"
-aws s3 cp "${CIRCUIT_NAME}_js/${CIRCUIT_NAME}.wasm" \
-  "s3://${R2_BUCKET}/${R2_SUBPATH}/${CIRCUIT_NAME}.wasm" \
-  --endpoint-url "$ENDPOINT"
-
-echo "[r2-upload] verification_key.json"
-aws s3 cp verification_key.json \
-  "s3://${R2_BUCKET}/${R2_SUBPATH}/verification_key.json" \
-  --endpoint-url "$ENDPOINT"
-
+echo
 echo "========================================================================"
 echo "CEREMONY COMPLETE — $(date -Is)"
-echo "Circuit:    $CIRCUIT_NAME"
-echo "R2 subpath: ${R2_SUBPATH}"
-echo "Artifacts at /data/out-${CIRCUIT_NAME} (for SFTP pull):"
+echo "Circuit:         $CIRCUIT_NAME"
+echo "Artifact dir:    /data/out-${CIRCUIT_NAME}"
+echo "========================================================================"
 ls -lh "/data/out-${CIRCUIT_NAME}"
+echo
+echo "[manifest] pull these from laptop via fly ssh sftp (paths on VM):"
+echo "  /data/out-${CIRCUIT_NAME}/${ZKEY_NAME}            ($(du -h "/data/out-${CIRCUIT_NAME}/${ZKEY_NAME}"            | awk '{print $1}'))"
+echo "  /data/out-${CIRCUIT_NAME}/verification_key.json   ($(du -h "/data/out-${CIRCUIT_NAME}/verification_key.json"   | awk '{print $1}'))"
+echo "  /data/out-${CIRCUIT_NAME}/${VERIFIER_CLASS}.sol   ($(du -h "/data/out-${CIRCUIT_NAME}/${VERIFIER_CLASS}.sol"   | awk '{print $1}'))"
+echo "  /data/out-${CIRCUIT_NAME}/zkey.sha256             ($(du -h "/data/out-${CIRCUIT_NAME}/zkey.sha256"             | awk '{print $1}'))"
+echo "  /data/out-${CIRCUIT_NAME}/${CIRCUIT_NAME}_js/${CIRCUIT_NAME}.wasm ($(du -h "/data/out-${CIRCUIT_NAME}/${CIRCUIT_NAME}_js/${CIRCUIT_NAME}.wasm" | awk '{print $1}'))"
+echo
+echo "[reminder] machine was launched with --restart no — it will now stop"
+echo "[reminder] after SFTP pull, destroy with: fly machine destroy <id>"
 echo "========================================================================"
