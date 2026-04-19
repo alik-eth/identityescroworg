@@ -19,8 +19,12 @@ import { keccak_256 } from '@noble/hashes/sha3';
 import {
   assertRegisterArgsShape,
   buildRegisterArgs,
+  buildRegisterArgsFromSignals,
+  chainInputsFromPublicSignals,
   classifyRegistryRevert,
   classifyWalletRevert,
+  encodeV3RegisterCalldata,
+  leafInputsFromPublicSignals,
   packChainInputs,
   packLeafInputs,
   packProof,
@@ -30,6 +34,8 @@ import {
   type RegisterArgs,
   type SolidityProof,
 } from '../../src/lib/registry';
+import { decodeFunctionData, toFunctionSelector } from 'viem';
+import QKBRegistryV3Abi from '../../fixtures/contracts/QKBRegistryV3.json';
 import type { Groth16Proof, SplitProveResult } from '../../src/lib/prover';
 import type {
   ChainWitnessInput,
@@ -445,5 +451,216 @@ describe('assertRegisterArgsShape', () => {
     expect(() => assertRegisterArgsShape(bad)).toThrowError(
       expect.objectContaining({ code: 'witness.fieldTooLong' }) as unknown as Error,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Public-signals → Solidity struct projections
+// ---------------------------------------------------------------------------
+
+describe('leafInputsFromPublicSignals', () => {
+  const signals: readonly string[] = [
+    '1', '2', '3', '4',       // pkX
+    '5', '6', '7', '8',       // pkY
+    '0',                      // ctxHash
+    '1234',                   // declHash
+    '1730000000',             // timestamp
+    '42',                     // nullifier
+    '99',                     // leafSpkiCommit
+  ];
+
+  it('projects a 13-signal array in orchestration §2.1 order into LeafInputs', () => {
+    const li = leafInputsFromPublicSignals(signals);
+    expect(li.pkX).toEqual(['1', '2', '3', '4']);
+    expect(li.pkY).toEqual(['5', '6', '7', '8']);
+    expect(li.ctxHash).toBe(hex32(0));
+    expect(li.declHash).toBe(hex32(1234));
+    expect(li.timestamp).toBe('1730000000');
+    expect(li.nullifier).toBe(hex32(42));
+    expect(li.leafSpkiCommit).toBe(hex32(99));
+  });
+
+  it('rejects public-signal arrays of the wrong length', () => {
+    expect(() => leafInputsFromPublicSignals(signals.slice(0, 12))).toThrowError(
+      expect.objectContaining({ code: 'witness.fieldTooLong' }) as unknown as Error,
+    );
+    expect(() => leafInputsFromPublicSignals([...signals, 'X'])).toThrowError(
+      expect.objectContaining({ code: 'witness.fieldTooLong' }) as unknown as Error,
+    );
+  });
+});
+
+describe('chainInputsFromPublicSignals', () => {
+  it('projects a 3-signal array in orchestration §2.2 order into ChainInputs', () => {
+    const ci = chainInputsFromPublicSignals(['4660', '1', '99']);
+    expect(ci.rTL).toBe(hex32(0x1234));
+    expect(ci.algorithmTag).toBe(1);
+    expect(ci.leafSpkiCommit).toBe(hex32(99));
+  });
+
+  it('algorithmTag="0" maps to 0 (RSA)', () => {
+    const ci = chainInputsFromPublicSignals(['4660', '0', '99']);
+    expect(ci.algorithmTag).toBe(0);
+  });
+
+  it('rejects wrong-length arrays', () => {
+    expect(() => chainInputsFromPublicSignals(['4660', '1'])).toThrowError(
+      expect.objectContaining({ code: 'witness.fieldTooLong' }) as unknown as Error,
+    );
+  });
+});
+
+describe('buildRegisterArgsFromSignals', () => {
+  const pk = ('0x04' + 'ab'.repeat(64)) as `0x04${string}`;
+  const publicLeaf = [
+    '1', '2', '3', '4',
+    '5', '6', '7', '8',
+    '0', '1234', '1730000000', '42', '99',
+  ];
+  const publicChain = ['4660', '1', '99'];
+
+  it('assembles a valid RegisterArgs from prover output + session signals', () => {
+    const args = buildRegisterArgsFromSignals(
+      pk,
+      sampleProof,
+      publicLeaf,
+      sampleProof,
+      publicChain,
+    );
+    expect(() => assertRegisterArgsShape(args)).not.toThrow();
+    expect(args.leafInputs.leafSpkiCommit).toBe(args.chainInputs.leafSpkiCommit);
+    expect(args.chainInputs.algorithmTag).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// V3 calldata encoding (viem) — golden
+// ---------------------------------------------------------------------------
+
+describe('encodeV3RegisterCalldata', () => {
+  const pk = ('0x04' + 'ab'.repeat(64)) as `0x04${string}`;
+  const publicLeaf = [
+    '1', '2', '3', '4',
+    '5', '6', '7', '8',
+    '0', '1234', '1730000000', '42', '99',
+  ];
+  const publicChain = ['4660', '1', '99'];
+  const args = buildRegisterArgsFromSignals(
+    pk,
+    sampleProof,
+    publicLeaf,
+    sampleProof,
+    publicChain,
+  );
+
+  // Golden value computed against the pumped V3 ABI on 2026-04-19. The
+  // register selector is keccak256 of the flattened-tuple signature
+  //   register((uint256[2],uint256[2][2],uint256[2]),
+  //            (uint256[4],uint256[4],bytes32,bytes32,uint64,bytes32,bytes32),
+  //            (uint256[2],uint256[2][2],uint256[2]),
+  //            (bytes32,uint8,bytes32))
+  // and lands at 0xe4cdff21. Any ABI reshape (adding/removing fields,
+  // changing field types) shifts the selector; this test is the early
+  // warning.
+  const REGISTER_SELECTOR = '0xe4cdff21';
+  const GOLDEN_CALLDATA =
+    REGISTER_SELECTOR +
+    // proofLeaf.a = (1, 2)
+    '0000000000000000000000000000000000000000000000000000000000000001' +
+    '0000000000000000000000000000000000000000000000000000000000000002' +
+    // proofLeaf.b = ((4,3),(6,5)) — packProof swaps pi_b[i] pairs
+    '0000000000000000000000000000000000000000000000000000000000000004' +
+    '0000000000000000000000000000000000000000000000000000000000000003' +
+    '0000000000000000000000000000000000000000000000000000000000000006' +
+    '0000000000000000000000000000000000000000000000000000000000000005' +
+    // proofLeaf.c = (7, 8)
+    '0000000000000000000000000000000000000000000000000000000000000007' +
+    '0000000000000000000000000000000000000000000000000000000000000008' +
+    // leafInputs.pkX = (1,2,3,4)
+    '0000000000000000000000000000000000000000000000000000000000000001' +
+    '0000000000000000000000000000000000000000000000000000000000000002' +
+    '0000000000000000000000000000000000000000000000000000000000000003' +
+    '0000000000000000000000000000000000000000000000000000000000000004' +
+    // leafInputs.pkY = (5,6,7,8)
+    '0000000000000000000000000000000000000000000000000000000000000005' +
+    '0000000000000000000000000000000000000000000000000000000000000006' +
+    '0000000000000000000000000000000000000000000000000000000000000007' +
+    '0000000000000000000000000000000000000000000000000000000000000008' +
+    // ctxHash = 0
+    '0000000000000000000000000000000000000000000000000000000000000000' +
+    // declHash = 0x4d2 (= 1234)
+    '00000000000000000000000000000000000000000000000000000000000004d2' +
+    // timestamp = 0x671db480 (= 1,730,000,000)
+    '00000000000000000000000000000000000000000000000000000000671db480' +
+    // nullifier = 0x2a (= 42)
+    '000000000000000000000000000000000000000000000000000000000000002a' +
+    // leafSpkiCommit = 0x63 (= 99)
+    '0000000000000000000000000000000000000000000000000000000000000063' +
+    // proofChain.a = (1, 2)
+    '0000000000000000000000000000000000000000000000000000000000000001' +
+    '0000000000000000000000000000000000000000000000000000000000000002' +
+    // proofChain.b = ((4,3),(6,5))
+    '0000000000000000000000000000000000000000000000000000000000000004' +
+    '0000000000000000000000000000000000000000000000000000000000000003' +
+    '0000000000000000000000000000000000000000000000000000000000000006' +
+    '0000000000000000000000000000000000000000000000000000000000000005' +
+    // proofChain.c = (7, 8)
+    '0000000000000000000000000000000000000000000000000000000000000007' +
+    '0000000000000000000000000000000000000000000000000000000000000008' +
+    // chainInputs.rTL = 0x1234 (= 4660)
+    '0000000000000000000000000000000000000000000000000000000000001234' +
+    // chainInputs.algorithmTag = 1 (uint8 left-pad)
+    '0000000000000000000000000000000000000000000000000000000000000001' +
+    // chainInputs.leafSpkiCommit = 0x63
+    '0000000000000000000000000000000000000000000000000000000000000063';
+
+  it('selector matches keccak256(register(tuple,tuple,tuple,tuple))[0..4]', () => {
+    // Derive the V3 register selector directly from the ABI so the golden
+    // stays honest against ABI drift.
+    const registerAbi = (QKBRegistryV3Abi as Array<{ type: string; name?: string }>).find(
+      (x) => x.type === 'function' && x.name === 'register',
+    );
+    expect(registerAbi).toBeDefined();
+    const sel = toFunctionSelector(registerAbi as Parameters<typeof toFunctionSelector>[0]);
+    expect(sel).toBe(REGISTER_SELECTOR);
+  });
+
+  it('round-trips through viem decodeFunctionData', () => {
+    const calldata = encodeV3RegisterCalldata(args);
+    const decoded = decodeFunctionData({
+      abi: QKBRegistryV3Abi as unknown as import('viem').Abi,
+      data: calldata,
+    });
+    expect(decoded.functionName).toBe('register');
+    const tupleArgs = decoded.args as readonly [
+      { a: readonly bigint[] },
+      { ctxHash: string; leafSpkiCommit: string; timestamp: bigint },
+      { a: readonly bigint[] },
+      { rTL: string; algorithmTag: number; leafSpkiCommit: string },
+    ];
+    expect(tupleArgs).toHaveLength(4);
+    expect(tupleArgs[0].a[0]).toBe(1n);
+    expect(tupleArgs[0].a[1]).toBe(2n);
+    expect(tupleArgs[1].ctxHash).toBe(hex32(0));
+    expect(tupleArgs[1].timestamp).toBe(1730000000n);
+    expect(tupleArgs[1].leafSpkiCommit).toBe(hex32(99));
+    expect(tupleArgs[3].rTL).toBe(hex32(0x1234));
+    expect(tupleArgs[3].algorithmTag).toBe(1);
+    expect(tupleArgs[3].leafSpkiCommit).toBe(hex32(99));
+  });
+
+  it('matches the pinned golden calldata byte-for-byte', () => {
+    // Golden. If this fails, either:
+    //   - The V3 ABI drifted (regenerate after rechecking the deployed contract).
+    //   - packProof's pi_b ordering changed (would also break on-chain verify).
+    //   - toHex32 / toLimbString changed their output.
+    // Always diagnose before blindly regenerating.
+    const calldata = encodeV3RegisterCalldata(args);
+    expect(calldata).toBe(GOLDEN_CALLDATA);
+  });
+
+  it('starts with the register selector', () => {
+    const calldata = encodeV3RegisterCalldata(args);
+    expect(calldata.slice(0, 10)).toBe(REGISTER_SELECTOR);
   });
 });

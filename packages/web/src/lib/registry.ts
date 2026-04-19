@@ -27,6 +27,7 @@
  * contracts worker re-emits the artifact. Consumers load the ABI from
  * `fixtures/contracts/sepolia.json` at runtime.
  */
+import { encodeFunctionData } from 'viem';
 import { keccak_256 } from '@noble/hashes/sha3';
 import { QkbError } from './errors';
 import type {
@@ -35,6 +36,7 @@ import type {
   Phase2Witness,
 } from './witness';
 import type { Groth16Proof, SplitProveResult } from './prover';
+import QKBRegistryV3Abi from '../../fixtures/contracts/QKBRegistryV3.json';
 
 // ---------------------------------------------------------------------------
 // V3 custom error selectors
@@ -303,6 +305,164 @@ export function buildRegisterArgs(
     proofChain: packProof(proofs.proofChain),
     chainInputs: packChainInputs(witness.chain),
   };
+}
+
+/**
+ * Project a 13-element leaf public-signals array (orchestration §2.1
+ * order: pkX[0..3], pkY[0..3], ctxHash[8], declHash[9], timestamp[10],
+ * nullifier[11], leafSpkiCommit[12]) into the Solidity `LeafInputs` struct.
+ *
+ * Motivation: /register loads proof + publicSignals from sessionStorage,
+ * where the originating `Phase2Witness` was discarded after the prover run.
+ * The public-signals array is sufficient on its own — V3's verifier
+ * consumes exactly these fields.
+ */
+export function leafInputsFromPublicSignals(publicLeaf: readonly string[]): LeafInputs {
+  if (publicLeaf.length !== 13) {
+    throw new QkbError('witness.fieldTooLong', {
+      reason: 'leaf-signals-shape',
+      got: publicLeaf.length,
+    });
+  }
+  return {
+    pkX: [
+      toLimbString(publicLeaf[0]!),
+      toLimbString(publicLeaf[1]!),
+      toLimbString(publicLeaf[2]!),
+      toLimbString(publicLeaf[3]!),
+    ] as const,
+    pkY: [
+      toLimbString(publicLeaf[4]!),
+      toLimbString(publicLeaf[5]!),
+      toLimbString(publicLeaf[6]!),
+      toLimbString(publicLeaf[7]!),
+    ] as const,
+    ctxHash: toHex32(publicLeaf[8]!),
+    declHash: toHex32(publicLeaf[9]!),
+    timestamp: toLimbString(publicLeaf[10]!),
+    nullifier: toHex32(publicLeaf[11]!),
+    leafSpkiCommit: toHex32(publicLeaf[12]!),
+  };
+}
+
+/**
+ * Project a 3-element chain public-signals array (orchestration §2.2
+ * order: rTL[0], algorithmTag[1], leafSpkiCommit[2]) into the Solidity
+ * `ChainInputs` struct.
+ */
+export function chainInputsFromPublicSignals(publicChain: readonly string[]): ChainInputs {
+  if (publicChain.length !== 3) {
+    throw new QkbError('witness.fieldTooLong', {
+      reason: 'chain-signals-shape',
+      got: publicChain.length,
+    });
+  }
+  const tag = publicChain[1] === '1' ? 1 : 0;
+  return {
+    rTL: toHex32(publicChain[0]!),
+    algorithmTag: tag,
+    leafSpkiCommit: toHex32(publicChain[2]!),
+  };
+}
+
+/**
+ * Reconstruct `RegisterArgs` from the session-persisted proof + public-signals
+ * arrays. Equivalent to `buildRegisterArgs(pk, witness, proofs)` but doesn't
+ * require the `Phase2Witness` object — useful on /register after a reload
+ * where the witness was dropped but the prover output was kept.
+ */
+export function buildRegisterArgsFromSignals(
+  pk: `0x04${string}`,
+  proofLeaf: Groth16Proof,
+  publicLeaf: readonly string[],
+  proofChain: Groth16Proof,
+  publicChain: readonly string[],
+): RegisterArgs {
+  return {
+    pk,
+    proofLeaf: packProof(proofLeaf),
+    leafInputs: leafInputsFromPublicSignals(publicLeaf),
+    proofChain: packProof(proofChain),
+    chainInputs: chainInputsFromPublicSignals(publicChain),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// V3 calldata encoder (viem)
+//
+// `register(Proof proofLeaf, LeafInputs leafInputs, Proof proofChain,
+//  ChainInputs chainInputs)` — 4 struct args, no raw bytes. Encoded via viem
+// `encodeFunctionData` against the pumped V3 ABI so ABI drift is caught by
+// the type checker (viem derives tuple types from the abi const).
+// ---------------------------------------------------------------------------
+
+// viem's encodeFunctionData is generic over a readonly ABI const, but our
+// ABI lives in a JSON import and tsc widens it to `unknown[]`. Treat it as
+// a plain `Abi` — we pay for the lost type-narrowing with a runtime coercion
+// of the args tuple below, but viem still does full dynamic ABI matching so
+// a shape mismatch fails fast.
+const V3_ABI = QKBRegistryV3Abi as unknown as import('viem').Abi;
+
+/**
+ * ABI-encode the V3 `register(...)` calldata from a `RegisterArgs`. The
+ * caller should have already validated `args` via `assertRegisterArgsShape`.
+ *
+ * Returns a 0x-prefixed hex string suitable for `eth_sendTransaction.data`.
+ * The 4-byte selector is keccak256("register((uint256[2],uint256[2][2],uint256[2]),(uint256[4],uint256[4],bytes32,bytes32,uint64,bytes32,bytes32),(uint256[2],uint256[2][2],uint256[2]),(bytes32,uint8,bytes32))")[0..4];
+ * everything after is ABI-encoded per Solidity's tuple-in-calldata rules.
+ */
+export function encodeV3RegisterCalldata(args: RegisterArgs): `0x${string}` {
+  // viem's function-data encoder accepts plain decimal strings / bigints /
+  // 0x-hex for uint types; toHex32 already rendered bytes32 fields and
+  // toLimbString rendered uint256[4] limbs as decimal strings, so no extra
+  // massaging is needed. The `as const` tuple here mirrors the V3 ABI's
+  // positional input order.
+  return encodeFunctionData({
+    abi: V3_ABI,
+    functionName: 'register',
+    args: [
+      {
+        a: [BigInt(args.proofLeaf.a[0]), BigInt(args.proofLeaf.a[1])],
+        b: [
+          [BigInt(args.proofLeaf.b[0][0]), BigInt(args.proofLeaf.b[0][1])],
+          [BigInt(args.proofLeaf.b[1][0]), BigInt(args.proofLeaf.b[1][1])],
+        ],
+        c: [BigInt(args.proofLeaf.c[0]), BigInt(args.proofLeaf.c[1])],
+      },
+      {
+        pkX: [
+          BigInt(args.leafInputs.pkX[0]),
+          BigInt(args.leafInputs.pkX[1]),
+          BigInt(args.leafInputs.pkX[2]),
+          BigInt(args.leafInputs.pkX[3]),
+        ],
+        pkY: [
+          BigInt(args.leafInputs.pkY[0]),
+          BigInt(args.leafInputs.pkY[1]),
+          BigInt(args.leafInputs.pkY[2]),
+          BigInt(args.leafInputs.pkY[3]),
+        ],
+        ctxHash: args.leafInputs.ctxHash,
+        declHash: args.leafInputs.declHash,
+        timestamp: BigInt(args.leafInputs.timestamp as string | bigint | number),
+        nullifier: args.leafInputs.nullifier,
+        leafSpkiCommit: args.leafInputs.leafSpkiCommit,
+      },
+      {
+        a: [BigInt(args.proofChain.a[0]), BigInt(args.proofChain.a[1])],
+        b: [
+          [BigInt(args.proofChain.b[0][0]), BigInt(args.proofChain.b[0][1])],
+          [BigInt(args.proofChain.b[1][0]), BigInt(args.proofChain.b[1][1])],
+        ],
+        c: [BigInt(args.proofChain.c[0]), BigInt(args.proofChain.c[1])],
+      },
+      {
+        rTL: args.chainInputs.rTL,
+        algorithmTag: args.chainInputs.algorithmTag,
+        leafSpkiCommit: args.chainInputs.leafSpkiCommit,
+      },
+    ],
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -2,37 +2,46 @@
  * /register — Step 4 of the binding flow.
  *
  * Reads the split-proof bundle (proofLeaf + publicLeaf, proofChain +
- * publicChain — 2026-04-18 pivot) from sessionStorage and submits a
- * `register(proofLeaf, leafInputs, proofChain, chainInputs)` call to
- * QKBRegistryV3 on Sepolia via the user's EIP-1193 wallet. The registry
- * address is still a TODO-stub today — the lead pumps the deployed
- * Sepolia address into `fixtures/contracts/sepolia.json` after the V3
- * deploy; this file then imports it.
+ * publicChain — 2026-04-18 pivot) from sessionStorage, ABI-encodes a V3
+ * `register(proofLeaf, leafInputs, proofChain, chainInputs)` call against
+ * the pumped QKBRegistryV3 ABI, and submits via the user's EIP-1193
+ * wallet. Registry address + chainId come from the lead-pumped
+ * `fixtures/contracts/sepolia.json`.
  *
  * The wallet + submit pipeline is injectable:
  *   - `window.__QKB_ETHEREUM__` lets Playwright stub EIP-1193 without a real
  *     MetaMask.
  *   - `window.__QKB_SUBMIT_TX__` lets Playwright bypass ABI encoding and
- *     return a deterministic tx hash + bound address for assertion.
- *
- * Both hooks are `undefined` in the production bundle; the default path
- * falls back to the real `window.ethereum` and a minimal hand-rolled
- * `eth_sendTransaction` flow. ABI encoding of the V3 split-proof calldata
- * is still a follow-up — it lands when the Sepolia V3 deploy address is
- * pumped (orchestration §S5).
+ *     return a deterministic tx hash + bound address for assertion. The
+ *     default path does real calldata encoding + eth_sendTransaction.
  */
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PhaseCard } from '../components/PhaseCard';
 import { localizeError } from '../lib/errors';
 import type { Groth16Proof } from '../lib/prover';
-import { classifyWalletRevert } from '../lib/registry';
+import {
+  assertRegisterArgsShape,
+  buildRegisterArgsFromSignals,
+  classifyWalletRevert,
+  encodeV3RegisterCalldata,
+} from '../lib/registry';
 import { loadSession } from '../lib/session';
+import sepoliaV3 from '../../fixtures/contracts/sepolia.json';
 
-// TODO: lead pumps real address after `DeployQKBRegistry.s.sol` runs on Sepolia.
-// The constant lives here so a find-and-replace during the pump step is a
-// one-liner. Do NOT hardcode it in routes/tests — always import.
-const REGISTRY_ADDRESS_SEPOLIA = '0x7F36aF783538Ae8f981053F2b0E45421a1BF4815';
+// V3 deploy coordinates pumped from the contracts worker post-deploy.
+// `registryVersion: "v3"` gates the import; a regression to V2 should
+// surface as a loud boot-time assert here rather than a silent calldata
+// mismatch at submit time.
+const REGISTRY_ADDRESS_SEPOLIA = sepoliaV3.registry as `0x${string}`;
+if (sepoliaV3.registryVersion !== 'v3') {
+  // Throw at module load — if this SPA bundle was built against a stale
+  // sepolia.json, /register would otherwise send V3-shaped calldata to a
+  // V2 contract address. Fail loud.
+  throw new Error(
+    `sepolia.json registryVersion must be 'v3' (got '${sepoliaV3.registryVersion}')`,
+  );
+}
 
 type Eip1193Request = (args: { method: string; params?: unknown[] }) => Promise<unknown>;
 interface Eip1193Provider {
@@ -43,11 +52,13 @@ interface Eip1193Provider {
 interface SubmitTxInput {
   from: string;
   to: string;
+  /** Uncompressed secp256k1 pubkey from /generate — used only for shape
+   *  validation via assertRegisterArgsShape; V3 register() derives the
+   *  bound address on-chain from leafInputs.pkX/pkY, not from msg.sender. */
+  pk: `0x04${string}`;
   // Split-proof pivot (2026-04-18): V3's register() takes a leaf proof +
   // leaf 13-signal inputs AND a chain proof + chain 3-signal inputs. The
-  // opaque `Groth16Proof` shape carries the snarkjs a/b/c triples; the
-  // submit-tx implementation is responsible for packing them into the
-  // Solidity struct layout and encoding the register(...) calldata.
+  // opaque `Groth16Proof` shape carries the snarkjs a/b/c triples.
   proofLeaf: Groth16Proof;
   publicLeaf: readonly string[];
   proofChain: Groth16Proof;
@@ -123,24 +134,59 @@ export function RegisterScreen() {
       setError(t('register.noWallet'));
       return;
     }
+    const sessionPk = session.pubkeyUncompressedHex;
+    if (!sessionPk) {
+      setError(t('register.noBundle'));
+      return;
+    }
+    // Normalize to the `0x04...` uncompressed-SEC1 form the V3 LeafInputs
+    // expects. /generate stores either `04...` or `0x04...` depending on
+    // bundle vintage; tolerate both.
+    const normalizedPk = (sessionPk.startsWith('0x04')
+      ? sessionPk
+      : sessionPk.startsWith('04')
+        ? `0x${sessionPk}`
+        : null) as `0x04${string}` | null;
+    if (!normalizedPk) {
+      setError(t('register.noBundle'));
+      return;
+    }
+
     setSubmitting(true);
     try {
       const submit =
         window.__QKB_SUBMIT_TX__ ??
         (async (input: SubmitTxInput): Promise<SubmitTxResult> => {
-          // Default path: fall back to eth_sendTransaction with empty data
-          // until the contracts worker's ABI + deployed address are pumped.
-          // This keeps the screen exercise-able in the happy-path Playwright
-          // suite without blocking on the ABI pump.
+          // Default path: ABI-encode the V3 register(proofLeaf, leafInputs,
+          // proofChain, chainInputs) calldata and ship it via
+          // eth_sendTransaction. buildRegisterArgsFromSignals projects the
+          // session-persisted publicLeaf/publicChain arrays into the
+          // Solidity struct shapes; assertRegisterArgsShape catches drift
+          // (e.g. a leaf/chain leafSpkiCommit mismatch) before we hit the
+          // wallet.
+          const args = buildRegisterArgsFromSignals(
+            input.pk,
+            input.proofLeaf,
+            input.publicLeaf,
+            input.proofChain,
+            input.publicChain,
+          );
+          assertRegisterArgsShape(args);
+          const data = encodeV3RegisterCalldata(args);
           const tx = (await provider.request({
             method: 'eth_sendTransaction',
-            params: [{ from: input.from, to: input.to, data: '0x' }],
+            params: [{ from: input.from, to: input.to, data }],
           })) as string;
+          // V3 derives the bound address on-chain from leafInputs.pkX/pkY
+          // via QKBVerifier.toPkAddress — the SPA doesn't observe the
+          // derivation, so we surface input.from as a placeholder pkAddr
+          // until a BindingRegistered event listener lands.
           return { txHash: tx, pkAddr: input.from };
         });
       const result = await submit({
         from: address,
         to: REGISTRY_ADDRESS_SEPOLIA,
+        pk: normalizedPk,
         proofLeaf,
         publicLeaf,
         proofChain,
