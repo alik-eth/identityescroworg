@@ -1,6 +1,11 @@
 {
-  "rTL": "0x25ce7bfa7693e391a7e1d5df666caa5b622bf709cc6797289a74bfc272462b3e",
+  "rTL": "0x27e44cb62367e384d9b0763ef82a3c78c3fac5bae08fc27ff8f2a0efa92845fe",
   "treeDepth": 16,
-  "builtAt": "2026-04-18T10:17:52.011Z",
-  "lotlVersion": "diia-2026-04-17"
+  "builtAt": "2026-04-22T19:32:03.493Z",
+  "lotlVersion": "combined-eidas-eu-ua-tl-ec-2026-04-22",
+  "trustDomain": "combined-eidas-eu-ua-tl-ec",
+  "trustSources": [
+    "eidas-eu-lotl-2026-04-22",
+    "ua-tl-ec-2026-02-26"
+  ]
 }

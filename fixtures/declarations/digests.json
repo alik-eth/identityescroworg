@@ -7,13 +7,13 @@
   "declarations": {
     "en": {
       "path": "fixtures/declarations/en.txt",
-      "bytes": 510,
-      "sha256": "0xf83a393242585b93dea1474fbfc92a06dd90629f3e159b0d230548274315c89b"
+      "bytes": 326,
+      "sha256": "0x007889dc58abf061ca1ba9d64a3cee02365c41eada133d028c51d4c7d0471084"
     },
     "uk": {
       "path": "fixtures/declarations/uk.txt",
-      "bytes": 905,
-      "sha256": "0x692d0666a14c9e70ebadbfb864a18e152a70be061924902423e52b4ae21492b7"
+      "bytes": 583,
+      "sha256": "0xfef523c6bee57ac2969d1bce6583f9b112a4859192cb7368929b4795654dfa90"
     }
   }
 }

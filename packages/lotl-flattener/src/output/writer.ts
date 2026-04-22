@@ -16,6 +16,8 @@ export interface WriterInput {
   cas: FlattenedCA[];
   lotlVersion: string;
   builtAt: string;
+  trustDomain?: string;
+  trustSources?: readonly string[];
 }
 
 const toHex = (v: bigint): string => {
@@ -37,12 +39,22 @@ export async function writeOutput(input: WriterInput, dir: string): Promise<void
     version: 1,
     lotlSnapshot: input.builtAt,
     treeDepth: input.treeDepth,
+    ...(input.trustDomain ? { trustDomain: input.trustDomain } : {}),
+    ...(input.trustSources ? { trustSources: input.trustSources } : {}),
     cas: input.cas.map((c, idx) => ({
       merkleIndex: idx,
       certDerB64: toB64(c.certDer),
       issuerDN: c.issuerDN,
       validFrom: c.validFrom,
       validTo: c.validTo,
+      territory: c.territory,
+      ...(c.tspName ? { tspName: c.tspName } : {}),
+      ...(c.serviceName ? { serviceName: c.serviceName } : {}),
+      serviceStatus: c.serviceStatus,
+      serviceValidFrom: c.serviceValidFrom,
+      ...(c.serviceValidTo ? { serviceValidTo: c.serviceValidTo } : {}),
+      qualifiers: c.qualifiers,
+      qualificationElements: c.qualificationElements,
       poseidonHash: toHex(c.poseidonHash),
     })),
   };
@@ -52,6 +64,8 @@ export async function writeOutput(input: WriterInput, dir: string): Promise<void
     treeDepth: input.treeDepth,
     builtAt: input.builtAt,
     lotlVersion: input.lotlVersion,
+    ...(input.trustDomain ? { trustDomain: input.trustDomain } : {}),
+    ...(input.trustSources ? { trustSources: input.trustSources } : {}),
   };
 
   const layers = {

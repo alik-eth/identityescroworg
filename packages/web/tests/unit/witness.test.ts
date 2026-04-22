@@ -131,20 +131,22 @@ describe('buildLeafWitness — public signals', () => {
 });
 
 describe('buildLeafWitness — offsets', () => {
-  it('every byte-offset field points at the matching key literal in Bcanon', async () => {
+  it('every byte-offset field points at the matching value in Bcanon', async () => {
     const parsed = parseCades(f.p7s);
     const w = await buildLeafWitness({
       parsed,
       binding: f.binding,
       bindingBytes: f.bindingBytes,
     });
-    const at = (off: number, s: string): boolean =>
-      new TextDecoder().decode(f.bindingBytes.subarray(off, off + s.length)) === s;
-    expect(at(w.pkValueOffset, '"pk":')).toBe(true);
-    expect(at(w.schemeValueOffset, '"scheme":')).toBe(true);
-    expect(at(w.ctxValueOffset, '"context":')).toBe(true);
-    expect(at(w.declValueOffset, '"declaration":')).toBe(true);
-    expect(at(w.tsValueOffset, '"timestamp":')).toBe(true);
+    const at = (off: number, s: string): boolean => {
+      const bytes = new TextEncoder().encode(s);
+      return new TextDecoder().decode(f.bindingBytes.subarray(off, off + bytes.length)) === s;
+    };
+    expect(at(w.pkValueOffset, f.binding.pk)).toBe(true);
+    expect(at(w.schemeValueOffset, f.binding.scheme)).toBe(true);
+    expect(at(w.ctxValueOffset, f.binding.context)).toBe(true);
+    expect(at(w.declValueOffset, f.binding.declaration)).toBe(true);
+    expect(at(w.tsValueOffset, String(f.binding.timestamp))).toBe(true);
     expect(w.BcanonLen).toBe(f.bindingBytes.length);
     expect(w.BcanonPaddedLen).toBe(sha256Pad(f.bindingBytes).length);
     expect(w.signedAttrsLen).toBe(parsed.signedAttrsDer.length);

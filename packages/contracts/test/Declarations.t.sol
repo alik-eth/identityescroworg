@@ -7,9 +7,8 @@ import { DeclarationHashes } from "../src/constants/DeclarationHashes.sol";
 contract DeclarationsTest is Test {
     /// @dev BN254 scalar field prime. The circuit packs sha256(declaration)
     ///      MSB-first into a field element, which reduces mod p when the raw
-    ///      digest exceeds it — both canonical declarations happen to have
-    ///      the high bit set so both reduce. Contract constants store the
-    ///      *reduced* value so on-chain whitelist matches circuit output.
+    ///      digest exceeds it. Contract constants store the reduced value so
+    ///      the on-chain whitelist matches circuit output.
     uint256 internal constant BN254_P =
         21888242871839275222246405745257275088548364400416034343698204186575808495617;
 

@@ -37,6 +37,7 @@ import {
 import type { NotaryVerifyResult } from "./context.js";
 
 const OID_MESSAGE_DIGEST = "1.2.840.113549.1.9.4";
+const OID_SIGNING_TIME = "1.2.840.113549.1.9.5";
 const OID_CN = "2.5.4.3";
 const OID_SHA256 = "2.16.840.1.101.3.4.2.1";
 const OID_RSA = "1.2.840.113549.1.1.1";
@@ -48,6 +49,8 @@ const OID_P256 = "1.2.840.10045.3.1.7";
 export interface TrustedCa {
   merkleIndex: number;
   certDerB64: string;
+  serviceValidFrom?: number;
+  serviceValidTo?: number;
 }
 
 export interface TrustedCasFile {
@@ -60,6 +63,8 @@ export interface TrustedCasFile {
 export interface VerifyOpts {
   /** LOTL snapshot file contents. When absent, chain is always "untrusted". */
   trustedCas?: TrustedCasFile;
+  /** Unix timestamp to evaluate the trusted-list service window at. Defaults to now. */
+  validationTime?: number;
 }
 
 let _engineReady = false;
@@ -179,18 +184,19 @@ export async function verifyCadesNode(
   // Resolve the intermediate and determine chain trust.
   let chain: "trusted" | "untrusted" = "untrusted";
   if (opts.trustedCas) {
+    const validationTime = opts.validationTime ?? readSigningTime(signer) ?? Math.floor(Date.now() / 1000);
     // Prefer inline intermediate when present.
     const inlineInt = findIssuer(certs, leaf);
     if (inlineInt) {
       const intDer = certDer(inlineInt);
-      if (indexInTrustedCas(intDer, opts.trustedCas) !== -1) {
+      if (indexInTrustedCas(intDer, opts.trustedCas, validationTime) !== -1) {
         chain = "trusted";
       } else {
         // inline didn't match — try DN-based lookup as a fallback.
-        if (resolveIntermediateFromLotl(leaf, opts.trustedCas)) chain = "trusted";
+        if (resolveIntermediateFromLotl(leaf, opts.trustedCas, validationTime)) chain = "trusted";
       }
     } else {
-      if (resolveIntermediateFromLotl(leaf, opts.trustedCas)) chain = "trusted";
+      if (resolveIntermediateFromLotl(leaf, opts.trustedCas, validationTime)) chain = "trusted";
     }
   }
 
@@ -323,6 +329,7 @@ function findIssuer(
 function resolveIntermediateFromLotl(
   leaf: Certificate,
   file: TrustedCasFile,
+  validationTime: number,
 ): { der: Uint8Array; merkleIndex: number } | null {
   const wantDer = new Uint8Array(leaf.issuer.toSchema().toBER(false));
   for (const ca of file.cas) {
@@ -336,21 +343,30 @@ function resolveIntermediateFromLotl(
     if (!parsed) continue;
     const subjDer = new Uint8Array(parsed.subject.toSchema().toBER(false));
     if (bytesEqual(subjDer, wantDer)) {
+      if (!isCaActiveAt(ca, validationTime)) continue;
       return { der, merkleIndex: ca.merkleIndex };
     }
   }
   return null;
 }
 
-function indexInTrustedCas(target: Uint8Array, file: TrustedCasFile): number {
+function indexInTrustedCas(target: Uint8Array, file: TrustedCasFile, validationTime: number): number {
   for (const ca of file.cas) {
     try {
-      if (bytesEqual(b64ToBytes(ca.certDerB64), target)) return ca.merkleIndex;
+      if (bytesEqual(b64ToBytes(ca.certDerB64), target) && isCaActiveAt(ca, validationTime)) {
+        return ca.merkleIndex;
+      }
     } catch {
       continue;
     }
   }
   return -1;
+}
+
+function isCaActiveAt(ca: TrustedCa, timestamp: number): boolean {
+  if (ca.serviceValidFrom !== undefined && timestamp < ca.serviceValidFrom) return false;
+  if (ca.serviceValidTo !== undefined && timestamp > ca.serviceValidTo) return false;
+  return true;
 }
 
 function tryParseCert(der: Uint8Array): Certificate | null {
@@ -371,6 +387,19 @@ function readCn(rdn: { typesAndValues: ReadonlyArray<{ type: string; value: { va
     }
   }
   return undefined;
+}
+
+function readSigningTime(signer: SignerInfo): number | undefined {
+  const attr = signer.signedAttrs?.attributes.find((a) => a.type === OID_SIGNING_TIME);
+  const value = attr?.values[0];
+  if (!value) return undefined;
+  const date =
+    value instanceof asn1js.UTCTime || value instanceof asn1js.GeneralizedTime
+      ? value.toDate()
+      : undefined;
+  if (!date) return undefined;
+  const t = date.getTime();
+  return Number.isFinite(t) ? Math.floor(t / 1000) : undefined;
 }
 
 function rdnEqual(a: { toSchema(): asn1js.AsnType }, b: { toSchema(): asn1js.AsnType }): boolean {

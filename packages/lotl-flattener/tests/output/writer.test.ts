@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { writeOutput, type WriterInput } from '../../src/output/writer.js';
+import { type WriterInput, writeOutput } from '../../src/output/writer.js';
 
 let dir: string;
 beforeEach(async () => {
@@ -15,19 +15,20 @@ afterEach(async () => {
 const sampleInput = (): WriterInput => ({
   rTL: 0x1234abcdn,
   treeDepth: 4,
-  layers: [
-    [1n, 2n, 3n],
-    [10n, 20n],
-    [100n],
-    [0x1234abcdn],
-    [0x1234abcdn],
-  ],
+  layers: [[1n, 2n, 3n], [10n, 20n], [100n], [0x1234abcdn], [0x1234abcdn]],
   cas: [
     {
       certDer: new Uint8Array([0xde, 0xad, 0xbe, 0xef]),
       issuerDN: 'CN=Foo',
       validFrom: 1_700_000_000,
       validTo: 1_900_000_000,
+      territory: 'EE',
+      tspName: 'Example QTSP',
+      serviceName: 'Example QES CA',
+      serviceStatus: 'http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/granted',
+      serviceValidFrom: 1_690_000_000,
+      serviceValidTo: 1_890_000_000,
+      qualifiers: ['http://uri.etsi.org/TrstSvc/TrustedList/SvcInfoExt/QCForESig'],
       poseidonHash: 1n,
     },
     {
@@ -35,11 +36,17 @@ const sampleInput = (): WriterInput => ({
       issuerDN: 'CN=Bar',
       validFrom: 1_710_000_000,
       validTo: 1_910_000_000,
+      territory: 'PL',
+      serviceStatus: 'http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/granted',
+      serviceValidFrom: 1_700_000_000,
+      qualifiers: [],
       poseidonHash: 2n,
     },
   ],
   lotlVersion: 'test-mini',
   builtAt: '2026-04-17T00:00:00Z',
+  trustDomain: 'test-domain',
+  trustSources: ['test-source-a', 'test-source-b'],
 });
 
 describe('writeOutput', () => {
@@ -54,11 +61,15 @@ describe('writeOutput', () => {
       treeDepth: 4,
       builtAt: '2026-04-17T00:00:00Z',
       lotlVersion: 'test-mini',
+      trustDomain: 'test-domain',
+      trustSources: ['test-source-a', 'test-source-b'],
     });
 
     expect(cas.version).toBe(1);
     expect(cas.lotlSnapshot).toBe('2026-04-17T00:00:00Z');
     expect(cas.treeDepth).toBe(4);
+    expect(cas.trustDomain).toBe('test-domain');
+    expect(cas.trustSources).toEqual(['test-source-a', 'test-source-b']);
     expect(cas.cas).toHaveLength(2);
     expect(cas.cas[0]).toEqual({
       merkleIndex: 0,
@@ -66,10 +77,17 @@ describe('writeOutput', () => {
       issuerDN: 'CN=Foo',
       validFrom: 1_700_000_000,
       validTo: 1_900_000_000,
+      territory: 'EE',
+      tspName: 'Example QTSP',
+      serviceName: 'Example QES CA',
+      serviceStatus: 'http://uri.etsi.org/TrstSvc/TrustedList/Svcstatus/granted',
+      serviceValidFrom: 1_690_000_000,
+      serviceValidTo: 1_890_000_000,
+      qualifiers: ['http://uri.etsi.org/TrstSvc/TrustedList/SvcInfoExt/QCForESig'],
       poseidonHash: '0x01',
     });
-    expect(cas.cas[1]!.merkleIndex).toBe(1);
-    expect(cas.cas[1]!.poseidonHash).toBe('0x02');
+    expect(cas.cas[1]?.merkleIndex).toBe(1);
+    expect(cas.cas[1]?.poseidonHash).toBe('0x02');
 
     expect(layers.depth).toBe(4);
     expect(layers.layers).toHaveLength(5);
@@ -80,19 +98,22 @@ describe('writeOutput', () => {
 
   test('round-trips bigints losslessly', async () => {
     const input = sampleInput();
-    input.cas[0]!.poseidonHash =
-      0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789n;
-    input.rTL = input.cas[0]!.poseidonHash;
+    const [ca] = input.cas;
+    if (!ca) throw new Error('expected CA');
+    ca.poseidonHash = 0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789n;
+    input.rTL = ca.poseidonHash;
     await writeOutput(input, dir);
     const root = JSON.parse(await readFile(join(dir, 'root.json'), 'utf8'));
     const cas = JSON.parse(await readFile(join(dir, 'trusted-cas.json'), 'utf8'));
     expect(BigInt(root.rTL)).toBe(input.rTL);
-    expect(BigInt(cas.cas[0].poseidonHash)).toBe(input.cas[0]!.poseidonHash);
+    expect(BigInt(cas.cas[0].poseidonHash)).toBe(ca.poseidonHash);
   });
 
   test('preserves input order and assigns merkleIndex by position', async () => {
     const input = sampleInput();
-    input.cas = [input.cas[1]!, input.cas[0]!];
+    const [first, second] = input.cas;
+    if (!first || !second) throw new Error('expected two CAs');
+    input.cas = [second, first];
     await writeOutput(input, dir);
     const cas = JSON.parse(await readFile(join(dir, 'trusted-cas.json'), 'utf8'));
     expect(cas.cas[0]).toMatchObject({ merkleIndex: 0, issuerDN: 'CN=Bar' });

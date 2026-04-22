@@ -75,10 +75,9 @@ template QKBPresentationEcdsaLeaf() {
     var MAX_CERT = 1536;
     var MAX_CTX = 256;
     // MAX_DECL must satisfy declValueOffset + MAX_DECL ≤ MAX_BCANON so the
-    // BPFSliceVar Multiplexer over the Bcanon buffer never overflows. Diia
-    // admin binding places declaration at offset 31; UK is the longest
-    // canonical declaration at 905 B. 960 gives ~25 B safety margin under
-    // either ceiling.
+    // BPFSliceVar Multiplexer over the Bcanon buffer never overflows. UK is
+    // the longest canonical declaration at 583 B; 960 remains the current
+    // ceremony cap.
     var MAX_DECL = 960;
     var MAX_TS_DIGITS = 20;
 

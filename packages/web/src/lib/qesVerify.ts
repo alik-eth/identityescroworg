@@ -40,6 +40,8 @@ export interface TrustedCa {
   issuerDN?: string;
   validFrom?: number;
   validTo?: number;
+  serviceValidFrom?: number;
+  serviceValidTo?: number;
   poseidonHash?: string;
 }
 
@@ -106,9 +108,9 @@ export async function verifyQes(input: VerifyInput): Promise<VerifyOk> {
   let caMerkleIndex: number;
   if (parsed.intermediateCertDer) {
     intermediateDer = parsed.intermediateCertDer;
-    caMerkleIndex = lookupTrustedCa(intermediateDer, trustedCas);
+    caMerkleIndex = lookupTrustedCa(intermediateDer, trustedCas, binding.timestamp);
   } else {
-    const resolved = resolveIntermediateFromLotl(parsed.leafIssuerDer, trustedCas);
+    const resolved = resolveIntermediateFromLotl(parsed.leafIssuerDer, trustedCas, binding.timestamp);
     if (!resolved) {
       throw new QkbError('qes.unknownCA', { reason: 'intermediate-not-in-lotl' });
     }
@@ -146,8 +148,10 @@ export async function verifyQes(input: VerifyInput): Promise<VerifyOk> {
 function resolveIntermediateFromLotl(
   leafIssuerDer: Uint8Array,
   file: TrustedCasFile,
+  timestamp: number,
 ): { der: Uint8Array; merkleIndex: number } | null {
   const want = hex(leafIssuerDer);
+  let inactiveMatch = false;
   for (const ca of file.cas) {
     const der = b64ToBytes(ca.certDerB64);
     let cert: Certificate;
@@ -158,8 +162,15 @@ function resolveIntermediateFromLotl(
     }
     const subjDer = new Uint8Array(cert.subject.toSchema().toBER(false));
     if (hex(subjDer) === want) {
+      if (!isCaActiveAt(ca, timestamp)) {
+        inactiveMatch = true;
+        continue;
+      }
       return { der, merkleIndex: ca.merkleIndex };
     }
+  }
+  if (inactiveMatch) {
+    throw new QkbError('qes.unknownCA', { reason: 'ca-not-active-at-timestamp', timestamp });
   }
   return null;
 }
@@ -267,13 +278,27 @@ async function verifyChain(leaf: Certificate, issuer: Certificate): Promise<bool
   throw new QkbError('qes.wrongAlgorithm', { reason: 'chain', oid: issuerAlg });
 }
 
-function lookupTrustedCa(intermediateDer: Uint8Array, file: TrustedCasFile): number {
+function lookupTrustedCa(intermediateDer: Uint8Array, file: TrustedCasFile, timestamp: number): number {
   const targetHex = hex(intermediateDer);
+  let inactiveMatch = false;
   for (const ca of file.cas) {
     const der = b64ToBytes(ca.certDerB64);
-    if (hex(der) === targetHex) return ca.merkleIndex;
+    if (hex(der) !== targetHex) continue;
+    if (!isCaActiveAt(ca, timestamp)) {
+      inactiveMatch = true;
+      continue;
+    }
+    return ca.merkleIndex;
   }
-  throw new QkbError('qes.unknownCA');
+  throw new QkbError('qes.unknownCA', inactiveMatch
+    ? { reason: 'ca-not-active-at-timestamp', timestamp }
+    : undefined);
+}
+
+function isCaActiveAt(ca: TrustedCa, timestamp: number): boolean {
+  if (ca.serviceValidFrom !== undefined && timestamp < ca.serviceValidFrom) return false;
+  if (ca.serviceValidTo !== undefined && timestamp > ca.serviceValidTo) return false;
+  return true;
 }
 
 function parseCert(der: Uint8Array): Certificate {

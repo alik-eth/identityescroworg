@@ -5,17 +5,10 @@
  * This test was missing through Phase 1 + Phase 2 split-proof. On
  * 2026-04-19 the live Sepolia V3 E2E tripped the circuit's
  * `fieldTooLong` guard at /upload because the Ukrainian locale pushed
- * the canonical JSON to ~1244 bytes vs MAX_BCANON=1024. The fixed
+ * the canonical JSON to 1244 bytes vs MAX_BCANON=1024. The fixed
  * scaffold overhead (pk 130 hex + nonce 64 hex + other fields +
- * structural chars) is ~339 bytes; that leaves only ~685 bytes for the
- * declaration, while uk.txt is 905 bytes. Adding it here now so the
- * mismatch is caught at CI instead of after a user has signed with Diia.
- *
- * Currently the UK assertion fails by design — the circuit cannot
- * accept UK until a leaf re-ceremony raises MAX_BCANON. `it.fails`
- * documents the gap: the moment the re-ceremony lands with a bigger
- * buffer, this test turns the other direction and we must flip it back
- * to a normal `it`.
+ * structural chars) is ~339 bytes. Keep both declaration files concise
+ * enough that a user can sign either locale without a new circuit ceremony.
  */
 import { describe, expect, it } from 'vitest';
 import * as secp from '@noble/secp256k1';
@@ -45,12 +38,7 @@ describe('binding size vs circuit MAX_BCANON', () => {
       .toBeLessThanOrEqual(MAX_BCANON);
   });
 
-  // UK currently overflows because uk.txt is 905 bytes of Cyrillic
-  // (2 bytes per char in UTF-8). `it.fails` means "this SHOULD fail today
-  // — if it stops failing, CI turns red so we notice and flip it to
-  // a real assertion". Convert this to `it(...)` once the re-ceremony
-  // with a larger MAX_BCANON ships.
-  it.fails('UK declaration + realistic pk/nonce overflows MAX_BCANON (pending re-ceremony)', () => {
+  it('UK declaration + realistic pk/nonce fits MAX_BCANON', () => {
     const size = bcanonSize('uk');
     expect(size, `UK canonical binding is ${size} bytes, limit ${MAX_BCANON}`)
       .toBeLessThanOrEqual(MAX_BCANON);
@@ -66,7 +54,7 @@ describe('binding size vs circuit MAX_BCANON', () => {
     expect(ukSize).toBeGreaterThan(0);
     // eslint-disable-next-line no-console
     console.info(
-      `bcanon sizes — MAX_BCANON=${MAX_BCANON}  EN=${enSize} (margin ${MAX_BCANON - enSize})  UK=${ukSize} (over by ${ukSize - MAX_BCANON})`,
+      `bcanon sizes - MAX_BCANON=${MAX_BCANON}  EN=${enSize} (margin ${MAX_BCANON - enSize})  UK=${ukSize} (margin ${MAX_BCANON - ukSize})`,
     );
   });
 });

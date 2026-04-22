@@ -138,6 +138,22 @@ describe("verifyCadesNode (Q5)", () => {
     expect(r.chain).toBe("untrusted");
   });
 
+  it("returns chain=untrusted when the trusted-list service window is inactive", async () => {
+    const trust: TrustedCasFile = {
+      version: 1,
+      cas: [{
+        merkleIndex: 0,
+        certDerB64: bytesToB64(fx.intermediateDer),
+        serviceValidFrom: 1_700_000_100,
+      }],
+    };
+    const r = await verifyCadesNode(fx.p7s, fx.cert, fx.message, {
+      trustedCas: trust,
+      validationTime: 1_700_000_000,
+    });
+    expect(r.chain).toBe("untrusted");
+  });
+
   it("returns sigValid=false when messageDigest does not match payload preimage", async () => {
     const wrong = new TextEncoder().encode("tampered-payload");
     const r = await verifyCadesNode(fx.p7s, fx.cert, wrong, { trustedCas: fx.trustedCas });

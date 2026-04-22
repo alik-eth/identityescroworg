@@ -162,6 +162,29 @@ describe('verifyQes — failure modes', () => {
     ).rejects.toMatchObject({ code: 'qes.unknownCA' });
   });
 
+  it('unknownCA: trusted-list service is not active at binding timestamp', async () => {
+    const intDer = rsaFx.parsed.intermediateCertDer!;
+    await expect(
+      verifyQes({
+        parsed: rsaFx.parsed,
+        binding: rsaFx.binding,
+        bindingBytes: rsaFx.bindingBytes,
+        expectedPk: rsaFx.pk,
+        trustedCas: {
+          version: 1,
+          cas: [{
+            merkleIndex: 0,
+            certDerB64: bytesToB64(intDer),
+            serviceValidFrom: rsaFx.binding.timestamp + 60,
+          }],
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: 'qes.unknownCA',
+      details: { reason: 'ca-not-active-at-timestamp' },
+    });
+  });
+
   it('sigInvalid: chain link fails (intermediate did not sign leaf)', async () => {
     const otherInt = makeRsaFixture({ locale: 'en' });
     const otherIntDer = otherInt.parsed.intermediateCertDer!;

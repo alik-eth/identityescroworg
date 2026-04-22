@@ -14,6 +14,13 @@
   "trustedListRootPrevious": "0x2aabe358cd38fe2859cdc57d62d611d76bce881ec49ecefa2d26f9338ff0228f",
   "trustedListRootRotatedAt": "2026-04-19T20:42:48Z",
   "trustedListRootRotationTx": "0xfd7ac1daf670266b28a2ebaa29d8df06682d518e096c6bc2dddcb7d5c4e02544",
+  "trustedListRootPending": "0x27e44cb62367e384d9b0763ef82a3c78c3fac5bae08fc27ff8f2a0efa92845fe",
+  "trustedListRootPendingPolicy": "combined-eidas-eu-ua-tl-ec",
+  "trustedListRootPendingLotlVersion": "combined-eidas-eu-ua-tl-ec-2026-04-22",
+  "trustedListRootPendingSources": [
+    "eidas-eu-lotl-2026-04-22",
+    "ua-tl-ec-2026-02-26"
+  ],
   "admin": "0xB8d121CD0B2D0AB3df2aFF0B45B2fD354FF4c1f7",
   "deployedAt": "2026-04-19T12:00:00Z",
   "phase1RegistryDeprecated": "0x7F36aF783538Ae8f981053F2b0E45421a1BF4815",
@@ -24,5 +31,5 @@
     "chainZkeySha256": "8d1aed8e30a76770a8480e203a86c362f4421b6d800147d0ff4f960472ca9933",
     "publicSignals": { "leaf": 13, "chain": 3 }
   },
-  "notes": "Phase 2 split-proof V3 deploy. ECDSA leaf + chain verifiers are REAL Groth16 from the 2026-04-19 ceremony. RSA slots are stubs (no RSA ceremony — defer until real non-Diia QES test material is available). trustedListRoot is the real Diia LOTL Poseidon-Merkle root; rotate via setRsaLeafVerifier/setRsaChainVerifier when a real RSA ceremony lands."
+  "notes": "Phase 2 split-proof V3 deploy. ECDSA leaf + chain verifiers are REAL Groth16 from the 2026-04-19 ceremony. RSA slots are stubs (no RSA ceremony — defer until real non-Diia QES test material is available). trustedListRoot is the currently deployed root; trustedListRootPending is the generated combined EU eIDAS + UA TL-EC root and must be broadcast with UpdateTrustedRoot.s.sol before the contract accepts proofs against the bundled public trusted-cas artifacts."
 }

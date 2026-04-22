@@ -88,7 +88,7 @@ describe(`BindingParseFull (MAX_B=${MAX_B}, CTX=${MAX_CTX}, DECL=${MAX_DECL}, TS
     await circuit.checkConstraints(w);
   });
 
-  it('parses uk-with-context (905-byte declaration)', async () => {
+  it('parses uk-with-context (583-byte declaration)', async () => {
     const f = loadFixture('uk-with-context');
     const w = await circuit.calculateWitness(buildInput(f), true);
     await circuit.checkConstraints(w);
