@@ -85,4 +85,128 @@ contract QKBRegistryV4 {
         emit AdminTransferred(admin, newAdmin);
         admin = newAdmin;
     }
+
+    // ---------- register ----------
+
+    struct G16Proof {
+        uint256[2] a;
+        uint256[2][2] b;
+        uint256[2] c;
+    }
+
+    struct ChainProof {
+        G16Proof proof;
+        uint256 rTL;
+        uint256 algorithmTag;
+        uint256 leafSpkiCommit;
+    }
+
+    struct LeafProof {
+        G16Proof proof;
+        uint256[4] pkX;
+        uint256[4] pkY;
+        uint256 ctxHash;
+        uint256 policyLeafHash;
+        uint256 policyRoot_;
+        uint256 timestamp;
+        uint256 nullifier;
+        uint256 leafSpkiCommit;
+        uint256 dobCommit;
+        uint256 dobSupported;
+    }
+
+    struct Binding {
+        address pk;
+        uint256 ctxHash;
+        uint256 policyLeafHash;
+        uint256 timestamp;
+        uint256 dobCommit;
+        bool    dobAvailable;
+        uint256 ageVerifiedCutoff;
+        bool    revoked;
+    }
+
+    mapping(bytes32 => Binding) public bindings;
+    mapping(bytes32 => bool)    public usedNullifiers;
+
+    error NotOnTrustedList();
+    error InvalidLeafSpkiCommit();
+    error InvalidPolicyRoot();
+    error AlgorithmNotSupported();
+    error DuplicateNullifier();
+    error InvalidProof();
+
+    event BindingRegistered(
+        bytes32 indexed id,
+        address indexed pk,
+        uint256 ctxHash,
+        uint256 policyLeafHash,
+        uint256 timestamp,
+        bool dobAvailable
+    );
+
+    function register(ChainProof calldata cp, LeafProof calldata lp)
+        external
+        returns (bytes32 bindingId)
+    {
+        if (cp.rTL != uint256(trustedListRoot))     revert NotOnTrustedList();
+        if (cp.leafSpkiCommit != lp.leafSpkiCommit) revert InvalidLeafSpkiCommit();
+        if (lp.policyRoot_ != uint256(policyRoot))  revert InvalidPolicyRoot();
+        if (cp.algorithmTag > 1)                    revert AlgorithmNotSupported();
+
+        uint256[3] memory chainInput = [cp.rTL, cp.algorithmTag, cp.leafSpkiCommit];
+        if (!chainVerifier.verifyProof(cp.proof.a, cp.proof.b, cp.proof.c, chainInput))
+            revert InvalidProof();
+
+        uint256[16] memory leafInput;
+        for (uint i = 0; i < 4; i++) {
+            leafInput[i]     = lp.pkX[i];
+            leafInput[i + 4] = lp.pkY[i];
+        }
+        leafInput[8]  = lp.ctxHash;
+        leafInput[9]  = lp.policyLeafHash;
+        leafInput[10] = lp.policyRoot_;
+        leafInput[11] = lp.timestamp;
+        leafInput[12] = lp.nullifier;
+        leafInput[13] = lp.leafSpkiCommit;
+        leafInput[14] = lp.dobCommit;
+        leafInput[15] = lp.dobSupported;
+        if (!leafVerifier.verifyProof(lp.proof.a, lp.proof.b, lp.proof.c, leafInput))
+            revert InvalidProof();
+
+        bindingId = bytes32(lp.nullifier);
+        if (usedNullifiers[bindingId]) revert DuplicateNullifier();
+        usedNullifiers[bindingId] = true;
+
+        address pkAddr = _pkAddressFromLimbs(lp.pkX, lp.pkY);
+        bool dobAvail = lp.dobSupported == 1;
+        bindings[bindingId] = Binding({
+            pk: pkAddr,
+            ctxHash: lp.ctxHash,
+            policyLeafHash: lp.policyLeafHash,
+            timestamp: lp.timestamp,
+            dobCommit: lp.dobCommit,
+            dobAvailable: dobAvail,
+            ageVerifiedCutoff: 0,
+            revoked: false
+        });
+        emit BindingRegistered(
+            bindingId, pkAddr, lp.ctxHash, lp.policyLeafHash, lp.timestamp, dobAvail
+        );
+    }
+
+    function _pkAddressFromLimbs(uint256[4] calldata pkX, uint256[4] calldata pkY)
+        private pure returns (address)
+    {
+        bytes memory pkBytes = new bytes(64);
+        for (uint i = 0; i < 4; i++) {
+            uint256 xLimb = pkX[i];
+            uint256 yLimb = pkY[i];
+            for (uint b = 0; b < 8; b++) {
+                pkBytes[i * 8 + b]      = bytes1(uint8(xLimb >> (8 * b)));
+                pkBytes[32 + i * 8 + b] = bytes1(uint8(yLimb >> (8 * b)));
+            }
+        }
+        return address(uint160(uint256(keccak256(pkBytes))));
+    }
 }

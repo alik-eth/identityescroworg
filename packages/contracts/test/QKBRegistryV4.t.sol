@@ -3,6 +3,33 @@ pragma solidity 0.8.24;
 
 import "forge-std/Test.sol";
 import { QKBRegistryV4 } from "../src/QKBRegistryV4.sol";
+import {
+    IGroth16LeafVerifierV4,
+    IGroth16ChainVerifierV4,
+    IGroth16AgeVerifierV4
+} from "../src/QKBVerifierV4Draft.sol";
+
+contract MockLeafV is IGroth16LeafVerifierV4 {
+    bool public result = true;
+    function setResult(bool r) external { result = r; }
+    function verifyProof(
+        uint256[2] calldata,
+        uint256[2][2] calldata,
+        uint256[2] calldata,
+        uint256[16] calldata
+    ) external view returns (bool) { return result; }
+}
+
+contract MockChainV is IGroth16ChainVerifierV4 {
+    bool public result = true;
+    function setResult(bool r) external { result = r; }
+    function verifyProof(
+        uint256[2] calldata,
+        uint256[2][2] calldata,
+        uint256[2] calldata,
+        uint256[3] calldata
+    ) external view returns (bool) { return result; }
+}
 
 contract QKBRegistryV4Test is Test {
     event TrustedListRootUpdated(bytes32 oldRoot, bytes32 newRoot);
@@ -121,5 +148,196 @@ contract QKBRegistryV4Test is Test {
             ageVerifier_: address(0x3333),
             admin_: address(this)
         });
+    }
+
+    // ---------- register() ----------
+
+    uint256 private constant _RTL_VAL       = uint256(0x2a5ce7b);
+    uint256 private constant _POLICY_VAL    = uint256(0x9);
+    uint256 private constant _SPKI_VAL      = uint256(0x77);
+    uint256 private constant _NULLIFIER_VAL = uint256(0xdeadbeef);
+
+    event BindingRegistered(
+        bytes32 indexed id,
+        address indexed pk,
+        uint256 ctxHash,
+        uint256 policyLeafHash,
+        uint256 timestamp,
+        bool dobAvailable
+    );
+
+    function _deployForRegister()
+        private
+        returns (QKBRegistryV4 r, MockLeafV lv, MockChainV cv)
+    {
+        lv = new MockLeafV();
+        cv = new MockChainV();
+        r = new QKBRegistryV4({
+            country_: "UA",
+            trustedListRoot_: bytes32(_RTL_VAL),
+            policyRoot_: bytes32(_POLICY_VAL),
+            leafVerifier_: address(lv),
+            chainVerifier_: address(cv),
+            ageVerifier_: address(0x0),
+            admin_: address(this)
+        });
+    }
+
+    function _emptyProof() private pure returns (QKBRegistryV4.G16Proof memory p) {
+        p.a = [uint256(0), uint256(0)];
+        p.b = [[uint256(0), uint256(0)], [uint256(0), uint256(0)]];
+        p.c = [uint256(0), uint256(0)];
+    }
+
+    function _chainProof(uint256 rTL, uint256 algorithmTag, uint256 spki)
+        private pure returns (QKBRegistryV4.ChainProof memory cp)
+    {
+        cp.proof = _emptyProof();
+        cp.rTL = rTL;
+        cp.algorithmTag = algorithmTag;
+        cp.leafSpkiCommit = spki;
+    }
+
+    function _leafProof(
+        uint256 policyRootVal,
+        uint256 spki,
+        uint256 nullifier,
+        uint256 dobCommit,
+        uint256 dobSupported
+    ) private pure returns (QKBRegistryV4.LeafProof memory lp, address pkAddr) {
+        lp.proof = _emptyProof();
+        lp.pkX = [uint256(0x1111), uint256(0x2222), uint256(0x3333), uint256(0x4444)];
+        lp.pkY = [uint256(0x5555), uint256(0x6666), uint256(0x7777), uint256(0x8888)];
+        lp.ctxHash = uint256(0xCCC);
+        lp.policyLeafHash = uint256(0xAAA);
+        lp.policyRoot_ = policyRootVal;
+        lp.timestamp = uint256(1_700_000_000);
+        lp.nullifier = nullifier;
+        lp.leafSpkiCommit = spki;
+        lp.dobCommit = dobCommit;
+        lp.dobSupported = dobSupported;
+
+        bytes memory pkBytes = new bytes(64);
+        for (uint i = 0; i < 4; i++) {
+            uint256 xLimb = lp.pkX[i];
+            uint256 yLimb = lp.pkY[i];
+            for (uint b = 0; b < 8; b++) {
+                pkBytes[i * 8 + b]      = bytes1(uint8(xLimb >> (8 * b)));
+                pkBytes[32 + i * 8 + b] = bytes1(uint8(yLimb >> (8 * b)));
+            }
+        }
+        pkAddr = address(uint160(uint256(keccak256(pkBytes))));
+    }
+
+    function test_register_happy_path_stores_binding() public {
+        (QKBRegistryV4 r,,) = _deployForRegister();
+        QKBRegistryV4.ChainProof memory cp = _chainProof(_RTL_VAL, 0, _SPKI_VAL);
+        (QKBRegistryV4.LeafProof memory lp, address pkAddr) =
+            _leafProof(_POLICY_VAL, _SPKI_VAL, _NULLIFIER_VAL, 0, 0);
+
+        vm.expectEmit(true, true, false, true);
+        emit BindingRegistered(
+            bytes32(_NULLIFIER_VAL), pkAddr, lp.ctxHash, lp.policyLeafHash, lp.timestamp, false
+        );
+        bytes32 id = r.register(cp, lp);
+        assertEq(id, bytes32(_NULLIFIER_VAL));
+
+        (
+            address pk,
+            uint256 ctxHash,
+            uint256 policyLeafHash,
+            uint256 timestamp,
+            uint256 dobCommit,
+            bool dobAvailable,
+            uint256 ageVerifiedCutoff,
+            bool revoked
+        ) = r.bindings(id);
+        assertEq(pk, pkAddr);
+        assertEq(ctxHash, lp.ctxHash);
+        assertEq(policyLeafHash, lp.policyLeafHash);
+        assertEq(timestamp, lp.timestamp);
+        assertEq(dobCommit, 0);
+        assertFalse(dobAvailable);
+        assertEq(ageVerifiedCutoff, 0);
+        assertFalse(revoked);
+        assertTrue(r.usedNullifiers(id));
+    }
+
+    function test_register_records_dobAvailable_when_supported() public {
+        (QKBRegistryV4 r,,) = _deployForRegister();
+        QKBRegistryV4.ChainProof memory cp = _chainProof(_RTL_VAL, 1, _SPKI_VAL);
+        (QKBRegistryV4.LeafProof memory lp,) =
+            _leafProof(_POLICY_VAL, _SPKI_VAL, _NULLIFIER_VAL, uint256(0xD0B), 1);
+
+        r.register(cp, lp);
+        (, , , , uint256 dobCommit, bool dobAvailable, , ) = r.bindings(bytes32(_NULLIFIER_VAL));
+        assertEq(dobCommit, uint256(0xD0B));
+        assertTrue(dobAvailable);
+    }
+
+    function test_register_reverts_on_root_mismatch() public {
+        (QKBRegistryV4 r,,) = _deployForRegister();
+        QKBRegistryV4.ChainProof memory cp = _chainProof(_RTL_VAL + 1, 0, _SPKI_VAL);
+        (QKBRegistryV4.LeafProof memory lp,) =
+            _leafProof(_POLICY_VAL, _SPKI_VAL, _NULLIFIER_VAL, 0, 0);
+        vm.expectRevert(QKBRegistryV4.NotOnTrustedList.selector);
+        r.register(cp, lp);
+    }
+
+    function test_register_reverts_on_leafSpkiCommit_mismatch() public {
+        (QKBRegistryV4 r,,) = _deployForRegister();
+        QKBRegistryV4.ChainProof memory cp = _chainProof(_RTL_VAL, 0, _SPKI_VAL);
+        (QKBRegistryV4.LeafProof memory lp,) =
+            _leafProof(_POLICY_VAL, _SPKI_VAL + 1, _NULLIFIER_VAL, 0, 0);
+        vm.expectRevert(QKBRegistryV4.InvalidLeafSpkiCommit.selector);
+        r.register(cp, lp);
+    }
+
+    function test_register_reverts_on_policyRoot_mismatch() public {
+        (QKBRegistryV4 r,,) = _deployForRegister();
+        QKBRegistryV4.ChainProof memory cp = _chainProof(_RTL_VAL, 0, _SPKI_VAL);
+        (QKBRegistryV4.LeafProof memory lp,) =
+            _leafProof(_POLICY_VAL + 1, _SPKI_VAL, _NULLIFIER_VAL, 0, 0);
+        vm.expectRevert(QKBRegistryV4.InvalidPolicyRoot.selector);
+        r.register(cp, lp);
+    }
+
+    function test_register_reverts_on_bad_algorithmTag() public {
+        (QKBRegistryV4 r,,) = _deployForRegister();
+        QKBRegistryV4.ChainProof memory cp = _chainProof(_RTL_VAL, 2, _SPKI_VAL);
+        (QKBRegistryV4.LeafProof memory lp,) =
+            _leafProof(_POLICY_VAL, _SPKI_VAL, _NULLIFIER_VAL, 0, 0);
+        vm.expectRevert(QKBRegistryV4.AlgorithmNotSupported.selector);
+        r.register(cp, lp);
+    }
+
+    function test_register_reverts_on_duplicate_nullifier() public {
+        (QKBRegistryV4 r,,) = _deployForRegister();
+        QKBRegistryV4.ChainProof memory cp = _chainProof(_RTL_VAL, 0, _SPKI_VAL);
+        (QKBRegistryV4.LeafProof memory lp,) =
+            _leafProof(_POLICY_VAL, _SPKI_VAL, _NULLIFIER_VAL, 0, 0);
+        r.register(cp, lp);
+        vm.expectRevert(QKBRegistryV4.DuplicateNullifier.selector);
+        r.register(cp, lp);
+    }
+
+    function test_register_reverts_on_chain_verifier_false() public {
+        (QKBRegistryV4 r, , MockChainV cv) = _deployForRegister();
+        cv.setResult(false);
+        QKBRegistryV4.ChainProof memory cp = _chainProof(_RTL_VAL, 0, _SPKI_VAL);
+        (QKBRegistryV4.LeafProof memory lp,) =
+            _leafProof(_POLICY_VAL, _SPKI_VAL, _NULLIFIER_VAL, 0, 0);
+        vm.expectRevert(QKBRegistryV4.InvalidProof.selector);
+        r.register(cp, lp);
+    }
+
+    function test_register_reverts_on_leaf_verifier_false() public {
+        (QKBRegistryV4 r, MockLeafV lv,) = _deployForRegister();
+        lv.setResult(false);
+        QKBRegistryV4.ChainProof memory cp = _chainProof(_RTL_VAL, 0, _SPKI_VAL);
+        (QKBRegistryV4.LeafProof memory lp,) =
+            _leafProof(_POLICY_VAL, _SPKI_VAL, _NULLIFIER_VAL, 0, 0);
+        vm.expectRevert(QKBRegistryV4.InvalidProof.selector);
+        r.register(cp, lp);
     }
 }
