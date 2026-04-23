@@ -209,4 +209,42 @@ contract QKBRegistryV4 {
         }
         return address(uint160(uint256(keccak256(pkBytes))));
     }
+
+    // ---------- proveAdulthood ----------
+
+    struct AgeProof {
+        G16Proof proof;
+        uint256 dobCommit;
+        uint256 ageCutoffDate;
+        uint256 ageQualified;
+    }
+
+    error AgeProofMismatch();
+    error AgeNotQualified();
+    error DobNotAvailable();
+    error NotMonotonic();
+    error BindingNotFound();
+
+    event AdulthoodProven(bytes32 indexed id, uint256 ageCutoffDate);
+
+    function proveAdulthood(
+        bytes32 id,
+        AgeProof calldata ap,
+        uint256 ageCutoffDate
+    ) external {
+        Binding storage b = bindings[id];
+        if (b.pk == address(0))                 revert BindingNotFound();
+        if (!b.dobAvailable)                    revert DobNotAvailable();
+        if (ageCutoffDate < b.ageVerifiedCutoff) revert NotMonotonic();
+        if (ap.dobCommit != b.dobCommit)        revert AgeProofMismatch();
+        if (ap.ageCutoffDate != ageCutoffDate)  revert AgeProofMismatch();
+        if (ap.ageQualified != 1)               revert AgeNotQualified();
+
+        uint256[3] memory input = [ap.dobCommit, ap.ageCutoffDate, ap.ageQualified];
+        if (!ageVerifier.verifyProof(ap.proof.a, ap.proof.b, ap.proof.c, input))
+            revert InvalidProof();
+
+        b.ageVerifiedCutoff = ageCutoffDate;
+        emit AdulthoodProven(id, ageCutoffDate);
+    }
 }

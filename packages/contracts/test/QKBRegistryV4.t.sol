@@ -31,6 +31,17 @@ contract MockChainV is IGroth16ChainVerifierV4 {
     ) external view returns (bool) { return result; }
 }
 
+contract MockAgeV is IGroth16AgeVerifierV4 {
+    bool public result = true;
+    function setResult(bool r) external { result = r; }
+    function verifyProof(
+        uint256[2] calldata,
+        uint256[2][2] calldata,
+        uint256[2] calldata,
+        uint256[3] calldata
+    ) external view returns (bool) { return result; }
+}
+
 contract QKBRegistryV4Test is Test {
     event TrustedListRootUpdated(bytes32 oldRoot, bytes32 newRoot);
     event PolicyRootUpdated(bytes32 oldRoot, bytes32 newRoot);
@@ -339,5 +350,125 @@ contract QKBRegistryV4Test is Test {
             _leafProof(_POLICY_VAL, _SPKI_VAL, _NULLIFIER_VAL, 0, 0);
         vm.expectRevert(QKBRegistryV4.InvalidProof.selector);
         r.register(cp, lp);
+    }
+
+    // ---------- proveAdulthood() ----------
+
+    uint256 private constant _DOB_COMMIT = uint256(0xD0B);
+    uint256 private constant _CUTOFF     = uint256(20080424);
+
+    event AdulthoodProven(bytes32 indexed id, uint256 ageCutoffDate);
+
+    function _deployForAge()
+        private
+        returns (QKBRegistryV4 r, MockLeafV lv, MockChainV cv, MockAgeV av)
+    {
+        lv = new MockLeafV();
+        cv = new MockChainV();
+        av = new MockAgeV();
+        r = new QKBRegistryV4({
+            country_: "UA",
+            trustedListRoot_: bytes32(_RTL_VAL),
+            policyRoot_: bytes32(_POLICY_VAL),
+            leafVerifier_: address(lv),
+            chainVerifier_: address(cv),
+            ageVerifier_: address(av),
+            admin_: address(this)
+        });
+    }
+
+    function _registerDobBinding(QKBRegistryV4 r) private returns (bytes32 id) {
+        QKBRegistryV4.ChainProof memory cp = _chainProof(_RTL_VAL, 0, _SPKI_VAL);
+        (QKBRegistryV4.LeafProof memory lp,) =
+            _leafProof(_POLICY_VAL, _SPKI_VAL, _NULLIFIER_VAL, _DOB_COMMIT, 1);
+        id = r.register(cp, lp);
+    }
+
+    function _ageProof(uint256 dobCommit, uint256 cutoff, uint256 qualified)
+        private pure returns (QKBRegistryV4.AgeProof memory ap)
+    {
+        ap.proof = _emptyProof();
+        ap.dobCommit = dobCommit;
+        ap.ageCutoffDate = cutoff;
+        ap.ageQualified = qualified;
+    }
+
+    function test_proveAdulthood_happy_path_updates_cutoff() public {
+        (QKBRegistryV4 r, , , ) = _deployForAge();
+        bytes32 id = _registerDobBinding(r);
+
+        QKBRegistryV4.AgeProof memory ap = _ageProof(_DOB_COMMIT, _CUTOFF, 1);
+        vm.expectEmit(true, false, false, true);
+        emit AdulthoodProven(id, _CUTOFF);
+        r.proveAdulthood(id, ap, _CUTOFF);
+
+        (, , , , , , uint256 ageVerifiedCutoff, ) = r.bindings(id);
+        assertEq(ageVerifiedCutoff, _CUTOFF);
+    }
+
+    function test_proveAdulthood_reverts_when_binding_not_found() public {
+        (QKBRegistryV4 r, , , ) = _deployForAge();
+        QKBRegistryV4.AgeProof memory ap = _ageProof(_DOB_COMMIT, _CUTOFF, 1);
+        vm.expectRevert(QKBRegistryV4.BindingNotFound.selector);
+        r.proveAdulthood(bytes32(uint256(0xBADBAD)), ap, _CUTOFF);
+    }
+
+    function test_proveAdulthood_reverts_when_dob_unavailable() public {
+        (QKBRegistryV4 r, , , ) = _deployForAge();
+        // register a binding with dobSupported=0
+        QKBRegistryV4.ChainProof memory cp = _chainProof(_RTL_VAL, 0, _SPKI_VAL);
+        (QKBRegistryV4.LeafProof memory lp,) =
+            _leafProof(_POLICY_VAL, _SPKI_VAL, _NULLIFIER_VAL, 0, 0);
+        bytes32 id = r.register(cp, lp);
+
+        QKBRegistryV4.AgeProof memory ap = _ageProof(0, _CUTOFF, 1);
+        vm.expectRevert(QKBRegistryV4.DobNotAvailable.selector);
+        r.proveAdulthood(id, ap, _CUTOFF);
+    }
+
+    function test_proveAdulthood_reverts_on_non_monotonic_cutoff() public {
+        (QKBRegistryV4 r, , , ) = _deployForAge();
+        bytes32 id = _registerDobBinding(r);
+
+        QKBRegistryV4.AgeProof memory ap = _ageProof(_DOB_COMMIT, _CUTOFF, 1);
+        r.proveAdulthood(id, ap, _CUTOFF);
+
+        // second call with smaller cutoff must revert
+        QKBRegistryV4.AgeProof memory ap2 = _ageProof(_DOB_COMMIT, _CUTOFF - 1, 1);
+        vm.expectRevert(QKBRegistryV4.NotMonotonic.selector);
+        r.proveAdulthood(id, ap2, _CUTOFF - 1);
+    }
+
+    function test_proveAdulthood_reverts_on_dobCommit_mismatch() public {
+        (QKBRegistryV4 r, , , ) = _deployForAge();
+        bytes32 id = _registerDobBinding(r);
+        QKBRegistryV4.AgeProof memory ap = _ageProof(_DOB_COMMIT + 1, _CUTOFF, 1);
+        vm.expectRevert(QKBRegistryV4.AgeProofMismatch.selector);
+        r.proveAdulthood(id, ap, _CUTOFF);
+    }
+
+    function test_proveAdulthood_reverts_on_cutoff_mismatch() public {
+        (QKBRegistryV4 r, , , ) = _deployForAge();
+        bytes32 id = _registerDobBinding(r);
+        QKBRegistryV4.AgeProof memory ap = _ageProof(_DOB_COMMIT, _CUTOFF + 1, 1);
+        vm.expectRevert(QKBRegistryV4.AgeProofMismatch.selector);
+        r.proveAdulthood(id, ap, _CUTOFF);
+    }
+
+    function test_proveAdulthood_reverts_when_not_qualified() public {
+        (QKBRegistryV4 r, , , ) = _deployForAge();
+        bytes32 id = _registerDobBinding(r);
+        QKBRegistryV4.AgeProof memory ap = _ageProof(_DOB_COMMIT, _CUTOFF, 0);
+        vm.expectRevert(QKBRegistryV4.AgeNotQualified.selector);
+        r.proveAdulthood(id, ap, _CUTOFF);
+    }
+
+    function test_proveAdulthood_reverts_on_invalid_age_proof() public {
+        (QKBRegistryV4 r, , , MockAgeV av) = _deployForAge();
+        bytes32 id = _registerDobBinding(r);
+        av.setResult(false);
+        QKBRegistryV4.AgeProof memory ap = _ageProof(_DOB_COMMIT, _CUTOFF, 1);
+        vm.expectRevert(QKBRegistryV4.InvalidProof.selector);
+        r.proveAdulthood(id, ap, _CUTOFF);
     }
 }
