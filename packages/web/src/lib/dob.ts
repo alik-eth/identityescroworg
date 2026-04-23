@@ -146,6 +146,70 @@ export function uaSubjectDirectoryDobExtractor(): DobExtractor {
   };
 }
 
+export interface DiiaDobExtraction {
+  readonly supported: boolean;
+  readonly ymd: number;
+  readonly sourceTag: number;
+}
+
+// Outer extension OID 2.5.29.9 (SubjectDirectoryAttributes) header: 06 03 55 1D 09.
+const DIIA_OUTER_OID_2_5_29_9 = new Uint8Array([0x06, 0x03, 0x55, 0x1d, 0x09]);
+// Inner UA attribute OID 1.2.804.2.1.1.1.11.1.4.11.1 — 14-byte header: 06 0C 2A 86 24 02 01 01 01 0B 01 04 0B 01.
+const DIIA_INNER_UA_ATTR_OID = new Uint8Array([
+  0x06, 0x0c, 0x2a, 0x86, 0x24, 0x02, 0x01, 0x01, 0x01, 0x0b, 0x01, 0x04, 0x0b, 0x01,
+]);
+const PRINTABLE_STRING_TAG = 0x13;
+const DIIA_DOB_SOURCE_TAG = 1;
+const DIIA_DOB_NEG: DiiaDobExtraction = { supported: false, ymd: 0, sourceTag: 0 };
+
+// Byte-exact mirror of DobExtractorDiiaUA.circom (M2.3b). The value is encoded
+// as ASN.1 PrintableString (tag 0x13), NOT GeneralizedTime — Diia's observed
+// content is "YYYYMMDD-NNNNN" (e.g. "19990426-02970"); first 8 ASCII digits
+// are YYYYMMDD. Until M2.3b lands the circuit emits dobYmd=0; this TS is the
+// canonical spec the circuit must reproduce.
+export function extractDobFromDiiaUA(der: Uint8Array): DiiaDobExtraction {
+  const outer = findSubsequence(der, DIIA_OUTER_OID_2_5_29_9, 0);
+  if (outer < 0) return DIIA_DOB_NEG;
+  const afterOuter = outer + DIIA_OUTER_OID_2_5_29_9.length;
+
+  const inner = findSubsequence(der, DIIA_INNER_UA_ATTR_OID, afterOuter);
+  if (inner < 0) return DIIA_DOB_NEG;
+  const afterInner = inner + DIIA_INNER_UA_ATTR_OID.length;
+
+  const tagIdx = findByte(der, PRINTABLE_STRING_TAG, afterInner);
+  if (tagIdx < 0 || tagIdx + 1 >= der.length) return DIIA_DOB_NEG;
+
+  const lenByte = der[tagIdx + 1]!;
+  if (lenByte < 8) return DIIA_DOB_NEG;
+
+  const startOfDigits = tagIdx + 2;
+  if (startOfDigits + 8 > der.length) return DIIA_DOB_NEG;
+
+  const digits = der.subarray(startOfDigits, startOfDigits + 8);
+  for (const d of digits) {
+    if (d < 0x30 || d > 0x39) return DIIA_DOB_NEG;
+  }
+  const ymd = Number(new TextDecoder().decode(digits));
+  return { supported: true, ymd, sourceTag: DIIA_DOB_SOURCE_TAG };
+}
+
+function findSubsequence(haystack: Uint8Array, needle: Uint8Array, from: number): number {
+  outer: for (let i = from; i <= haystack.length - needle.length; i++) {
+    for (let j = 0; j < needle.length; j++) {
+      if (haystack[i + j] !== needle[j]) continue outer;
+    }
+    return i;
+  }
+  return -1;
+}
+
+function findByte(haystack: Uint8Array, byte: number, from: number): number {
+  for (let i = from; i < haystack.length; i++) {
+    if (haystack[i] === byte) return i;
+  }
+  return -1;
+}
+
 function hasOid(values: readonly DobAttributeValue[] | undefined, oid: string): boolean {
   return values?.some((value) => value.oid === oid) ?? false;
 }
