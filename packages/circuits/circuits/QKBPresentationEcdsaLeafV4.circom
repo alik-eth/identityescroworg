@@ -1,27 +1,28 @@
 pragma circom 2.1.9;
 
-// QKBPresentationEcdsaLeafV4 — draft successor leaf circuit for `QKB/2.0`.
+// QKBPresentationEcdsaLeafV4 — unified successor leaf circuit for `QKB/2.0`.
 //
-// This file is intentionally not wired into the live build / ceremony path.
-// It exists to freeze the intended successor constraint surface:
-//   - structured binding-core bytes instead of declaration prose
-//   - policy-root inclusion instead of DeclarationWhitelist
-//   - unchanged CMS verification, scoped nullifier, and leafSpkiCommit glue
-//
-// Public signals (14 total — draft successor order):
+// Public signals (16 total):
 //   [0..3]  pkX[4]
 //   [4..7]  pkY[4]
 //   [8]     ctxHash
 //   [9]     policyLeafHash
 //   [10]    policyRoot
 //   [11]    timestamp
-//   [12]    nullifier
-//   [13]    leafSpkiCommit
+//   [12]    nullifier             (scoped credential, §14.4)
+//   [13]    leafSpkiCommit        (glue to chain proof)
+//   [14]    dobCommit             (Poseidon(dobYmd, dobSourceTag); 0 if dobSupported=0)
+//   [15]    dobSupported          (0 or 1)
 //
-// `BindingParseV2Core` now pins the full machine-readable `bindingCoreV2(...)`
-// surface. This circuit is still draft-only because it is not wired into the
-// live proving / verifier / contract path, not because the core JSON shape is
-// intentionally underconstrained.
+// Countries without DOB extraction link DobExtractorNull.circom, which emits
+// dobSupported=0 and sourceTag=0 so the downstream Poseidon still produces a
+// well-defined `dobCommit`. Registry reads `dobSupported` at age-proof time.
+//
+// This file is the generic template. Per-country compile is done via
+// QKBPresentationEcdsaLeafV4_<CC>.circom wrappers that `include` the
+// appropriate DOB extractor before including this template (see
+// docs/superpowers/specs/2026-04-24-per-country-registries-design.md §Circuit
+// family).
 
 include "./binding/BindingParseV2Core.circom";
 include "./primitives/Sha256Var.circom";
@@ -116,6 +117,7 @@ template QKBPresentationEcdsaLeafV4() {
 
     // === Private (leaf certificate) ===
     signal input leafDER[MAX_CERT];
+    signal input leafDerLen;
     signal input leafSpkiXOffset;
     signal input leafSpkiYOffset;
     signal input leafSigR[6];
@@ -302,7 +304,23 @@ template QKBPresentationEcdsaLeafV4() {
     nullifierDerive.ctxHash <== ctxHash;
 
     nullifierDerive.nullifier === nullifier;
+
+    // =========================================================================
+    // 8. DOB extraction + commitment (pluggable per country via DobExtractor).
+    // =========================================================================
+    component dobExtractor = DobExtractor();
+    for (var i = 0; i < MAX_CERT; i++) dobExtractor.leafDER[i] <== leafDER[i];
+    dobExtractor.leafDerLen <== leafDerLen;
+
+    component dobHash = Poseidon(2);
+    dobHash.inputs[0] <== dobExtractor.dobYmd;
+    dobHash.inputs[1] <== dobExtractor.sourceTag;
+
+    signal output dobCommit;
+    signal output dobSupported;
+    dobCommit     <== dobHash.out;
+    dobSupported  <== dobExtractor.dobSupported;
 }
 
-component main {public [pkX, pkY, ctxHash, policyLeafHash, policyRoot, timestamp, nullifier, leafSpkiCommit]}
+component main {public [pkX, pkY, ctxHash, policyLeafHash, policyRoot, timestamp, nullifier, leafSpkiCommit, dobCommit, dobSupported]}
     = QKBPresentationEcdsaLeafV4();
