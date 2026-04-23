@@ -5,7 +5,7 @@
  * running.
  */
 
-export type ProofSide = 'leaf' | 'chain';
+export type ProofSide = 'leaf' | 'chain' | 'age';
 
 export interface Groth16Proof {
   readonly pi_a: string[];

@@ -45,6 +45,34 @@ program
     await runProve(witnessPath, opts);
   });
 
+program
+  .command('prove-age')
+  .description('Groth16-prove an age witness (3 public signals) offline')
+  .argument('<witness-path>', 'path to age-witness.json')
+  .option(
+    '--out <dir>',
+    'output directory for age-proof-bundle.json',
+    './proofs',
+  )
+  .option(
+    '--backend <name>',
+    'prover backend: snarkjs (default) or rapidsnark',
+    'snarkjs',
+  )
+  .option(
+    '--rapidsnark-bin <path>',
+    'path to the rapidsnark binary (required when --backend rapidsnark)',
+  )
+  .option(
+    '--cache-dir <path>',
+    'artifact cache directory',
+    defaultCacheDir(),
+  )
+  .action(async (witnessPath: string, opts: ProveOptions) => {
+    const { runProveAge } = await import('./prove-age.js');
+    await runProveAge(witnessPath, opts);
+  });
+
 program.parseAsync(process.argv).catch((err: unknown) => {
   console.error(err instanceof Error ? err.message : String(err));
   process.exit(1);
