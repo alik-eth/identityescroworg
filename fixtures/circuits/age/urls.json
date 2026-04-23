@@ -1,0 +1,19 @@
+{
+  "schema": "qkb-v4-ceremony-urls/v1",
+  "role": "age",
+  "source": "local-ceremony",
+  "note": "QKBPresentationAgeV4 local phase-2 ceremony. Single contributor: local-<hostname>-<YYYYMMDD>. ptau-16 (75 MB) was sufficient — circuit has 273 non-linear constraints, 3 public inputs [dobCommit, ageCutoffDate, ageQualified], 0 outputs. URLs are placeholders — team-lead replaces after R2 upload.",
+  "circuit": "QKBPresentationAgeV4",
+  "wasmUrl": "https://prove.identityescrow.org/age/QKBPresentationAgeV4.wasm",
+  "zkeyUrl": "https://prove.identityescrow.org/age/age_final.zkey",
+  "vkeyUrl": "https://prove.identityescrow.org/age/verification_key.json",
+  "wasmSha256": "f9391991fba5049c7cddfd24c753e30d304a67820366b826afed9229d5a660d4",
+  "zkeySha256": "5ab2eace51dd4f1587b66e0df8f7924ae71f20ed6116338ce46c43eb430b20dd",
+  "vkeySha256": "6a04d9c6ce971fe44af107fbf1b32f629c10341c33ae44995cc62a8f7378c6be",
+  "verifierSolSha256": "0fd375f39cf5e877929981f57b135d1eb4f8ee3a19c7d950153b6389b340726e",
+  "wasmBytes": 1747930,
+  "zkeyBytes": 171827,
+  "publicSignals": 3,
+  "powersOfTau": 16,
+  "constraints": 273
+}
