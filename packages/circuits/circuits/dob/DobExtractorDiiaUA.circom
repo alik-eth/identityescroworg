@@ -15,8 +15,7 @@ include "circomlib/circuits/multiplexer.circom";
 // is left at 0 until M2.3b wires the PrintableString read.
 //
 // sourceTag = 1 (Diia UA, per IDobExtractor.circom).
-template DobExtractor() {
-    var MAX_DER = 2048;
+template DobExtractor(MAX_DER) {
     var OID_LEN = 5;
     // OID 2.5.29.9 header: 06 03 55 1D 09
     var OID[5] = [0x06, 0x03, 0x55, 0x1d, 0x09];
@@ -86,5 +85,3 @@ template DobExtractor() {
     // consumers must gate on dobSupported only.
     dobYmd <== 0;
 }
-
-component main = DobExtractor();

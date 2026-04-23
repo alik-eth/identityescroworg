@@ -78,6 +78,8 @@ template QKBPresentationEcdsaLeafV4() {
     signal input timestamp;
     signal input nullifier;
     signal input leafSpkiCommit;
+    signal input dobCommit;
+    signal input dobSupported;
 
     // === Private (nullifier extraction) ===
     signal input subjectSerialValueOffset;
@@ -308,7 +310,7 @@ template QKBPresentationEcdsaLeafV4() {
     // =========================================================================
     // 8. DOB extraction + commitment (pluggable per country via DobExtractor).
     // =========================================================================
-    component dobExtractor = DobExtractor();
+    component dobExtractor = DobExtractor(MAX_CERT);
     for (var i = 0; i < MAX_CERT; i++) dobExtractor.leafDER[i] <== leafDER[i];
     dobExtractor.leafDerLen <== leafDerLen;
 
@@ -316,10 +318,12 @@ template QKBPresentationEcdsaLeafV4() {
     dobHash.inputs[0] <== dobExtractor.dobYmd;
     dobHash.inputs[1] <== dobExtractor.sourceTag;
 
-    signal output dobCommit;
-    signal output dobSupported;
-    dobCommit     <== dobHash.out;
-    dobSupported  <== dobExtractor.dobSupported;
+    // Public signals 14 + 15 are wired as constrained inputs so their index
+    // order in the public-signal vector follows the spec (inputs-only list on
+    // `component main`). The extractor's computed commitment must equal the
+    // caller-supplied public input.
+    dobCommit    === dobHash.out;
+    dobSupported === dobExtractor.dobSupported;
 }
 
 component main {public [pkX, pkY, ctxHash, policyLeafHash, policyRoot, timestamp, nullifier, leafSpkiCommit, dobCommit, dobSupported]}

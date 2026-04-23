@@ -7,7 +7,7 @@ describe('DobExtractorNull', function () {
   let circuit: CompiledCircuit;
 
   before(async () => {
-    circuit = await compile('dob/DobExtractorNull.circom');
+    circuit = await compile('dob/DobExtractorNullTest.circom');
   });
 
   it('always emits dobSupported=0, sourceTag=0, dobYmd=0', async () => {

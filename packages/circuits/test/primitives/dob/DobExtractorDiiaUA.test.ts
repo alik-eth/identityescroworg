@@ -20,7 +20,7 @@ describe('DobExtractorDiiaUA', function () {
   let circuit: CompiledCircuit;
 
   before(async () => {
-    circuit = await compile('dob/DobExtractorDiiaUA.circom');
+    circuit = await compile('dob/DobExtractorDiiaUATest.circom');
   });
 
   it('extracts DOB from a real Diia leaf cert (OID 2.5.29.9 present)', async () => {
