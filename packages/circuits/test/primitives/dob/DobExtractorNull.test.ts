@@ -13,7 +13,7 @@ describe('DobExtractorNull', function () {
   it('always emits dobSupported=0, sourceTag=0, dobYmd=0', async () => {
     const witness = await circuit.calculateWitness(
       {
-        leafDER: Array(2048).fill(0),
+        leafDER: Array(1536).fill(0),
         leafDerLen: 0,
       },
       true,
@@ -28,7 +28,7 @@ describe('DobExtractorNull', function () {
   it('ignores leafDerLen for a non-zero prefix — still dobSupported=0', async () => {
     const witness = await circuit.calculateWitness(
       {
-        leafDER: Array(2048).fill(0x42),
+        leafDER: Array(1536).fill(0x42),
         leafDerLen: 100,
       },
       true,

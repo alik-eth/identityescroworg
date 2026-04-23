@@ -6,4 +6,5 @@ pragma circom 2.1.9;
 // `QKBPresentationEcdsaLeafV4_UA.circom`.
 include "./DobExtractorDiiaUA.circom";
 
-component main = DobExtractor(2048);
+// MAX_DER = 1536 mirrors the leaf circuit's MAX_CERT (production sizing).
+component main = DobExtractor(1536);
