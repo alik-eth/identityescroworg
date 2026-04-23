@@ -33,6 +33,7 @@
 import { QkbError } from './errors';
 import type { Groth16Proof } from './prover';
 import { packProof, type ChainInputs, type SolidityProof } from './registry';
+import type { LeafPublicSignals } from './witnessV4';
 
 const P = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
 
@@ -121,6 +122,42 @@ export interface AgePublicSignalFieldsV4 {
   readonly dobCommit: string;
   readonly ageCutoffDate: string | bigint | number;
   readonly ageQualified: string | number;
+}
+
+export interface G16Proof {
+  a: readonly [bigint, bigint];
+  b: readonly [readonly [bigint, bigint], readonly [bigint, bigint]];
+  c: readonly [bigint, bigint];
+}
+
+export interface LeafCalldata {
+  a: readonly [bigint, bigint];
+  b: readonly [readonly [bigint, bigint], readonly [bigint, bigint]];
+  c: readonly [bigint, bigint];
+  inputs: readonly bigint[];
+}
+
+export function encodeLeafProofCalldata(
+  proof: G16Proof,
+  s: LeafPublicSignals,
+): LeafCalldata {
+  return {
+    a: proof.a,
+    b: proof.b,
+    c: proof.c,
+    inputs: [
+      ...s.pkX,
+      ...s.pkY,
+      s.ctxHash,
+      s.policyLeafHash,
+      s.policyRoot,
+      s.timestamp,
+      s.nullifier,
+      s.leafSpkiCommit,
+      s.dobCommit,
+      s.dobSupported,
+    ],
+  };
 }
 
 export function assertRegisterArgsV4Shape(args: RegisterArgsV4): void {

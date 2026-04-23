@@ -8,6 +8,7 @@ import {
   assertRegisterArgsV4AgeShape,
   buildRegisterArgsV4AgeFromSignals,
   buildRegisterArgsV4FromSignals,
+  encodeLeafProofCalldata,
   leafInputsV4AgeFromPublicSignals,
   leafInputsV4FromPublicSignals,
   leafPublicSignalsV4Age,
@@ -403,5 +404,38 @@ describe('buildRegisterArgsV4AgeFromSignals', () => {
     expect(args.ageInputs.dobCommit).toBe(hex32(777));
     expect(args.ageInputs.ageQualified).toBe(1);
     expect(() => assertRegisterArgsV4AgeShape(args)).not.toThrow();
+  });
+});
+
+describe('encodeLeafProofCalldata', () => {
+  function makeDummyG16Proof() {
+    return {
+      a: [0n, 0n] as const,
+      b: [
+        [0n, 0n],
+        [0n, 0n],
+      ] as const,
+      c: [0n, 0n] as const,
+    };
+  }
+
+  it('emits 16 uints in circuit order', () => {
+    const proof = makeDummyG16Proof();
+    const signals = {
+      pkX: [1n, 2n, 3n, 4n] as [bigint, bigint, bigint, bigint],
+      pkY: [5n, 6n, 7n, 8n] as [bigint, bigint, bigint, bigint],
+      ctxHash: 9n,
+      policyLeafHash: 10n,
+      policyRoot: 11n,
+      timestamp: 12n,
+      nullifier: 13n,
+      leafSpkiCommit: 14n,
+      dobCommit: 15n,
+      dobSupported: 1n,
+    };
+    const calldata = encodeLeafProofCalldata(proof, signals);
+    expect(calldata.inputs).toHaveLength(16);
+    expect(calldata.inputs[14]).toBe(15n);
+    expect(calldata.inputs[15]).toBe(1n);
   });
 });
