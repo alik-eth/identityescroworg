@@ -195,19 +195,15 @@ contract QKBRegistryV4 {
         );
     }
 
+    /// @dev Reassemble 4x64-bit little-endian limbs into secp256k1 affine
+    ///      coordinates and derive the canonical Ethereum address
+    ///      `keccak256(x32 || y32)[12:]`. Mirrors `QKBVerifierV2.toPkAddress`.
     function _pkAddressFromLimbs(uint256[4] calldata pkX, uint256[4] calldata pkY)
         private pure returns (address)
     {
-        bytes memory pkBytes = new bytes(64);
-        for (uint i = 0; i < 4; i++) {
-            uint256 xLimb = pkX[i];
-            uint256 yLimb = pkY[i];
-            for (uint b = 0; b < 8; b++) {
-                pkBytes[i * 8 + b]      = bytes1(uint8(xLimb >> (8 * b)));
-                pkBytes[32 + i * 8 + b] = bytes1(uint8(yLimb >> (8 * b)));
-            }
-        }
-        return address(uint160(uint256(keccak256(pkBytes))));
+        uint256 x = pkX[0] | (pkX[1] << 64) | (pkX[2] << 128) | (pkX[3] << 192);
+        uint256 y = pkY[0] | (pkY[1] << 64) | (pkY[2] << 128) | (pkY[3] << 192);
+        return address(uint160(uint256(keccak256(abi.encodePacked(bytes32(x), bytes32(y))))));
     }
 
     // ---------- proveAdulthood ----------

@@ -228,16 +228,18 @@ contract QKBRegistryV4Test is Test {
         lp.dobCommit = dobCommit;
         lp.dobSupported = dobSupported;
 
-        bytes memory pkBytes = new bytes(64);
-        for (uint i = 0; i < 4; i++) {
-            uint256 xLimb = lp.pkX[i];
-            uint256 yLimb = lp.pkY[i];
-            for (uint b = 0; b < 8; b++) {
-                pkBytes[i * 8 + b]      = bytes1(uint8(xLimb >> (8 * b)));
-                pkBytes[32 + i * 8 + b] = bytes1(uint8(yLimb >> (8 * b)));
-            }
-        }
-        pkAddr = address(uint160(uint256(keccak256(pkBytes))));
+        uint256 xCoord = lp.pkX[0] | (lp.pkX[1] << 64) | (lp.pkX[2] << 128) | (lp.pkX[3] << 192);
+        uint256 yCoord = lp.pkY[0] | (lp.pkY[1] << 64) | (lp.pkY[2] << 128) | (lp.pkY[3] << 192);
+        pkAddr = address(uint160(uint256(keccak256(abi.encodePacked(bytes32(xCoord), bytes32(yCoord))))));
+    }
+
+    /// @dev Split a uint256 into 4 x 64-bit little-endian limbs matching the
+    ///      circuit's output layout.
+    function _splitLE(uint256 v) private pure returns (uint256[4] memory out) {
+        out[0] = v & 0xFFFFFFFFFFFFFFFF;
+        out[1] = (v >> 64)  & 0xFFFFFFFFFFFFFFFF;
+        out[2] = (v >> 128) & 0xFFFFFFFFFFFFFFFF;
+        out[3] = (v >> 192) & 0xFFFFFFFFFFFFFFFF;
     }
 
     function test_register_happy_path_stores_binding() public {
@@ -350,6 +352,31 @@ contract QKBRegistryV4Test is Test {
             _leafProof(_POLICY_VAL, _SPKI_VAL, _NULLIFIER_VAL, 0, 0);
         vm.expectRevert(QKBRegistryV4.InvalidProof.selector);
         r.register(cp, lp);
+    }
+
+    /// @dev Regression: for a real secp256k1 public key, `Binding.pk` must
+    ///      equal the canonical Ethereum address produced by `vm.addr(pk)`.
+    ///      Guards against endianness drift in `_pkAddressFromLimbs`.
+    function test_register_stores_canonical_ethereum_address() public {
+        (QKBRegistryV4 r,,) = _deployForRegister();
+        Vm.Wallet memory w = vm.createWallet(uint256(keccak256("qkb-v4-kat")));
+        QKBRegistryV4.ChainProof memory cp = _chainProof(_RTL_VAL, 0, _SPKI_VAL);
+        QKBRegistryV4.LeafProof memory lp;
+        lp.proof = _emptyProof();
+        lp.pkX = _splitLE(w.publicKeyX);
+        lp.pkY = _splitLE(w.publicKeyY);
+        lp.ctxHash = uint256(0xCCC);
+        lp.policyLeafHash = uint256(0xAAA);
+        lp.policyRoot_ = _POLICY_VAL;
+        lp.timestamp = uint256(1_700_000_000);
+        lp.nullifier = uint256(0xFEEDFACE);
+        lp.leafSpkiCommit = _SPKI_VAL;
+        lp.dobCommit = 0;
+        lp.dobSupported = 0;
+
+        bytes32 id = r.register(cp, lp);
+        (address pk,,,,,,,) = r.bindings(id);
+        assertEq(pk, w.addr);
     }
 
     // ---------- proveAdulthood() ----------
