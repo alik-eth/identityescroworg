@@ -266,4 +266,43 @@ contract QKBRegistryV4 {
         b.ageVerifiedCutoff = ageCutoffDate;
         emit AdulthoodProven(bindingId, ageCutoffDate);
     }
+
+    // ---------- revoke + selfRevoke ----------
+
+    error SelfRevokeSigInvalid();
+    error BindingRevoked();
+
+    event BindingRevokedEv(bytes32 indexed id, bytes32 reason);
+
+    function revoke(bytes32 id, bytes32 reason) external onlyAdmin {
+        Binding storage b = bindings[id];
+        if (b.pk == address(0)) revert BindingNotFound();
+        if (b.revoked)          revert BindingRevoked();
+        b.revoked = true;
+        emit BindingRevokedEv(id, reason);
+    }
+
+    function selfRevoke(bytes32 id, bytes calldata signature) external {
+        Binding storage b = bindings[id];
+        if (b.pk == address(0)) revert BindingNotFound();
+        if (b.revoked)          revert BindingRevoked();
+        bytes32 payload = keccak256(abi.encodePacked("qkb-self-revoke/v1", id));
+        address recovered = _ecrecover(payload, signature);
+        if (recovered != b.pk) revert SelfRevokeSigInvalid();
+        b.revoked = true;
+        emit BindingRevokedEv(id, bytes32("self"));
+    }
+
+    function _ecrecover(bytes32 hash, bytes calldata sig) private pure returns (address) {
+        require(sig.length == 65, "bad sig length");
+        bytes32 r;
+        bytes32 s;
+        uint8 v;
+        assembly {
+            r := calldataload(sig.offset)
+            s := calldataload(add(sig.offset, 32))
+            v := byte(0, calldataload(add(sig.offset, 64)))
+        }
+        return ecrecover(hash, v, r, s);
+    }
 }

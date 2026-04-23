@@ -546,4 +546,117 @@ contract QKBRegistryV4Test is Test {
         // register() succeeded inside facade, but outer call reverts → state rolls back
         assertFalse(r.usedNullifiers(bytes32(_NULLIFIER_VAL)));
     }
+
+    // ---------- revoke() + selfRevoke() ----------
+
+    event BindingRevokedEv(bytes32 indexed id, bytes32 reason);
+
+    function _registerForWallet(QKBRegistryV4 r, Vm.Wallet memory w, uint256 nullifier)
+        private returns (bytes32 id)
+    {
+        QKBRegistryV4.ChainProof memory cp = _chainProof(_RTL_VAL, 0, _SPKI_VAL);
+        QKBRegistryV4.LeafProof memory lp;
+        lp.proof = _emptyProof();
+        lp.pkX = _splitLE(w.publicKeyX);
+        lp.pkY = _splitLE(w.publicKeyY);
+        lp.ctxHash = uint256(0xCCC);
+        lp.policyLeafHash = uint256(0xAAA);
+        lp.policyRoot_ = _POLICY_VAL;
+        lp.timestamp = uint256(1_700_000_000);
+        lp.nullifier = nullifier;
+        lp.leafSpkiCommit = _SPKI_VAL;
+        lp.dobCommit = 0;
+        lp.dobSupported = 0;
+        id = r.register(cp, lp);
+    }
+
+    function test_revoke_admin_succeeds() public {
+        (QKBRegistryV4 r,,) = _deployForRegister();
+        Vm.Wallet memory w = vm.createWallet(uint256(keccak256("qkb-v4-revoke")));
+        bytes32 id = _registerForWallet(r, w, uint256(0xA11CE));
+
+        bytes32 reason = bytes32("compromised");
+        vm.expectEmit(true, false, false, true);
+        emit BindingRevokedEv(id, reason);
+        r.revoke(id, reason);
+
+        (,,,,,,, bool revoked) = r.bindings(id);
+        assertTrue(revoked);
+    }
+
+    function test_revoke_reverts_when_binding_not_found() public {
+        (QKBRegistryV4 r,,) = _deployForRegister();
+        vm.expectRevert(QKBRegistryV4.BindingNotFound.selector);
+        r.revoke(bytes32(uint256(0xDEAD)), bytes32(0));
+    }
+
+    function test_revoke_reverts_on_double_revoke() public {
+        (QKBRegistryV4 r,,) = _deployForRegister();
+        Vm.Wallet memory w = vm.createWallet(uint256(keccak256("qkb-v4-revoke2")));
+        bytes32 id = _registerForWallet(r, w, uint256(0xA11CE2));
+        r.revoke(id, bytes32("x"));
+        vm.expectRevert(QKBRegistryV4.BindingRevoked.selector);
+        r.revoke(id, bytes32("y"));
+    }
+
+    function test_revoke_non_admin_reverts() public {
+        (QKBRegistryV4 r,,) = _deployForRegister();
+        Vm.Wallet memory w = vm.createWallet(uint256(keccak256("qkb-v4-revoke3")));
+        bytes32 id = _registerForWallet(r, w, uint256(0xA11CE3));
+        vm.prank(address(0xBEEF));
+        vm.expectRevert(QKBRegistryV4.OnlyAdmin.selector);
+        r.revoke(id, bytes32("nope"));
+    }
+
+    function test_selfRevoke_with_valid_signature() public {
+        (QKBRegistryV4 r,,) = _deployForRegister();
+        Vm.Wallet memory w = vm.createWallet(uint256(keccak256("qkb-v4-self")));
+        bytes32 id = _registerForWallet(r, w, uint256(0x5E1F));
+
+        bytes32 payload = keccak256(abi.encodePacked("qkb-self-revoke/v1", id));
+        (uint8 v, bytes32 rr, bytes32 s) = vm.sign(w, payload);
+        bytes memory sig = abi.encodePacked(rr, s, v);
+
+        vm.expectEmit(true, false, false, true);
+        emit BindingRevokedEv(id, bytes32("self"));
+        r.selfRevoke(id, sig);
+
+        (,,,,,,, bool revoked) = r.bindings(id);
+        assertTrue(revoked);
+    }
+
+    function test_selfRevoke_with_wrong_signer_reverts() public {
+        (QKBRegistryV4 r,,) = _deployForRegister();
+        Vm.Wallet memory w     = vm.createWallet(uint256(keccak256("qkb-v4-self-owner")));
+        Vm.Wallet memory other = vm.createWallet(uint256(keccak256("qkb-v4-self-attacker")));
+        bytes32 id = _registerForWallet(r, w, uint256(0x5E1F2));
+
+        bytes32 payload = keccak256(abi.encodePacked("qkb-self-revoke/v1", id));
+        (uint8 v, bytes32 rr, bytes32 s) = vm.sign(other, payload);
+        bytes memory sig = abi.encodePacked(rr, s, v);
+
+        vm.expectRevert(QKBRegistryV4.SelfRevokeSigInvalid.selector);
+        r.selfRevoke(id, sig);
+    }
+
+    function test_selfRevoke_reverts_when_binding_not_found() public {
+        (QKBRegistryV4 r,,) = _deployForRegister();
+        bytes memory sig = new bytes(65);
+        vm.expectRevert(QKBRegistryV4.BindingNotFound.selector);
+        r.selfRevoke(bytes32(uint256(0xDEAD)), sig);
+    }
+
+    function test_selfRevoke_reverts_on_double_revoke() public {
+        (QKBRegistryV4 r,,) = _deployForRegister();
+        Vm.Wallet memory w = vm.createWallet(uint256(keccak256("qkb-v4-self-dbl")));
+        bytes32 id = _registerForWallet(r, w, uint256(0x5E1F3));
+
+        bytes32 payload = keccak256(abi.encodePacked("qkb-self-revoke/v1", id));
+        (uint8 v, bytes32 rr, bytes32 s) = vm.sign(w, payload);
+        bytes memory sig = abi.encodePacked(rr, s, v);
+        r.selfRevoke(id, sig);
+
+        vm.expectRevert(QKBRegistryV4.BindingRevoked.selector);
+        r.selfRevoke(id, sig);
+    }
 }
