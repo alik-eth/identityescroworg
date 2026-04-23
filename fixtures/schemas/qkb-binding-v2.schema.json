@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://identityescrow.org/schemas/qkb-binding-v2.schema.json",
+  "title": "QKB Binding V2",
+  "description": "Structured, policy-committed successor to QKB/1.0. Natural-language rendering is explicitly display-only; the stable circuit-bound surface is the machine-readable core.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "statementSchema",
+    "pk",
+    "scheme",
+    "context",
+    "timestamp",
+    "nonce",
+    "policy",
+    "assertions"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "QKB/2.0"
+    },
+    "statementSchema": {
+      "type": "string",
+      "const": "qkb-binding-core/v1"
+    },
+    "pk": {
+      "type": "string",
+      "pattern": "^0x04[0-9a-fA-F]{128}$",
+      "description": "SEC1 uncompressed secp256k1 public key."
+    },
+    "scheme": {
+      "type": "string",
+      "enum": ["secp256k1"]
+    },
+    "context": {
+      "type": "string",
+      "pattern": "^0x([0-9a-fA-F]{2})*$",
+      "description": "App- or vote-specific raw bytes encoded as 0x-hex. Empty is 0x."
+    },
+    "timestamp": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "nonce": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{64}$",
+      "description": "Exactly 32 random bytes."
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "leafHash",
+        "policyId",
+        "policyVersion",
+        "bindingSchema"
+      ],
+      "properties": {
+        "leafHash": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{64}$",
+          "description": "Commitment inserted into the policy Merkle tree; circuit proves inclusion under policyRoot."
+        },
+        "policyId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9._/-]*$"
+        },
+        "policyVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "bindingSchema": {
+          "type": "string",
+          "const": "qkb-binding-core/v1"
+        }
+      }
+    },
+    "assertions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "keyControl",
+        "bindsContext",
+        "acceptsAttribution",
+        "revocationRequired"
+      ],
+      "properties": {
+        "keyControl": {
+          "type": "boolean",
+          "const": true
+        },
+        "bindsContext": {
+          "type": "boolean",
+          "const": true
+        },
+        "acceptsAttribution": {
+          "type": "boolean",
+          "const": true
+        },
+        "revocationRequired": {
+          "type": "boolean",
+          "const": true
+        }
+      }
+    },
+    "display": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lang", "template"],
+      "properties": {
+        "lang": {
+          "type": "string",
+          "pattern": "^[a-z]{2}(-[A-Z]{2})?$"
+        },
+        "template": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "description": "Display-only localization/rendering metadata. Must not be circuit-whitelisted byte-for-byte."
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Optional application-specific data outside the stable circuit-bound core."
+    }
+  }
+}

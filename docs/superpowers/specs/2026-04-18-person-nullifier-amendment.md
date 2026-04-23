@@ -1,6 +1,20 @@
-# Person-Level Nullifier — Spec Amendment
+# Scoped Credential Nullifier — Spec Amendment
 
-> Amends §14.4 of `2026-04-17-qie-phase2-design.md` and §13.4 of `packages/contracts/CLAUDE.md`. Date: 2026-04-18. Status: authoritative.
+> Amends §14.4 of `2026-04-17-qie-phase2-design.md` and §13.4 of `packages/contracts/CLAUDE.md`. Date: 2026-04-18. Clarified 2026-04-23. Status: authoritative.
+
+## 2026-04-23 clarification
+
+This primitive is **not** a pan-eIDAS natural-person deduplicator. It derives
+a context-bound nullifier from the identifier namespace exposed by the QES
+certificate's `subject.serialNumber` value. eIDAS trust lists establish that a
+QTSP/certificate chain is trusted; they do not require every Member State,
+QTSP, passport, or tax-number namespace held by the same natural person to
+collapse to one EU-wide identifier.
+
+Applications may treat this as "one registration per context per QES
+identifier namespace." If they need "one natural person across multiple
+national identifiers," that must be supplied by a separate identity-escrow or
+deduplication layer above QKB.
 
 ## Motivation
 
@@ -11,7 +25,13 @@ secret    = Poseidon(subject_serial_limbs, issuer_cert_hash)
 nullifier = Poseidon(secret, ctxHash)
 ```
 
-This binds the nullifier to a specific **certificate**, not to a **person**. Every eIDAS QES is reissued every 1–3 years with a fresh serial and subject public key. Under the prior construction, the same natural person produced a different nullifier after each renewal — defeating Sybil resistance at the DAO / airdrop / regulated-entity layer, where "one human per context" is the whole point.
+This binds the nullifier to a specific **certificate**, not to the identifier
+namespace represented by the QES subject. Every eIDAS QES is reissued every
+1–3 years with a fresh certificate serial and subject public key. Under the
+prior construction, the same local QES identity produced a different nullifier
+after each renewal. The construction below fixes renewal/provider churn inside
+the exposed identifier namespace, but it still does not unify different
+national identifiers held by the same natural person.
 
 ## New construction
 
@@ -58,7 +78,7 @@ where `<3-letter-type>` ∈ `{PAS, IDC, PNO, TAX, …}` per ETSI TS 119 412-1 An
 The circuit hashes the raw PrintableString content bytes. It does NOT parse the semantics prefix. Consequently:
 
 - **Pan-eIDAS coverage**: any ETSI-compliant QES works without circuit changes. The primitive generalizes beyond Ukraine.
-- **Identifier-scheme-scoped**: a person who holds both `PNODE-…` and `PASDE-…` certs from the same QTSP produces two distinct nullifiers — one per identifier scheme. This is intentional; normalizing across schemes would introduce gaming (pick whichever cert yields a fresh nullifier). Applications that want strict one-human-ever should pin a single identifier-type prefix off-chain.
+- **Identifier-scheme-scoped**: a person who holds both `PNODE-…` and `PASDE-…` certs from the same QTSP produces two distinct nullifiers — one per identifier scheme. This is intentional. Applications that need strict one-human-ever semantics need an escrow/deduplication layer; pinning a single identifier-type prefix only narrows the namespace and does not solve cross-country identity unification.
 - **Non-ETSI QES**: certs without OID 2.5.4.5 fail witness generation with `witness.rnokppMissing`. The web SPA surfaces this as "This flow currently requires an ETSI EN 319 412-1 compliant eIDAS QES."
 
 ## On-chain / interface compatibility
@@ -112,4 +132,8 @@ Public signal `nullifier` is derived off-circuit by `buildPersonSecret` + `build
 
 - **RSA variant.** Still deferred until we have non-Diia RSA QES test material. When it lands, the same `PersonNullifier` primitive wires in unchanged — only the leaf-cert DER path differs.
 - **Normalization across schemes.** See eIDAS scope note above — explicitly out.
-- **Cross-QTSP deduplication.** Two QTSPs issuing certs to the same person produce the same nullifier (both derive from OID 2.5.4.5 which is the state-issued identifier, not a QTSP artefact). This is a property, not a limitation.
+- **Pan-eIDAS natural-person deduplication.** Two QTSPs issuing certs with the
+  same `subject.serialNumber` namespace/value produce the same nullifier. Two
+  different national identifier namespaces for the same natural person do not.
+  Cross-namespace deduplication is an identity-escrow problem, not a QES
+  certificate-proof property.

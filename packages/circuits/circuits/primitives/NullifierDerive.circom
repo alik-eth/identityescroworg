@@ -1,19 +1,20 @@
 pragma circom 2.1.9;
 
-// NullifierDerive — Phase-2 QIE nullifier primitive.
+// NullifierDerive — Phase-2 QIE scoped credential nullifier primitive.
 //
-// Person-level construction, amended 2026-04-18 (see
+// Credential-namespace construction, clarified 2026-04-23 (see
 // `docs/superpowers/specs/2026-04-18-person-nullifier-amendment.md`):
 //
 //   secret    = Poseidon( subjectSerialLimbs[0..3], subjectSerialLen )  // arity 5
 //   nullifier = Poseidon( secret, ctxHash )                              // arity 2
 //
 // Rationale:
-//   * `subjectSerialLimbs` is the per-person identifier (ETSI EN 319 412-1
-//     §5.1.3 semantics identifier in OID 2.5.4.5 — `PNOUA-…`, `PNODE-…`,
-//     `TINPL-…`, etc.) extracted by `X509SubjectSerial`, packed as 4 × 64-bit
-//     LE limbs. Stable across QES renewals because the national identifier
-//     does not change when a cert is rotated.
+//   * `subjectSerialLimbs` is the certificate subject's ETSI EN 319 412-1
+//     semantics identifier in OID 2.5.4.5 — `PNOUA-…`, `PNODE-…`, `TINPL-…`,
+//     etc. It is extracted by `X509SubjectSerial` and packed as 4 × 64-bit
+//     LE limbs. It is stable across renewals only inside that identifier
+//     namespace. eIDAS does not require all Member State / QTSP identifiers
+//     for the same natural person to collapse to one EU-wide identifier.
 //   * `subjectSerialLen` is hashed alongside the limbs to prevent
 //     padding-collision attacks between identifiers of different natural
 //     byte-lengths (8-byte EDRPOU vs 10-byte РНОКПП vs 14-byte `PNODE-…`
@@ -21,9 +22,10 @@ pragma circom 2.1.9;
 //     the LE-limb packing of one identifier and the padded-zero suffix of
 //     a shorter identifier could produce identical nullifiers.
 //   * No `issuerCertHash` input (removed in the 2026-04-18 amendment):
-//     binding the nullifier to the issuing QTSP would make it QTSP-scoped,
-//     defeating Sybil resistance when a person switches between QTSPs
-//     (common in practice — e.g. Diia → PrivatBank → Masterkey in UA).
+//     binding to a single QTSP would make renewals/provider switches inside
+//     the same national identifier namespace look like different identities.
+//     This primitive is still not a pan-eIDAS human deduplicator; cross-
+//     namespace deduplication belongs in a separate identity-escrow layer.
 //   * The two-step split (rather than a single 6-input hash) lets callers
 //     expose `secret` for long-lived commitments while keeping the
 //     context-specific `nullifier` separate.

@@ -1,43 +1,41 @@
 pragma circom 2.1.9;
 
-// QKBPresentationEcdsaLeaf — leaf-side ECDSA proof.
+// QKBPresentationEcdsaLeafV4 — draft successor leaf circuit for `QKB/2.0`.
 //
-// Wires R_QKB constraints 1, 2, 5, 6 per spec §5.3 — the "binding proof"
-// attesting that the user actually performed the QES over the binding
-// statement committed to `pk`/context/declaration/timestamp. Chain-side
-// constraints 3, 4 (intermediate signs leaf; intermediate in trusted list)
-// are proved by a separate circuit QKBPresentationEcdsaChain and verified
-// on-chain alongside this proof, per the §5.4 split-proof fallback (both
-// verifies in one circuit exceed the 22 GB compile budget on dev HW).
+// This file is intentionally not wired into the live build / ceremony path.
+// It exists to freeze the intended successor constraint surface:
+//   - structured binding-core bytes instead of declaration prose
+//   - policy-root inclusion instead of DeclarationWhitelist
+//   - unchanged CMS verification, scoped nullifier, and leafSpkiCommit glue
 //
-// Public signals (13 total — orchestration §2.1):
+// Public signals (14 total — draft successor order):
 //   [0..3]  pkX[4]
 //   [4..7]  pkY[4]
 //   [8]     ctxHash
-//   [9]     declHash
-//   [10]    timestamp
-//   [11]    nullifier        Poseidon(Poseidon-5(subjectSerialLimbs, len), ctxHash)
-//                            — context-scoped credential-namespace gate, §14.4.
-//                              Not a pan-eIDAS natural-person identifier.
-//   [12]    leafSpkiCommit   Poseidon(Poseidon(leafXLimbs), Poseidon(leafYLimbs))
-//                            — binds this proof's leaf SPKI to the chain
-//                              proof's leaf SPKI via an on-chain equality
-//                              check between the two public signals.
+//   [9]     policyLeafHash
+//   [10]    policyRoot
+//   [11]    timestamp
+//   [12]    nullifier
+//   [13]    leafSpkiCommit
+//
+// `BindingParseV2Core` now pins the full machine-readable `bindingCoreV2(...)`
+// surface. This circuit is still draft-only because it is not wired into the
+// live proving / verifier / contract path, not because the core JSON shape is
+// intentionally underconstrained.
 
-include "./binding/BindingParseFull.circom";
-include "./binding/DeclarationWhitelist.circom";
+include "./binding/BindingParseV2Core.circom";
 include "./primitives/Sha256Var.circom";
 include "./primitives/EcdsaP256Verify.circom";
 include "./primitives/PoseidonChunkHashVar.circom";
 include "./primitives/NullifierDerive.circom";
 include "./primitives/X509SubjectSerial.circom";
+include "./primitives/MerkleProofPoseidon.circom";
 include "./secp/Secp256k1PkMatch.circom";
 include "circomlib/circuits/bitify.circom";
 include "circomlib/circuits/poseidon.circom";
 include "circomlib/circuits/comparators.circom";
 include "circomlib/circuits/multiplexer.circom";
 
-// Bytes-to-limbs helper for ECDSA-P256 (6×43-bit LE limbs).
 template Bytes32ToLimbs643() {
     signal input bytes[32];
     signal output limbs[6];
@@ -62,95 +60,96 @@ template Bytes32ToLimbs643() {
     }
 }
 
-template Bits256ToField() {
-    signal input digestBits[256];
-    signal output packed;
-    var acc = 0;
-    for (var i = 0; i < 256; i++) acc = acc * 2 + digestBits[i];
-    packed <== acc;
-}
-
-template QKBPresentationEcdsaLeaf() {
+template QKBPresentationEcdsaLeafV4() {
     var MAX_BCANON = 1024;
     var MAX_SA = 1536;
     var MAX_CERT = 1536;
     var MAX_CTX = 256;
-    // MAX_DECL must satisfy declValueOffset + MAX_DECL ≤ MAX_BCANON so the
-    // BPFSliceVar Multiplexer over the Bcanon buffer never overflows. UK is
-    // the longest canonical declaration at 583 B; 960 remains the current
-    // ceremony cap.
-    var MAX_DECL = 960;
     var MAX_TS_DIGITS = 20;
+    var MERKLE_DEPTH = 16;
 
     // === Public ===
     signal input pkX[4];
     signal input pkY[4];
     signal input ctxHash;
-    signal input declHash;
+    signal input policyLeafHash;
+    signal input policyRoot;
     signal input timestamp;
-    // Scoped credential nullifier (§14.4 clarification, 2026-04-23). Public
-    // input; the circuit derives it in §7 below and constrains equality.
     signal input nullifier;
-    // leafSpkiCommit is a PUBLIC INPUT (not output) so it lands at the last
-    // position of the Solidity verifier's `input[13]` per the orchestration
-    // §2.1 index map. Snarkjs orders `public.json` as [outputs…, inputs in
-    // declaration order]; making leafSpkiCommit an output would push it to
-    // index 0 and break contracts-eng's `leafArr[12]` packing. The circuit
-    // constrains it below to equal the internally-computed Poseidon2 of the
-    // Poseidon6 digests over the leaf SPKI X/Y limbs — so the prover cannot
-    // pick an arbitrary value.
     signal input leafSpkiCommit;
 
     // === Private (nullifier extraction) ===
-    // Byte offset into leafDER where the subject.serialNumber (OID 2.5.4.5)
-    // PrintableString content starts, plus its content length (1..32).
     signal input subjectSerialValueOffset;
     signal input subjectSerialValueLength;
 
-    // === Private ===
-    signal input Bcanon[MAX_BCANON];
-    signal input BcanonLen;
-    signal input BcanonPaddedIn[MAX_BCANON];
-    signal input BcanonPaddedLen;
+    // === Private (binding core parse) ===
+    signal input bindingCore[MAX_BCANON];
+    signal input bindingCoreLen;
+    signal input bindingCorePaddedIn[MAX_BCANON];
+    signal input bindingCorePaddedLen;
     signal input pkValueOffset;
     signal input schemeValueOffset;
+    signal input assertionsValueOffset;
+    signal input statementSchemaValueOffset;
+    signal input nonceValueOffset;
     signal input ctxValueOffset;
     signal input ctxHexLen;
-    signal input declValueOffset;
-    signal input declValueLen;
+    signal input policyIdValueOffset;
+    signal input policyIdLen;
+    signal input policyLeafHashValueOffset;
+    signal input policyBindingSchemaValueOffset;
+    signal input policyVersionValueOffset;
+    signal input policyVersionDigitCount;
     signal input tsValueOffset;
     signal input tsDigitCount;
+    signal input versionValueOffset;
+    signal input nonceBytes[32];
+    signal input policyIdBytes[128];
+    signal input policyVersion;
 
-    signal input declPaddedIn[MAX_DECL + 64];
-    signal input declPaddedLen;
-
+    // === Private (CMS signedAttrs + leaf signature) ===
     signal input signedAttrs[MAX_SA];
     signal input signedAttrsLen;
     signal input signedAttrsPaddedIn[MAX_SA];
     signal input signedAttrsPaddedLen;
     signal input mdOffsetInSA;
 
+    // === Private (leaf certificate) ===
     signal input leafDER[MAX_CERT];
     signal input leafSpkiXOffset;
     signal input leafSpkiYOffset;
-
     signal input leafSigR[6];
     signal input leafSigS[6];
 
+    // === Private (policy inclusion) ===
+    signal input policyMerklePath[MERKLE_DEPTH];
+    signal input policyMerkleIndices[MERKLE_DEPTH];
+
     // =========================================================================
-    // 1. Bcanon parse + pk limb match + timestamp match.
+    // 1. Binding core parse + pk limb match + timestamp match.
     // =========================================================================
-    component parser = BindingParseFull(MAX_BCANON, MAX_CTX, MAX_DECL, MAX_TS_DIGITS);
-    for (var i = 0; i < MAX_BCANON; i++) parser.bytes[i] <== Bcanon[i];
-    parser.bcanonLen <== BcanonLen;
+    component parser = BindingParseV2Core(MAX_BCANON, MAX_CTX, MAX_TS_DIGITS);
+    for (var i = 0; i < MAX_BCANON; i++) parser.bytes[i] <== bindingCore[i];
+    parser.bcanonLen <== bindingCoreLen;
     parser.pkValueOffset <== pkValueOffset;
     parser.schemeValueOffset <== schemeValueOffset;
+    parser.assertionsValueOffset <== assertionsValueOffset;
+    parser.statementSchemaValueOffset <== statementSchemaValueOffset;
+    parser.nonceValueOffset <== nonceValueOffset;
     parser.ctxValueOffset <== ctxValueOffset;
     parser.ctxHexLen <== ctxHexLen;
-    parser.declValueOffset <== declValueOffset;
-    parser.declValueLen <== declValueLen;
+    parser.policyIdValueOffset <== policyIdValueOffset;
+    parser.policyIdLen <== policyIdLen;
+    parser.policyLeafHashValueOffset <== policyLeafHashValueOffset;
+    parser.policyBindingSchemaValueOffset <== policyBindingSchemaValueOffset;
+    parser.policyVersionValueOffset <== policyVersionValueOffset;
+    parser.policyVersionDigitCount <== policyVersionDigitCount;
     parser.tsValueOffset <== tsValueOffset;
     parser.tsDigitCount <== tsDigitCount;
+    parser.versionValueOffset <== versionValueOffset;
+    for (var i = 0; i < 32; i++) parser.nonceBytesIn[i] <== nonceBytes[i];
+    for (var i = 0; i < 128; i++) parser.policyIdBytesIn[i] <== policyIdBytes[i];
+    parser.policyVersionIn <== policyVersion;
 
     component pkMatch = Secp256k1PkMatch();
     for (var i = 0; i < 65; i++) pkMatch.pkBytes[i] <== parser.pkBytes[i];
@@ -160,20 +159,21 @@ template QKBPresentationEcdsaLeaf() {
     }
 
     parser.tsValue === timestamp;
+    parser.policyLeafHash === policyLeafHash;
 
     // =========================================================================
-    // 2. sha256(Bcanon) == messageDigest inside signedAttrs at mdOffsetInSA.
+    // 2. sha256(bindingCore) == messageDigest inside signedAttrs at mdOffsetInSA.
     // =========================================================================
     component bcLt[MAX_BCANON];
     for (var i = 0; i < MAX_BCANON; i++) {
         bcLt[i] = LessThan(16);
         bcLt[i].in[0] <== i;
-        bcLt[i].in[1] <== BcanonLen;
-        bcLt[i].out * (BcanonPaddedIn[i] - Bcanon[i]) === 0;
+        bcLt[i].in[1] <== bindingCoreLen;
+        bcLt[i].out * (bindingCorePaddedIn[i] - bindingCore[i]) === 0;
     }
     component hashBcanon = Sha256Var(MAX_BCANON);
-    for (var i = 0; i < MAX_BCANON; i++) hashBcanon.paddedIn[i] <== BcanonPaddedIn[i];
-    hashBcanon.paddedLen <== BcanonPaddedLen;
+    for (var i = 0; i < MAX_BCANON; i++) hashBcanon.paddedIn[i] <== bindingCorePaddedIn[i];
+    hashBcanon.paddedLen <== bindingCorePaddedLen;
 
     component mdPick[32];
     signal mdFromSA[32];
@@ -248,25 +248,15 @@ template QKBPresentationEcdsaLeaf() {
     }
 
     // =========================================================================
-    // 4. declHash + DeclarationWhitelist.
+    // 4. policyLeafHash ∈ policyRoot.
     // =========================================================================
-    component declLt[MAX_DECL];
-    for (var i = 0; i < MAX_DECL; i++) {
-        declLt[i] = LessThan(16);
-        declLt[i].in[0] <== i;
-        declLt[i].in[1] <== declValueLen;
-        declLt[i].out * (declPaddedIn[i] - parser.declBytes[i]) === 0;
+    component merkle = MerkleProofPoseidon(MERKLE_DEPTH);
+    merkle.leaf <== policyLeafHash;
+    merkle.root <== policyRoot;
+    for (var i = 0; i < MERKLE_DEPTH; i++) {
+        merkle.path[i] <== policyMerklePath[i];
+        merkle.indices[i] <== policyMerkleIndices[i];
     }
-    component hashDecl = Sha256Var(MAX_DECL + 64);
-    for (var i = 0; i < MAX_DECL + 64; i++) hashDecl.paddedIn[i] <== declPaddedIn[i];
-    hashDecl.paddedLen <== declPaddedLen;
-
-    component whitelist = DeclarationWhitelist();
-    for (var i = 0; i < 256; i++) whitelist.digestBits[i] <== hashDecl.out[i];
-
-    component declPack = Bits256ToField();
-    for (var i = 0; i < 256; i++) declPack.digestBits[i] <== hashDecl.out[i];
-    declPack.packed === declHash;
 
     // =========================================================================
     // 5. ctxHash: empty → 0, else PoseidonChunkHashVar(ctxBytes) = ctxHash.
@@ -283,9 +273,7 @@ template QKBPresentationEcdsaLeaf() {
     ctxEff === ctxHash;
 
     // =========================================================================
-    // 6. leafSpkiCommit — Poseidon commitment to the leaf SPKI limbs. The
-    //    chain-side proof exposes the same commitment; the on-chain verifier
-    //    asserts equality to glue the two proofs.
+    // 6. leafSpkiCommit — Poseidon commitment to the leaf SPKI limbs.
     // =========================================================================
     component packX = Poseidon(6);
     component packY = Poseidon(6);
@@ -299,14 +287,7 @@ template QKBPresentationEcdsaLeaf() {
     packXY.out === leafSpkiCommit;
 
     // =========================================================================
-    // 7. Scoped credential nullifier (§14.4 clarification, 2026-04-23).
-    //    Extract the subject.serialNumber (OID 2.5.4.5) value bytes from the
-    //    leaf cert DER, pack into 4 × uint64 LE limbs, derive
-    //        nullifier = Poseidon(Poseidon-5(limbs[0..3], len), ctxHash).
-    //    The limbs never leak; only the ctx-bound nullifier is public. This
-    //    deduplicates within the identifier namespace encoded in the QES
-    //    certificate. It does not prove one natural person across every
-    //    eIDAS Member State / QTSP namespace.
+    // 7. Scoped credential nullifier.
     // =========================================================================
     component subjectSerial = X509SubjectSerial(MAX_CERT);
     for (var i = 0; i < MAX_CERT; i++) subjectSerial.leafDER[i] <== leafDER[i];
@@ -323,5 +304,5 @@ template QKBPresentationEcdsaLeaf() {
     nullifierDerive.nullifier === nullifier;
 }
 
-component main {public [pkX, pkY, ctxHash, declHash, timestamp, nullifier, leafSpkiCommit]}
-    = QKBPresentationEcdsaLeaf();
+component main {public [pkX, pkY, ctxHash, policyLeafHash, policyRoot, timestamp, nullifier, leafSpkiCommit]}
+    = QKBPresentationEcdsaLeafV4();

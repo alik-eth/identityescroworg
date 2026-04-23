@@ -74,8 +74,8 @@ export function GenerateScreen() {
       const pk = hexToU8(pubkeyHex);
       const nonce = crypto.getRandomValues(new Uint8Array(32));
       const timestamp = Math.floor(Date.now() / 1000);
-      // Optional per-app context for Sybil-resistant nullifier (§14.4). Empty
-      // string ⇒ omit ⇒ binding.context = "0x" (global identity proof).
+      // Optional per-app context for the scoped credential nullifier (§14.4).
+      // Empty string ⇒ omit ⇒ binding.context = "0x".
       const ctxTrim = contextText.trim();
       const binding =
         ctxTrim.length > 0
