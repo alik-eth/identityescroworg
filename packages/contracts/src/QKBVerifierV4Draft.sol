@@ -1,30 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity 0.8.24;
 
-/// @notice Draft Groth16 verifier interface for the base `QKB/2` leaf circuit
-///         (policy-root successor surface, 14 public signals):
-///           [0..3]  pkX limbs
-///           [4..7]  pkY limbs
+/// @notice Unified Groth16 verifier interface for the QKB/2 leaf circuit
+///         (16 public signals):
+///           [0..3]  pkX[4]
+///           [4..7]  pkY[4]
 ///           [8]     ctxHash
 ///           [9]     policyLeafHash
 ///           [10]    policyRoot
 ///           [11]    timestamp
 ///           [12]    nullifier
 ///           [13]    leafSpkiCommit
-interface IGroth16LeafVerifierV4 {
-    function verifyProof(
-        uint256[2] calldata a,
-        uint256[2][2] calldata b,
-        uint256[2] calldata c,
-        uint256[14] calldata input
-    ) external view returns (bool);
-}
-
-/// @notice Draft Groth16 verifier interface for the age-capable `QKB/2` leaf
-///         circuit (16 public signals). This extends the base surface with:
 ///           [14]    dobCommit
 ///           [15]    dobSupported
-interface IGroth16LeafVerifierV4Age {
+interface IGroth16LeafVerifierV4 {
     function verifyProof(
         uint256[2] calldata a,
         uint256[2][2] calldata b,
@@ -86,17 +75,6 @@ library QKBVerifierV4Draft {
         uint64 timestamp;
         bytes32 nullifier;
         bytes32 leafSpkiCommit;
-    }
-
-    struct LeafSignalsAge {
-        uint256[4] pkX;
-        uint256[4] pkY;
-        bytes32 ctxHash;
-        bytes32 policyLeafHash;
-        bytes32 policyRoot;
-        uint64 timestamp;
-        bytes32 nullifier;
-        bytes32 leafSpkiCommit;
         bytes32 dobCommit;
         uint8 dobSupported;
     }
@@ -107,48 +85,12 @@ library QKBVerifierV4Draft {
         uint8 ageQualified;
     }
 
-    function verifyBase(
+    function verify(
         IGroth16LeafVerifierV4 lv,
-        IGroth16ChainVerifierV4 cv,
-        Proof memory proofLeaf,
-        LeafSignals memory inputsLeaf,
-        Proof memory proofChain,
-        ChainSignals memory inputsChain
-    ) internal view returns (bool) {
-        if (inputsLeaf.leafSpkiCommit != inputsChain.leafSpkiCommit) return false;
-
-        uint256[14] memory leafArr;
-        leafArr[0] = inputsLeaf.pkX[0];
-        leafArr[1] = inputsLeaf.pkX[1];
-        leafArr[2] = inputsLeaf.pkX[2];
-        leafArr[3] = inputsLeaf.pkX[3];
-        leafArr[4] = inputsLeaf.pkY[0];
-        leafArr[5] = inputsLeaf.pkY[1];
-        leafArr[6] = inputsLeaf.pkY[2];
-        leafArr[7] = inputsLeaf.pkY[3];
-        leafArr[8] = uint256(inputsLeaf.ctxHash);
-        leafArr[9] = uint256(inputsLeaf.policyLeafHash);
-        leafArr[10] = uint256(inputsLeaf.policyRoot);
-        leafArr[11] = uint256(inputsLeaf.timestamp);
-        leafArr[12] = uint256(inputsLeaf.nullifier);
-        leafArr[13] = uint256(inputsLeaf.leafSpkiCommit);
-
-        uint256[3] memory chainArr;
-        chainArr[0] = uint256(inputsChain.rTL);
-        chainArr[1] = uint256(inputsChain.algorithmTag);
-        chainArr[2] = uint256(inputsChain.leafSpkiCommit);
-
-        if (!lv.verifyProof(proofLeaf.a, proofLeaf.b, proofLeaf.c, leafArr)) return false;
-        if (!cv.verifyProof(proofChain.a, proofChain.b, proofChain.c, chainArr)) return false;
-        return true;
-    }
-
-    function verifyWithAge(
-        IGroth16LeafVerifierV4Age lv,
         IGroth16ChainVerifierV4 cv,
         IGroth16AgeVerifierV4 av,
         Proof memory proofLeaf,
-        LeafSignalsAge memory inputsLeaf,
+        LeafSignals memory inputsLeaf,
         Proof memory proofChain,
         ChainSignals memory inputsChain,
         Proof memory proofAge,
