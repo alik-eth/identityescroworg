@@ -185,6 +185,9 @@
       "offsetNotFound": "Could not locate a required field inside the binding.",
       "fieldTooLong": "A field in the binding exceeds the circuit length limit."
     },
+    "qkb": {
+      "leafPublicSignals": "Leaf public-signal array has the wrong shape."
+    },
     "prover": {
       "wasmOOM": "The in-browser prover ran out of memory.",
       "cancelled": "Proof generation was cancelled.",

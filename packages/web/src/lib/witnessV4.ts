@@ -352,6 +352,41 @@ export function buildPhase2WitnessV4Draft(
   return { leaf, chain, shared };
 }
 
+export interface LeafPublicSignals {
+  pkX: [bigint, bigint, bigint, bigint];
+  pkY: [bigint, bigint, bigint, bigint];
+  ctxHash: bigint;
+  policyLeafHash: bigint;
+  policyRoot: bigint;
+  timestamp: bigint;
+  nullifier: bigint;
+  leafSpkiCommit: bigint;
+  dobCommit: bigint;
+  dobSupported: bigint;
+}
+
+export function parseLeafPublicSignals(raw: string[]): LeafPublicSignals {
+  if (raw.length !== 16) {
+    throw new QkbError('qkb.leafPublicSignals', {
+      reason: 'leaf public signals must be length 16',
+      got: raw.length,
+    });
+  }
+  const b = raw.map((s) => BigInt(s));
+  return {
+    pkX: [b[0]!, b[1]!, b[2]!, b[3]!],
+    pkY: [b[4]!, b[5]!, b[6]!, b[7]!],
+    ctxHash: b[8]!,
+    policyLeafHash: b[9]!,
+    policyRoot: b[10]!,
+    timestamp: b[11]!,
+    nullifier: b[12]!,
+    leafSpkiCommit: b[13]!,
+    dobCommit: b[14]!,
+    dobSupported: b[15]!,
+  };
+}
+
 export function leafPublicSignalsV4(w: LeafWitnessInputV4): LeafPublicSignalsV4 {
   const signals: string[] = [
     ...w.pkX,
