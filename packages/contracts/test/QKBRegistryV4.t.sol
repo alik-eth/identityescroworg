@@ -471,4 +471,52 @@ contract QKBRegistryV4Test is Test {
         vm.expectRevert(QKBRegistryV4.InvalidProof.selector);
         r.proveAdulthood(id, ap, _CUTOFF);
     }
+
+    // ---------- registerWithAge() ----------
+
+    function test_registerWithAge_happy_path_binds_and_sets_cutoff() public {
+        (QKBRegistryV4 r, , , ) = _deployForAge();
+        QKBRegistryV4.ChainProof memory cp = _chainProof(_RTL_VAL, 0, _SPKI_VAL);
+        (QKBRegistryV4.LeafProof memory lp,) =
+            _leafProof(_POLICY_VAL, _SPKI_VAL, _NULLIFIER_VAL, _DOB_COMMIT, 1);
+        QKBRegistryV4.AgeProof memory ap = _ageProof(_DOB_COMMIT, _CUTOFF, 1);
+
+        bytes32 id = r.registerWithAge(cp, lp, ap, _CUTOFF);
+        assertEq(id, bytes32(_NULLIFIER_VAL));
+        (, , , , uint256 dobCommit, bool dobAvailable, uint256 cutoff, ) = r.bindings(id);
+        assertEq(dobCommit, _DOB_COMMIT);
+        assertTrue(dobAvailable);
+        assertEq(cutoff, _CUTOFF);
+    }
+
+    function test_registerWithAge_atomic_reverts_on_bad_age_proof() public {
+        (QKBRegistryV4 r, , , MockAgeV av) = _deployForAge();
+        av.setResult(false);
+        QKBRegistryV4.ChainProof memory cp = _chainProof(_RTL_VAL, 0, _SPKI_VAL);
+        (QKBRegistryV4.LeafProof memory lp,) =
+            _leafProof(_POLICY_VAL, _SPKI_VAL, _NULLIFIER_VAL, _DOB_COMMIT, 1);
+        QKBRegistryV4.AgeProof memory ap = _ageProof(_DOB_COMMIT, _CUTOFF, 1);
+
+        vm.expectRevert(QKBRegistryV4.InvalidProof.selector);
+        r.registerWithAge(cp, lp, ap, _CUTOFF);
+
+        // nothing persisted
+        assertFalse(r.usedNullifiers(bytes32(_NULLIFIER_VAL)));
+        (address pk, , , , , , , ) = r.bindings(bytes32(_NULLIFIER_VAL));
+        assertEq(pk, address(0));
+    }
+
+    function test_registerWithAge_reverts_when_dob_unavailable() public {
+        (QKBRegistryV4 r, , , ) = _deployForAge();
+        QKBRegistryV4.ChainProof memory cp = _chainProof(_RTL_VAL, 0, _SPKI_VAL);
+        (QKBRegistryV4.LeafProof memory lp,) =
+            _leafProof(_POLICY_VAL, _SPKI_VAL, _NULLIFIER_VAL, 0, 0);
+        QKBRegistryV4.AgeProof memory ap = _ageProof(0, _CUTOFF, 1);
+
+        vm.expectRevert(QKBRegistryV4.DobNotAvailable.selector);
+        r.registerWithAge(cp, lp, ap, _CUTOFF);
+
+        // register() succeeded inside facade, but outer call reverts → state rolls back
+        assertFalse(r.usedNullifiers(bytes32(_NULLIFIER_VAL)));
+    }
 }

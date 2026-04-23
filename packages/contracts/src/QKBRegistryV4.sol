@@ -247,4 +247,27 @@ contract QKBRegistryV4 {
         b.ageVerifiedCutoff = ageCutoffDate;
         emit AdulthoodProven(id, ageCutoffDate);
     }
+
+    // ---------- registerWithAge facade ----------
+
+    function registerWithAge(
+        ChainProof calldata cp,
+        LeafProof calldata lp,
+        AgeProof calldata ap,
+        uint256 ageCutoffDate
+    ) external returns (bytes32 bindingId) {
+        bindingId = this.register(cp, lp);
+        Binding storage b = bindings[bindingId];
+        if (!b.dobAvailable)                   revert DobNotAvailable();
+        if (ap.dobCommit != b.dobCommit)       revert AgeProofMismatch();
+        if (ap.ageCutoffDate != ageCutoffDate) revert AgeProofMismatch();
+        if (ap.ageQualified != 1)              revert AgeNotQualified();
+
+        uint256[3] memory input = [ap.dobCommit, ap.ageCutoffDate, ap.ageQualified];
+        if (!ageVerifier.verifyProof(ap.proof.a, ap.proof.b, ap.proof.c, input))
+            revert InvalidProof();
+
+        b.ageVerifiedCutoff = ageCutoffDate;
+        emit AdulthoodProven(bindingId, ageCutoffDate);
+    }
 }
