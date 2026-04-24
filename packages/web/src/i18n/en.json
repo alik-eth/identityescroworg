@@ -186,7 +186,8 @@
       "fieldTooLong": "A field in the binding exceeds the circuit length limit."
     },
     "qkb": {
-      "leafPublicSignals": "Leaf public-signal array has the wrong shape."
+      "leafPublicSignals": "Leaf public-signal array has the wrong shape.",
+      "countryUnsupported": "This country is not supported by the registry."
     },
     "prover": {
       "wasmOOM": "The in-browser prover ran out of memory.",

@@ -12,6 +12,7 @@ export type ErrorCode =
   | 'witness.offsetNotFound'
   | 'witness.fieldTooLong'
   | 'qkb.leafPublicSignals'
+  | 'qkb.countryUnsupported'
   | 'prover.wasmOOM'
   | 'prover.cancelled'
   | 'prover.artifactMismatch'
@@ -60,6 +61,7 @@ export const ALL_ERROR_CODES: readonly ErrorCode[] = [
   'witness.offsetNotFound',
   'witness.fieldTooLong',
   'qkb.leafPublicSignals',
+  'qkb.countryUnsupported',
   'prover.wasmOOM',
   'prover.cancelled',
   'prover.artifactMismatch',
