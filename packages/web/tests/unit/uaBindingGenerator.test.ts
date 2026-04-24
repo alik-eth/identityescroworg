@@ -4,9 +4,15 @@ import Ajv2020, { type ValidateFunction } from 'ajv/dist/2020';
 import addFormats from 'ajv-formats';
 import * as secp from '@noble/secp256k1';
 import schema from '../../../../fixtures/schemas/qkb-binding-v2.schema.json';
+import coreSchema from '../../../../fixtures/schemas/qkb-binding-v2-core.schema.json';
 import ukDeclaration from '../../../../fixtures/declarations/uk.txt?raw';
 import { buildUaBindingV2 } from '../../src/lib/uaBindingGenerator';
-import { buildPolicyLeafV1, policyLeafHashV1 } from '../../src/lib/bindingV2';
+import {
+  bindingCoreV2,
+  buildPolicyLeafV1,
+  policyLeafHashV1,
+} from '../../src/lib/bindingV2';
+import { MAX_BCANON } from '../../src/lib/witness';
 
 const TEST_PK_SK = new Uint8Array(32);
 TEST_PK_SK[31] = 1;
@@ -18,6 +24,12 @@ function compileBindingSchema(): ValidateFunction {
   const ajv = new Ajv2020({ strict: true, allErrors: true, allowUnionTypes: true });
   addFormats(ajv);
   return ajv.compile(schema);
+}
+
+function compileCoreSchema(): ValidateFunction {
+  const ajv = new Ajv2020({ strict: true, allErrors: true, allowUnionTypes: true });
+  addFormats(ajv);
+  return ajv.compile(coreSchema);
 }
 
 describe('buildUaBindingV2', () => {
@@ -83,14 +95,63 @@ describe('buildUaBindingV2', () => {
     expect(out.binding.scheme).toBe('secp256k1');
   });
 
-  it('bcanon is exactly the JCS serialization of the binding', () => {
+  it('bcanon is the JCS serialization of the binding CORE only (no display, no extensions)', () => {
     const out = buildUaBindingV2({
       pk: TEST_PK,
       timestamp: FIXED_TIMESTAMP,
       nonce: FIXED_NONCE,
     });
-    const expected = new TextEncoder().encode(canonicalize(out.binding) as string);
+    const expected = new TextEncoder().encode(
+      canonicalize(bindingCoreV2(out.binding)) as string,
+    );
     expect(Array.from(out.bcanon)).toEqual(Array.from(expected));
+
+    // Regression guard: bcanon must NOT be the serialization of the full
+    // binding (core + display + extensions). That was the original bug
+    // (real Diia sign produced a 1265B blob that blew MAX_BCANON=1024
+    // inside the circuit's witness builder).
+    const fullJcs = new TextEncoder().encode(canonicalize(out.binding) as string);
+    expect(Array.from(out.bcanon)).not.toEqual(Array.from(fullJcs));
+  });
+
+  it('bcanon decodes to JSON with no display / extensions keys', () => {
+    const out = buildUaBindingV2({
+      pk: TEST_PK,
+      timestamp: FIXED_TIMESTAMP,
+      nonce: FIXED_NONCE,
+    });
+    const decoded = JSON.parse(new TextDecoder().decode(out.bcanon)) as Record<
+      string,
+      unknown
+    >;
+    expect('display' in decoded).toBe(false);
+    expect('extensions' in decoded).toBe(false);
+    // And the UI-side binding still carries display (it's rendered on /ua/sign).
+    expect(out.binding.display).toBeDefined();
+  });
+
+  it('bcanon validates against the core-only schema', () => {
+    const out = buildUaBindingV2({
+      pk: TEST_PK,
+      timestamp: FIXED_TIMESTAMP,
+      nonce: FIXED_NONCE,
+    });
+    const decoded = JSON.parse(new TextDecoder().decode(out.bcanon));
+    const validate = compileCoreSchema();
+    const ok = validate(decoded);
+    expect(ok, JSON.stringify(validate.errors ?? [], null, 2)).toBe(true);
+  });
+
+  it('bcanon stays under MAX_BCANON (= 1024 B) for the real UA prose', () => {
+    const out = buildUaBindingV2({
+      pk: TEST_PK,
+      timestamp: FIXED_TIMESTAMP,
+      nonce: FIXED_NONCE,
+    });
+    // Headroom for display-only changes: core bytes are prose-free, so any
+    // growth here is a structural binding-core change and deserves a
+    // circuit-constant bump to match.
+    expect(out.bcanon.byteLength).toBeLessThanOrEqual(MAX_BCANON);
   });
 
   it('supports optional context bytes (hex-encoded)', () => {

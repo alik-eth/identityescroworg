@@ -60,7 +60,21 @@ async function seedV2AndGotoUpload(page: import('@playwright/test').Page): Promi
   );
   await page.evaluate(
     ({ binding, pk }) => {
-      const bcanon = JSON.stringify(binding);
+      // Match production: bcanonV2B64 decodes to the core-only binding,
+      // NOT the full display-carrying binding. That's what Diia signs and
+      // what the V4 leaf circuit consumes (MAX_BCANON = 1024 B).
+      const core = {
+        version: binding.version,
+        statementSchema: binding.statementSchema,
+        pk: binding.pk,
+        scheme: binding.scheme,
+        context: binding.context,
+        timestamp: binding.timestamp,
+        nonce: binding.nonce,
+        policy: binding.policy,
+        assertions: binding.assertions,
+      };
+      const bcanon = JSON.stringify(core);
       const utf8 = new TextEncoder().encode(bcanon);
       let bin = '';
       for (const b of utf8) bin += String.fromCharCode(b);

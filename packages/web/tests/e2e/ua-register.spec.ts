@@ -105,6 +105,15 @@ test.describe('/ua/ flow — end-to-end', () => {
     const validate = compileV2Schema();
     const ok = validate(session.bindingV2);
     expect(ok, JSON.stringify(validate.errors ?? [], null, 2)).toBe(true);
+
+    // Spec-conformance: bcanonV2B64 MUST decode to the core-only shape
+    // (no display, no extensions). That's what Diia signs and the circuit
+    // consumes; mixing display prose into bcanon bloats past MAX_BCANON.
+    const bcanonJson = Buffer.from(session.bcanonV2B64, 'base64').toString('utf8');
+    const bcanon = JSON.parse(bcanonJson) as Record<string, unknown>;
+    expect('display' in bcanon).toBe(false);
+    expect('extensions' in bcanon).toBe(false);
+    expect(bcanonJson.length).toBeLessThanOrEqual(1024);
   });
 
   test('/ua/register without V2 session → missing-V2 banner + auto-redirect to /ua/generate', async ({ page }) => {

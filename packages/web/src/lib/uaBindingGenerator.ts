@@ -1,14 +1,16 @@
 /**
  * UA QKB/2.0 binding generator.
  *
- * Wraps `buildBindingV2` with the committed UA default policy leaf and the
- * pinned UA declaration text, producing a schema-valid QKB/2.0 binding ready
- * for Diia CAdES signing.
+ * Produces a schema-valid QKB/2.0 `BindingV2` (core + display) for UI rendering
+ * and download, AND the JCS bytes (`bcanon`) that must be signed by Diia and
+ * fed into the V4 circuit. Per spec (2026-04-23 QKB binding V2 + policy root),
+ * `display` + `extensions` live OUTSIDE the proving surface — the signed bytes
+ * are the core-only serialization. Mixing display text into the signed bytes
+ * both bloats the payload past the circuit's `MAX_BCANON = 1024` cap AND lets
+ * prose drift creep into a circuit-committed surface. Never do it.
  *
- * The `policy.leafHash` here MUST match what the V4 leaf circuit derives from
- * the JCS-canonicalized binding core — anything else produces silent
- * constraint failures downstream. The cross-check lives in the vitest that
- * drives this module.
+ * `policy.leafHash` must equal what the V4 leaf circuit derives from the JCS
+ * core bytes; drift there causes silent constraint failures downstream.
  */
 import uaPolicySeed from '../../../../fixtures/declarations/ua/policy-v1.json';
 import ukDeclaration from '../../../../fixtures/declarations/uk.txt?raw';
@@ -16,10 +18,12 @@ import {
   BINDING_V2_SCHEMA,
   buildBindingV2,
   buildPolicyLeafV1,
-  canonicalizeBindingV2,
+  canonicalizeBindingCoreV2,
   policyLeafHashV1,
   type BindingV2,
 } from './bindingV2';
+import { MAX_BCANON } from './witness';
+import { QkbError } from './errors';
 
 export interface BuildUaBindingV2Input {
   readonly pk: Uint8Array; // SEC1 uncompressed 65 bytes
@@ -29,7 +33,16 @@ export interface BuildUaBindingV2Input {
 }
 
 export interface UaBindingV2Bundle {
+  /**
+   * Full binding object — core + display. Render this in the UI and persist
+   * it in session so `/ua/sign` can show the user what they're about to sign.
+   * NEVER hash this, NEVER put it into `bcanonV2B64`, NEVER sign it.
+   */
   readonly binding: BindingV2;
+  /**
+   * JCS-canonical core-only bytes. This is what Diia signs and what the
+   * circuit consumes. Stable across display-text changes; always ≤ 1024 B.
+   */
   readonly bcanon: Uint8Array;
 }
 
@@ -59,7 +72,14 @@ export function buildUaBindingV2(input: BuildUaBindingV2Input): UaBindingV2Bundl
       text: ukDeclaration,
     },
   });
-  const bcanon = canonicalizeBindingV2(binding);
+  const bcanon = canonicalizeBindingCoreV2(binding);
+  if (bcanon.byteLength > MAX_BCANON) {
+    throw new QkbError('binding.jcs', {
+      reason: 'bcanon-exceeds-max',
+      got: bcanon.byteLength,
+      max: MAX_BCANON,
+    });
+  }
   return { binding, bcanon };
 }
 
