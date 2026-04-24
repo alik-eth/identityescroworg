@@ -9,8 +9,9 @@
 // Verifies:
 //   1. contentHash in policy-v1.json matches sha256(fixtures/declarations/uk.txt).
 //   2. metadataHash in policy-v1.json matches sha256(JCS({lang,template})).
-// …then builds the Poseidon Merkle tree (depth 4, 16 slots, 1 filled) using
-// the same convention as packages/web/src/lib/policyTree.ts and writes the root.
+// …then builds the Poseidon Merkle tree (depth 16, matching circuit MERKLE_DEPTH
+// in QKBPresentationEcdsaLeafV4.circom) using the same convention as
+// packages/web/src/lib/policyTree.ts and writes the root.
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -23,7 +24,10 @@ const REPO_ROOT = resolve(HERE, '../../..');
 const SEED_PATH = resolve(REPO_ROOT, 'fixtures/declarations/ua/policy-v1.json');
 const OUT_PATH = resolve(REPO_ROOT, 'fixtures/trust/ua/policy-root.json');
 const UK_DECL_PATH = resolve(REPO_ROOT, 'fixtures/declarations/uk.txt');
-const TREE_DEPTH = 4;
+// Must match MERKLE_DEPTH in packages/circuits/circuits/QKBPresentationEcdsaLeafV4.circom.
+// A depth mismatch between this script and the circuit produces a policyRoot that
+// the circuit's MerkleProofPoseidon(MERKLE_DEPTH) check will reject.
+const TREE_DEPTH = 16;
 const BN254_SCALAR_FIELD =
   21888242871839275222246405745257275088548364400416034343698204186575808495617n;
 const POLICY_LEAF_SCHEMA = 'qkb-policy-leaf/v1';

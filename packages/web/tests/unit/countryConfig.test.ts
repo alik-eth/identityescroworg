@@ -10,7 +10,7 @@ const EXPECTED_UA = {
   trustedListRoot:
     '0x25ce7bfa7693e391a7e1d5df666caa5b622bf709cc6797289a74bfc272462b3e',
   policyRoot:
-    '0x1eef6cacb886925d014ff151d4dbef9b37b16cc836f47b1ec89fc821496e2414',
+    '0x011529dbfa29851faf7df3975b439caeeed62a22c4aecf6c31cef0805029db3c',
 };
 
 const EXPECTED_LEAF_ZKEY_SHA =
