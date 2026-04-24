@@ -2,11 +2,11 @@
   "schema": "qkb-v4-ceremony-urls/v1",
   "role": "ua-leaf",
   "source": "local-ceremony",
-  "note": "QKBPresentationEcdsaLeafV4_UA local phase-2 ceremony. Single contributor: local-<hostname>-<YYYYMMDD>. ptau-24 required (full UA leaf ~6.38M non-linear constraints, 16 public signals). URLs are placeholders — team-lead replaces after R2 upload.",
+  "note": "QKBPresentationEcdsaLeafV4_UA local phase-2 ceremony. Single contributor: local-<hostname>-2026-04-24. ptau-24 (UA leaf ~6.38M non-linear constraints, 16 public signals). Uploaded to R2 bucket 'proving-1' under ua-leaf-v4/ and fronted by Cloudflare at prove.identityescrow.org on 2026-04-24T01:40:06Z.",
   "circuit": "QKBPresentationEcdsaLeafV4_UA",
-  "wasmUrl": "https://<bucket>.r2.cloudflarestorage.com/qkb/ua-leaf-v4/QKBPresentationEcdsaLeafV4_UA.wasm",
-  "zkeyUrl": "https://<bucket>.r2.cloudflarestorage.com/qkb/ua-leaf-v4/ua_leaf_final.zkey",
-  "vkeyUrl": "https://<bucket>.r2.cloudflarestorage.com/qkb/ua-leaf-v4/verification_key.json",
+  "wasmUrl": "https://prove.identityescrow.org/ua-leaf-v4/QKBPresentationEcdsaLeafV4_UA.wasm",
+  "zkeyUrl": "https://prove.identityescrow.org/ua-leaf-v4/ua_leaf_final.zkey",
+  "vkeyUrl": "https://prove.identityescrow.org/ua-leaf-v4/verification_key.json",
   "wasmSha256": "8c1db43942d34fd6d684403cde62cc2f2198a80d901474c8106e47ee46f0adbf",
   "zkeySha256": "d43cc46cba9ad2cc4097144c486b951270859df8ebac651bec0554082a56547c",
   "vkeySha256": "ce9adc6929181eace5463a61143bf9581294e8b5c5445e29bd4e69eacd517863",
@@ -15,5 +15,6 @@
   "zkeyBytes": 3815376479,
   "publicSignals": 16,
   "powersOfTau": 24,
-  "constraints": 6380000
+  "constraints": 6380000,
+  "uploadedAt": "2026-04-24T01:40:06Z"
 }
