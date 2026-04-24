@@ -1,0 +1,40 @@
+{
+  "schema": "qkb-v4-trust-root/v1",
+  "country": "UA",
+  "trustedListRoot": "0x25ce7bfa7693e391a7e1d5df666caa5b622bf709cc6797289a74bfc272462b3e",
+  "treeDepth": 16,
+  "serviceCount": 2,
+  "trustDomain": "qkb-v4-ua",
+  "trustSources": [
+    "ua-tl-ec-diia-2026-04-17"
+  ],
+  "lotlVersion": "ua-tl-ec-diia-2026-04-17",
+  "source": {
+    "lotlXmlPath": "packages/lotl-flattener/fixtures/diia/lotl.xml",
+    "lotlXmlSha256": "f8f4079746810a3591ca73a9f0dd005b7d8758dd8d560681a08b932f13cbc9c7",
+    "msTlXmlPath": "packages/lotl-flattener/fixtures/diia/ua-msTl.xml",
+    "msTlXmlSha256": "38951df8ccb2c33a50d4d6198e9cb2290d9fecc8c0ca0caf331a03670af2a5e7",
+    "snapshotFetchedAt": "2026-04-17",
+    "originUrl": "http://ca.diia.gov.ua/uploads/certificates/diia_ecdsa.p7b"
+  },
+  "services": [
+    {
+      "merkleIndex": 0,
+      "tspName": "State enterprise \"DIIA\"",
+      "serviceName": "\"DIIA\". Qualified Trust Services Provider (UA-43395033-2311)",
+      "territory": "UA",
+      "serviceStatus": "granted",
+      "poseidonHash": "0x10ff6e20f00fc1a159d49ce818bab81e35829dc80038d0a52ac86e037a4d73f4"
+    },
+    {
+      "merkleIndex": 1,
+      "tspName": "State enterprise \"DIIA\"",
+      "serviceName": "\"DIIA\". Qualified Trust Services Provider (UA-43395033-2503)",
+      "territory": "UA",
+      "serviceStatus": "granted",
+      "poseidonHash": "0x2a72fb63263767c4afc90e459749c1015969a458c1456af57656e7f459b47131"
+    }
+  ],
+  "generatedAt": "2026-04-24T01:23:40.966Z",
+  "note": "Byte-identical to V3 deployed trustedListRoot — same pinned Diia QTSP source. Derivable via: node packages/lotl-flattener/dist/index.js --lotl packages/lotl-flattener/fixtures/diia/lotl.xml --filter-country UA --tree-depth 16 --lotl-version ua-tl-ec-diia-2026-04-17 --trust-domain qkb-v4-ua --trust-source ua-tl-ec-diia-2026-04-17 --out <dir>"
+}
