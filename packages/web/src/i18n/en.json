@@ -27,6 +27,16 @@
     "proveAge": {
       "heading": "Prove adulthood",
       "comingSoon": "Age attestation wiring lands in the next commit — the UA leaf ceremony artifacts are already pinned."
+    },
+    "register": {
+      "intro": "Submit your QKB/2.0 binding to the UA registry on Sepolia. The leaf + chain Groth16 proofs carried here were produced from your signed binding.",
+      "registry": "UA registry",
+      "chainId": "Chain ID",
+      "missingV2": "No QKB/2.0 binding in this session. Start at Generate and sign with Diia.",
+      "missingProof": "No V4 proof bundle in this session. Run Upload to produce leaf + chain proofs first.",
+      "backToGenerate": "Back to /ua/generate →",
+      "backToUpload": "Back to /ua/upload →",
+      "wrongChain": "Wallet is on chainId {{actual}} — switch to Sepolia (chainId {{expected}}) before submitting."
     }
   },
   "lang": {

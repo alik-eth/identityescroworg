@@ -1,10 +1,10 @@
 import { createRoute, type AnyRoute } from '@tanstack/react-router';
 import { SignScreen } from '../sign';
 import { UploadScreen } from '../upload';
-import { RegisterScreen } from '../register';
 import { UaIndex } from './index';
 import { UaGenerateScreen } from './generate';
 import { UaProveAgeScreen } from './proveAge';
+import { UaRegisterScreen } from './register';
 import { UaLayout } from './layout';
 
 export function buildUaRoutes(parent: AnyRoute) {
@@ -38,7 +38,7 @@ export function buildUaRoutes(parent: AnyRoute) {
     createRoute({
       getParentRoute: () => uaRoute,
       path: 'register',
-      component: RegisterScreen,
+      component: UaRegisterScreen,
     }),
     createRoute({
       getParentRoute: () => uaRoute,

@@ -32,6 +32,14 @@ export interface Session {
   bindingV2?: BindingV2;
   bcanonV2B64?: string;
 
+  // V4 split-proof bundle (set by the UA upload path after both Groth16
+  // prove runs succeed). publicLeafV4 is 16 signals, publicChainV4 is 3.
+  // publicLeafV4[14] = dobCommit, publicLeafV4[15] = dobSupported.
+  proofLeafV4?: Groth16Proof;
+  publicLeafV4?: string[];
+  proofChainV4?: Groth16Proof;
+  publicChainV4?: string[];
+
   // From /upload
   cadesB64?: string;
   /** @deprecated Phase-1 single-proof field. Split-proof pivot uses

@@ -30,6 +30,8 @@
  * The future leaf circuit may still keep the Merkle path private and only
  * publish these two commitments plus the existing nullifier / key surface.
  */
+import { encodeFunctionData } from 'viem';
+import { keccak_256 } from '@noble/hashes/sha3';
 import { QkbError } from './errors';
 import type { Groth16Proof } from './prover';
 import { packProof, type ChainInputs, type SolidityProof } from './registry';
@@ -464,4 +466,258 @@ function toBinaryFlag(v: string | number, field: string): 0 | 1 {
 
 function toBinaryFlagString(v: string | number, field: string): string {
   return toBinaryFlag(v, field).toString();
+}
+
+// ---------------------------------------------------------------------------
+// QKBRegistryV4 on-chain submit surface
+//
+// register(ChainProof, LeafProof) — selector + tuple encoding per Solidity
+// ABIv2 rules. The ABI fragment below mirrors packages/contracts/src/
+// QKBRegistryV4.sol — keep in sync whenever the contract's struct layout
+// changes (an ABI pump is the cleaner long-term fix).
+// ---------------------------------------------------------------------------
+
+const V4_REGISTRY_ABI = [
+  {
+    type: 'function',
+    name: 'register',
+    stateMutability: 'nonpayable',
+    inputs: [
+      {
+        name: 'cp',
+        type: 'tuple',
+        components: [
+          {
+            name: 'proof',
+            type: 'tuple',
+            components: [
+              { name: 'a', type: 'uint256[2]' },
+              { name: 'b', type: 'uint256[2][2]' },
+              { name: 'c', type: 'uint256[2]' },
+            ],
+          },
+          { name: 'rTL', type: 'uint256' },
+          { name: 'algorithmTag', type: 'uint256' },
+          { name: 'leafSpkiCommit', type: 'uint256' },
+        ],
+      },
+      {
+        name: 'lp',
+        type: 'tuple',
+        components: [
+          {
+            name: 'proof',
+            type: 'tuple',
+            components: [
+              { name: 'a', type: 'uint256[2]' },
+              { name: 'b', type: 'uint256[2][2]' },
+              { name: 'c', type: 'uint256[2]' },
+            ],
+          },
+          { name: 'pkX', type: 'uint256[4]' },
+          { name: 'pkY', type: 'uint256[4]' },
+          { name: 'ctxHash', type: 'uint256' },
+          { name: 'policyLeafHash', type: 'uint256' },
+          { name: 'policyRoot_', type: 'uint256' },
+          { name: 'timestamp', type: 'uint256' },
+          { name: 'nullifier', type: 'uint256' },
+          { name: 'leafSpkiCommit', type: 'uint256' },
+          { name: 'dobCommit', type: 'uint256' },
+          { name: 'dobSupported', type: 'uint256' },
+        ],
+      },
+    ],
+    outputs: [{ name: 'bindingId', type: 'bytes32' }],
+  },
+] as const;
+
+export interface LeafDobInputs {
+  readonly dobCommit: `0x${string}`;
+  readonly dobSupported: 0 | 1;
+}
+
+/**
+ * ABI-encode the V4 `register(ChainProof, LeafProof)` calldata. The optional
+ * `dob` parameter fills the `dobCommit` / `dobSupported` signals at the tail
+ * of the LeafProof tuple. When omitted they default to 0 / 0 — consistent
+ * with a jurisdiction whose DOB extractor is wired to `DobExtractorNull`.
+ *
+ * The 4-byte selector is
+ *   keccak256("register((...<chain>...),(...<leaf>...))")[0..4]
+ * everything after is ABI-encoded per Solidity's tuple-in-calldata rules.
+ * Static tuples only → no dynamic offsets.
+ */
+export function encodeV4RegisterCalldata(
+  args: RegisterArgsV4,
+  dob?: LeafDobInputs,
+): `0x${string}` {
+  const dobCommit = dob?.dobCommit ?? `0x${'0'.repeat(64)}`;
+  const dobSupported = dob?.dobSupported ?? 0;
+  return encodeFunctionData({
+    abi: V4_REGISTRY_ABI,
+    functionName: 'register',
+    args: [
+      {
+        proof: {
+          a: [BigInt(args.proofChain.a[0]), BigInt(args.proofChain.a[1])],
+          b: [
+            [BigInt(args.proofChain.b[0][0]), BigInt(args.proofChain.b[0][1])],
+            [BigInt(args.proofChain.b[1][0]), BigInt(args.proofChain.b[1][1])],
+          ],
+          c: [BigInt(args.proofChain.c[0]), BigInt(args.proofChain.c[1])],
+        },
+        rTL: BigInt(args.chainInputs.rTL),
+        algorithmTag: BigInt(args.chainInputs.algorithmTag),
+        leafSpkiCommit: BigInt(args.chainInputs.leafSpkiCommit),
+      },
+      {
+        proof: {
+          a: [BigInt(args.proofLeaf.a[0]), BigInt(args.proofLeaf.a[1])],
+          b: [
+            [BigInt(args.proofLeaf.b[0][0]), BigInt(args.proofLeaf.b[0][1])],
+            [BigInt(args.proofLeaf.b[1][0]), BigInt(args.proofLeaf.b[1][1])],
+          ],
+          c: [BigInt(args.proofLeaf.c[0]), BigInt(args.proofLeaf.c[1])],
+        },
+        pkX: [
+          BigInt(args.leafInputs.pkX[0]),
+          BigInt(args.leafInputs.pkX[1]),
+          BigInt(args.leafInputs.pkX[2]),
+          BigInt(args.leafInputs.pkX[3]),
+        ],
+        pkY: [
+          BigInt(args.leafInputs.pkY[0]),
+          BigInt(args.leafInputs.pkY[1]),
+          BigInt(args.leafInputs.pkY[2]),
+          BigInt(args.leafInputs.pkY[3]),
+        ],
+        ctxHash: BigInt(args.leafInputs.ctxHash),
+        policyLeafHash: BigInt(args.leafInputs.policyLeafHash),
+        policyRoot_: BigInt(args.leafInputs.policyRoot),
+        timestamp: BigInt(args.leafInputs.timestamp as string | bigint | number),
+        nullifier: BigInt(args.leafInputs.nullifier),
+        leafSpkiCommit: BigInt(args.leafInputs.leafSpkiCommit),
+        dobCommit: BigInt(dobCommit),
+        dobSupported: BigInt(dobSupported),
+      },
+    ],
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Custom error taxonomy (QKBRegistryV4.sol)
+// ---------------------------------------------------------------------------
+
+function sel(signature: string): `0x${string}` {
+  const h = keccak_256(new TextEncoder().encode(signature));
+  let hex = '';
+  for (let i = 0; i < 4; i++) hex += (h[i] as number).toString(16).padStart(2, '0');
+  return `0x${hex}`;
+}
+
+export const REGISTRY_V4_ERROR_SELECTORS: Readonly<Record<string, `0x${string}`>> = {
+  // register()
+  NotOnTrustedList: sel('NotOnTrustedList()'),
+  InvalidLeafSpkiCommit: sel('InvalidLeafSpkiCommit()'),
+  InvalidPolicyRoot: sel('InvalidPolicyRoot()'),
+  AlgorithmNotSupported: sel('AlgorithmNotSupported()'),
+  DuplicateNullifier: sel('DuplicateNullifier()'),
+  InvalidProof: sel('InvalidProof()'),
+  // proveAdulthood()
+  AgeProofMismatch: sel('AgeProofMismatch()'),
+  AgeNotQualified: sel('AgeNotQualified()'),
+  DobNotAvailable: sel('DobNotAvailable()'),
+  NotMonotonic: sel('NotMonotonic()'),
+  BindingNotFound: sel('BindingNotFound()'),
+  // admin / selfRevoke()
+  SelfRevokeSigInvalid: sel('SelfRevokeSigInvalid()'),
+  BindingRevoked: sel('BindingRevoked()'),
+  OnlyAdmin: sel('OnlyAdmin()'),
+} as const;
+
+/**
+ * Map a V4 custom-error `data` (4-byte selector + optional args) to a typed
+ * QkbError. Unknown selectors return null so callers can fall back to the
+ * raw wallet message.
+ */
+export function classifyV4RegistryRevert(data: string | undefined): QkbError | null {
+  if (!data || typeof data !== 'string') return null;
+  const lower = data.toLowerCase();
+  if (!lower.startsWith('0x')) return null;
+  const s = lower.slice(0, 10);
+
+  if (s === REGISTRY_V4_ERROR_SELECTORS.DuplicateNullifier) {
+    return new QkbError('registry.nullifierUsed');
+  }
+  if (s === REGISTRY_V4_ERROR_SELECTORS.NotOnTrustedList) {
+    return new QkbError('registry.rootMismatch', { reason: 'trusted-list-root-stale' });
+  }
+  if (s === REGISTRY_V4_ERROR_SELECTORS.InvalidPolicyRoot) {
+    return new QkbError('registry.rootMismatch', { reason: 'policy-root-mismatch' });
+  }
+  if (s === REGISTRY_V4_ERROR_SELECTORS.InvalidLeafSpkiCommit) {
+    return new QkbError('witness.fieldTooLong', { reason: 'leaf-spki-commit-mismatch-on-chain' });
+  }
+  if (s === REGISTRY_V4_ERROR_SELECTORS.AlgorithmNotSupported) {
+    return new QkbError('qes.wrongAlgorithm');
+  }
+  if (s === REGISTRY_V4_ERROR_SELECTORS.InvalidProof) {
+    return new QkbError('qes.sigInvalid', { reason: 'groth16-invalid-on-chain' });
+  }
+  if (s === REGISTRY_V4_ERROR_SELECTORS.AgeProofMismatch) {
+    return new QkbError('registry.ageExceeded', { reason: 'age-proof-mismatch' });
+  }
+  if (s === REGISTRY_V4_ERROR_SELECTORS.AgeNotQualified) {
+    return new QkbError('registry.ageExceeded', { reason: 'age-not-qualified' });
+  }
+  if (s === REGISTRY_V4_ERROR_SELECTORS.DobNotAvailable) {
+    return new QkbError('registry.ageExceeded', { reason: 'dob-not-available' });
+  }
+  return null;
+}
+
+/**
+ * Heuristic wallet-revert classifier — accepts viem + EIP-1474 shapes plus
+ * bare error messages containing the error name. Mirrors registry.ts's
+ * `classifyWalletRevert` for V3.
+ */
+export function classifyV4WalletRevert(err: unknown): QkbError | null {
+  if (err instanceof Error && err.message) {
+    const m = err.message;
+    if (/DuplicateNullifier/.test(m)) return new QkbError('registry.nullifierUsed');
+    if (/NotOnTrustedList/.test(m)) {
+      return new QkbError('registry.rootMismatch', { reason: 'trusted-list-root-stale' });
+    }
+    if (/InvalidPolicyRoot/.test(m)) {
+      return new QkbError('registry.rootMismatch', { reason: 'policy-root-mismatch' });
+    }
+    if (/InvalidLeafSpkiCommit/.test(m)) {
+      return new QkbError('witness.fieldTooLong', { reason: 'leaf-spki-commit-mismatch-on-chain' });
+    }
+    if (/AlgorithmNotSupported/.test(m)) return new QkbError('qes.wrongAlgorithm');
+    if (/InvalidProof/.test(m)) {
+      return new QkbError('qes.sigInvalid', { reason: 'groth16-invalid-on-chain' });
+    }
+    if (/AgeProofMismatch|AgeNotQualified|DobNotAvailable/.test(m)) {
+      return new QkbError('registry.ageExceeded', { reason: 'age-path' });
+    }
+  }
+  const data = extractV4RevertData(err);
+  if (data) return classifyV4RegistryRevert(data);
+  return null;
+}
+
+function extractV4RevertData(err: unknown): string | undefined {
+  if (!err || typeof err !== 'object') return undefined;
+  const obj = err as Record<string, unknown>;
+  if (typeof obj.data === 'string') return obj.data;
+  // viem nests revert data under { cause: { data: { originalError: { data: "0x..." } } } }
+  // — when `data` is itself an object rather than a string, keep descending.
+  for (const c of [obj.cause, obj.error, obj.originalError, obj.data]) {
+    if (c && typeof c === 'object') {
+      const nested = extractV4RevertData(c);
+      if (nested) return nested;
+    }
+  }
+  return undefined;
 }
