@@ -26,6 +26,10 @@ export default defineConfig({
       testMatch: /flow\.spec\.ts/,
     },
     {
+      name: 'ua',
+      testMatch: /ua-register\.spec\.ts/,
+    },
+    {
       name: 'real-prover',
       testMatch: /happy-path\.spec\.ts/,
     },
