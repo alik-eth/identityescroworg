@@ -25,6 +25,26 @@ describe('normalizeDobToIso', () => {
   it('normalizes plain YYYYMMDD values', () => {
     expect(normalizeDobToIso('19990426')).toBe('1999-04-26');
   });
+
+  it('rejects impossible calendar dates (Feb 31)', () => {
+    expect(() => normalizeDobToIso('19990231')).toThrowError(/calendar/);
+  });
+
+  it('rejects Feb 29 on a non-leap year', () => {
+    expect(() => normalizeDobToIso('19990229')).toThrowError(/calendar/);
+  });
+
+  it('accepts Feb 29 on a leap year', () => {
+    expect(normalizeDobToIso('20000229')).toBe('2000-02-29');
+  });
+
+  it('rejects Feb 29 on a centenary non-leap year (1900)', () => {
+    expect(() => normalizeDobToIso('19000229')).toThrowError(/calendar/);
+  });
+
+  it('rejects April 31', () => {
+    expect(() => normalizeDobToIso('19990431')).toThrowError(/calendar/);
+  });
 });
 
 describe('normalizeDobToYmd', () => {
@@ -69,14 +89,41 @@ describe('uaSubjectDirectoryDobExtractor', () => {
 });
 
 describe('runDobExtractors', () => {
-  it('returns the first matching extraction result', () => {
+  it('returns the first matching extraction result when the issuer is UA-anchored', () => {
     const out = runDobExtractors(
       {
+        country: 'UA',
         subjectDirectoryAttributes: [
           { oid: '1.2.804.2.1.1.1.11.1.4.11', value: '19990426-02970' },
         ],
       },
       [standardRfc3739DobExtractor(), uaSubjectDirectoryDobExtractor()],
+    );
+    expect(out?.profile).toBe('ua-subject-directory-v1');
+  });
+
+  it('refuses to classify a cert as national-UA when the OID appears without a UA issuer', () => {
+    const out = runDobExtractors(
+      {
+        issuerDN: 'CN=Some Non-UA CA, C=US',
+        subjectDirectoryAttributes: [
+          { oid: '1.2.804.2.1.1.1.11.1.4.11', value: '19990426-02970' },
+        ],
+      },
+      [uaSubjectDirectoryDobExtractor()],
+    );
+    expect(out).toBeNull();
+  });
+
+  it('accepts a UA cert via issuer DN C=UA even without the country helper field', () => {
+    const out = runDobExtractors(
+      {
+        issuerDN: 'CN=DIIA QTSP, O=State enterprise DIIA, C=UA',
+        subjectDirectoryAttributes: [
+          { oid: '1.2.804.2.1.1.1.11.1.4.11', value: '19990426-02970' },
+        ],
+      },
+      [uaSubjectDirectoryDobExtractor()],
     );
     expect(out?.profile).toBe('ua-subject-directory-v1');
   });

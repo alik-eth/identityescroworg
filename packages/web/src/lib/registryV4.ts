@@ -36,6 +36,7 @@ import { QkbError } from './errors';
 import type { Groth16Proof } from './prover';
 import { packProof, type ChainInputs, type SolidityProof } from './registry';
 import type { LeafPublicSignals } from './witnessV4';
+import { assertGregorianDate } from './dob';
 
 const P = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
 
@@ -221,6 +222,38 @@ export function assertLeafInputsV4AgeShape(l: LeafInputsV4AgeCapable): void {
 export function assertAgeInputsV4Shape(a: AgeInputsV4): void {
   assertHex32(a.dobCommit, 'age.dobCommit');
   assertBinaryFlag(a.ageQualified, 'ageQualified');
+  assertAgeCutoffDate(a.ageCutoffDate);
+}
+
+/** ageCutoffDate is a public age-circuit signal carrying a YYYYMMDD integer
+ *  (e.g. 20080423 for "person is born on or before 2008-04-23"). The
+ *  circuit treats it as an opaque field element, but the TS boundary —
+ *  which freezes what the contract consumes — must reject negatives,
+ *  impossible calendar dates, and non-numeric strings. Otherwise a
+ *  malformed bundle can pass the boundary with dobCommit/ageQualified that
+ *  the contract then trusts. */
+function assertAgeCutoffDate(raw: string | number | bigint): void {
+  let n: bigint;
+  if (typeof raw === 'bigint') n = raw;
+  else if (typeof raw === 'number') {
+    if (!Number.isInteger(raw)) {
+      throw new QkbError('binding.field', { field: 'ageCutoffDate', reason: 'not-integer', raw });
+    }
+    n = BigInt(raw);
+  } else {
+    if (!/^\d{8}$/.test(raw)) {
+      throw new QkbError('binding.field', { field: 'ageCutoffDate', reason: 'format', raw });
+    }
+    n = BigInt(raw);
+  }
+  if (n < 19000101n || n > 29991231n) {
+    throw new QkbError('binding.field', { field: 'ageCutoffDate', reason: 'range', raw: String(raw) });
+  }
+  const ymd = Number(n);
+  const year = Math.floor(ymd / 10000);
+  const month = Math.floor((ymd % 10000) / 100);
+  const day = ymd % 100;
+  assertGregorianDate(year, month, day, String(raw), 'ageCutoffDate');
 }
 
 export function leafPublicSignalsV4(input: LeafPublicSignalFieldsV4): LeafPublicSignalsV4 {
@@ -350,6 +383,10 @@ export function ageInputsV4FromPublicSignals(publicAge: readonly string[]): AgeI
       got: publicAge.length,
     });
   }
+  // Validate the cutoff date at the public-signal boundary so downstream
+  // callers can't bypass it by going through toLimbString (which would
+  // raise a generic SyntaxError instead of a typed QkbError on garbage).
+  assertAgeCutoffDate(publicAge[1]!);
   return {
     dobCommit: toHex32(publicAge[0]!),
     ageCutoffDate: toLimbString(publicAge[1]!),
@@ -419,10 +456,20 @@ function chainInputsFromPublicSignals(publicChain: readonly string[]): ChainInpu
       got: publicChain.length,
     });
   }
-  const tag = publicChain[1] === '1' ? 1 : 0;
+  // Reject unknown algorithm tags at this boundary rather than silently
+  // coercing to RSA (tag 0). The chain circuit only emits '0' or '1' today,
+  // and any other value is either a malformed bundle or a future tag the
+  // contract hasn't been taught to dispatch.
+  const tagStr = publicChain[1];
+  if (tagStr !== '0' && tagStr !== '1') {
+    throw new QkbError('witness.fieldTooLong', {
+      reason: 'algorithm-tag-unknown',
+      got: tagStr,
+    });
+  }
   return {
     rTL: toHex32(publicChain[0]!),
-    algorithmTag: tag,
+    algorithmTag: tagStr === '1' ? 1 : 0,
     leafSpkiCommit: toHex32(publicChain[2]!),
   };
 }

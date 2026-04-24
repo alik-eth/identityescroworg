@@ -125,8 +125,21 @@ export function uaSubjectDirectoryDobExtractor(): DobExtractor {
     id: 'ua-subject-directory-v1',
     sourceTag: 'ua_subject_directory_v1',
     trustLevel: 'national',
+    // OID presence alone is NOT a trust anchor — the attribute OID
+    // 1.2.804.2.1.1.1.11.1.4.11 can appear in any cert. Match both the
+    // OID and a UA-country issuer marker so this extractor's
+    // `trustLevel: 'national'` label is only applied to certs chained
+    // through a Ukrainian trust anchor. Downstream of this the on-chain
+    // verifier still gates the leaf via intermediate Merkle inclusion
+    // under the UA `trustedListRoot`, but labeling arbitrary certs
+    // 'national' here overstates trust in an inferred field.
     supports(input) {
-      return hasOid(input.subjectDirectoryAttributes, '1.2.804.2.1.1.1.11.1.4.11');
+      if (!hasOid(input.subjectDirectoryAttributes, '1.2.804.2.1.1.1.11.1.4.11')) {
+        return false;
+      }
+      if (input.country === 'UA') return true;
+      const issuer = input.issuerDN ?? '';
+      return /(^|,|\s)C\s*=\s*UA(\s|,|$)/i.test(issuer);
     },
     extract(input) {
       const attr = findByOid(input.subjectDirectoryAttributes, '1.2.804.2.1.1.1.11.1.4.11');
@@ -229,17 +242,36 @@ function extractDobDigits(raw: string): string {
   return match[1]!;
 }
 
+function isLeapYear(year: number): boolean {
+  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+}
+
+function daysInMonth(year: number, month: number): number {
+  if (month === 2) return isLeapYear(year) ? 29 : 28;
+  if (month === 4 || month === 6 || month === 9 || month === 11) return 30;
+  return 31;
+}
+
+/** Throws QkbError('binding.field') if (y,m,d) is not a real Gregorian date.
+ *  Rejects impossible days like 19990231 that a simple 1..31 check accepts. */
+export function assertGregorianDate(
+  year: number,
+  month: number,
+  day: number,
+  raw: string,
+  field: string,
+): void {
+  if (!Number.isInteger(year) || year < 1900 || year > 2999) {
+    throw new QkbError('binding.field', { field: `${field}.year`, reason: 'range', raw });
+  }
+  if (!Number.isInteger(month) || month < 1 || month > 12) {
+    throw new QkbError('binding.field', { field: `${field}.month`, reason: 'range', raw });
+  }
+  if (!Number.isInteger(day) || day < 1 || day > daysInMonth(year, month)) {
+    throw new QkbError('binding.field', { field: `${field}.day`, reason: 'calendar', raw });
+  }
+}
+
 function validateDobParts(year: string, month: string, day: string, raw: string): void {
-  const y = Number(year);
-  const m = Number(month);
-  const d = Number(day);
-  if (!Number.isInteger(y) || y < 1900 || y > 2999) {
-    throw new QkbError('binding.field', { field: 'dob.year', reason: 'range', raw });
-  }
-  if (!Number.isInteger(m) || m < 1 || m > 12) {
-    throw new QkbError('binding.field', { field: 'dob.month', reason: 'range', raw });
-  }
-  if (!Number.isInteger(d) || d < 1 || d > 31) {
-    throw new QkbError('binding.field', { field: 'dob.day', reason: 'range', raw });
-  }
+  assertGregorianDate(Number(year), Number(month), Number(day), raw, 'dob');
 }
