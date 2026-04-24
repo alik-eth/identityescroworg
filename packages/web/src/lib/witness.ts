@@ -466,8 +466,10 @@ export async function computeLeafSpkiCommit(
 
 /**
  * Compute nullifier = Poseidon(Poseidon(subjectSerialLimbs[4], serialLen), ctxHash).
- * §14.4 person-level nullifier (2026-04-18 amendment). All inputs/outputs
- * are BN254 field elements.
+ * §14.4 scoped credential nullifier (2026-04-23 clarification). This is
+ * stable only within the identifier namespace encoded in subject.serialNumber;
+ * it is not a pan-eIDAS natural-person deduplicator. All inputs/outputs are
+ * BN254 field elements.
  */
 export async function computeNullifier(
   subjectSerialLimbs: bigint[],
@@ -758,7 +760,7 @@ async function buildSharedInputs(input: BuildWitnessInput): Promise<SharedDeriva
   const subj = extractSubjectSerial(leafDer);
   const subjectSerialLimbs = subjectSerialToLimbs(subj.content);
 
-  // --- Nullifier (person-level) + leafSpkiCommit (Poseidon2(P6(X), P6(Y))) ---
+  // --- Nullifier (credential-namespace scoped) + leafSpkiCommit (Poseidon2(P6(X), P6(Y))) ---
   const ctxHashBig = BigInt(ctxHash);
   const nullifierBig = await computeNullifier(
     subjectSerialLimbs.map((s) => BigInt(s)),

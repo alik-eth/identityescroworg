@@ -4,7 +4,7 @@ pragma circom 2.1.9;
 // value from a leaf certificate DER buffer, packed into 4 × 64-bit LE limbs.
 //
 // Purpose (Phase-2 QIE, spec §14):
-//   The per-user QES nullifier is keyed on the leaf certificate's
+//   The per-credential-namespace QES nullifier is keyed on the leaf certificate's
 //   subject.serialNumber attribute (OID 2.5.4.5). This is a CHOICE of
 //   DirectoryString — PrintableString / UTF8String / IA5String — whose
 //   content bytes encode the national PII identifier (UA РНОКПП, PL PESEL,
@@ -12,6 +12,10 @@ pragma circom 2.1.9;
 //   "TINUA-<10 digits>" (16 bytes); all in-scope EU QES subject serials
 //   fit in 20 bytes, so 32 bytes is a safe MAX that still packs into a
 //   single Poseidon-5 input (4 × uint64 + 1 extra field = 5 inputs).
+//   This is intentionally not treated as a universal human identifier:
+//   eIDAS/QTSP trust establishes credential validity, while cross-country
+//   natural-person deduplication must be handled by a higher identity-escrow
+//   layer if an application needs it.
 //
 // Caller contract:
 //   * `leafDER[MAX_CERT]` — raw cert DER, zero-padded to MAX_CERT.

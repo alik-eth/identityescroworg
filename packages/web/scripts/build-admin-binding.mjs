@@ -3,10 +3,11 @@
 // the user to take to Diia Підпис and produce a real `.p7s` over.
 //
 //   pnpm binding:admin
+//   pnpm binding:admin -- --locale uk --out .playwright-mcp/admin-binding/binding.qkb.json
 //
 // Sources:
 //   - admin private key  ← repo-root .env  (ADMIN_PRIVATE_KEY)
-//   - declaration text   ← fixtures/declarations/en.txt (raw bytes)
+//   - declaration text   ← fixtures/declarations/<locale>.txt (raw bytes)
 //   - binding builder    ← reimplemented inline against the canonical
 //                          encoding rules in orchestration §4.1 (committed
 //                          4784a95). The CANONICAL implementation lives at
@@ -21,11 +22,15 @@
 //   - <repo-root>/binding.qkb.json — the JCS-canonicalized binding bytes,
 //     ready to be loaded into the QES tool.
 //
+// Optional:
+//   --locale en|uk
+//   --out path/to/binding.qkb.json
+//
 // The output file is gitignored. Re-run produces a fresh nonce + timestamp
 // (so each run is a distinct binding); use the same .p7s only with the
 // same binding.qkb.json that produced its messageDigest.
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomBytes } from 'node:crypto';
@@ -40,6 +45,12 @@ const NONCE_LENGTH = 32;
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = findRepoRoot(here);
+const cli = parseArgs(process.argv.slice(2));
+const locale = cli.locale ?? process.env.BINDING_LOCALE ?? 'en';
+if (locale !== 'en' && locale !== 'uk') {
+  console.error('error: --locale must be en or uk');
+  process.exit(1);
+}
 
 const adminKey = loadAdminKey(repoRoot);
 const privBytes = hexToBytes(stripHex(adminKey));
@@ -58,7 +69,7 @@ const adminAddr = pubkeyToAddress(pk);
 const nonce = new Uint8Array(randomBytes(NONCE_LENGTH));
 const timestamp = Math.floor(Date.now() / 1000);
 
-const declarationPath = resolve(repoRoot, 'fixtures/declarations/en.txt');
+const declarationPath = resolve(repoRoot, `fixtures/declarations/${locale}.txt`);
 const declaration = readFileSync(declarationPath, 'utf8');
 
 // Mirror packages/web/src/lib/binding.ts buildBinding + canonicalizeBinding.
@@ -78,7 +89,8 @@ if (json === undefined) {
   process.exit(1);
 }
 const bytes = new TextEncoder().encode(json);
-const outPath = resolve(repoRoot, 'binding.qkb.json');
+const outPath = resolve(repoRoot, cli.out ?? process.env.BINDING_OUT ?? 'binding.qkb.json');
+mkdirSync(dirname(outPath), { recursive: true });
 writeFileSync(outPath, bytes);
 
 const sha256 = createHash('sha256').update(bytes).digest('hex');
@@ -91,7 +103,11 @@ console.log();
 console.log('  pk (uncomp.) : 0x' + bytesToHex(pk).slice(0, 20) + '… (65 bytes)');
 console.log('  pkAddr (eth) :', adminAddr);
 console.log('  scheme       :', binding.scheme);
-console.log('  declaration  : en (' + binding.declaration.length + ' chars)');
+console.log(
+  '  declaration  :',
+  locale,
+  '(' + new TextEncoder().encode(binding.declaration).length + ' bytes)',
+);
 console.log('  declHash     : 0x' + sha256Of(new TextEncoder().encode(binding.declaration)));
 console.log('  timestamp    :', timestamp, '(' + new Date(timestamp * 1000).toISOString() + ')');
 console.log('  context      :', binding.context);
@@ -101,6 +117,24 @@ console.log('  version      :', binding.version);
 console.log();
 console.log('next: take', outPath, 'to Diia Підпис; sign as detached CAdES;');
 console.log('      bring back binding.qkb.json + binding.qkb.json.p7s.');
+
+function parseArgs(args) {
+  const out = {};
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--') {
+      continue;
+    } else if (arg === '--locale') {
+      out.locale = args[++i];
+    } else if (arg === '--out') {
+      out.out = args[++i];
+    } else {
+      console.error('error: unknown argument', arg);
+      process.exit(1);
+    }
+  }
+  return out;
+}
 
 function loadAdminKey(root) {
   if (process.env.ADMIN_PRIVATE_KEY) return process.env.ADMIN_PRIVATE_KEY;

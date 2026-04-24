@@ -22,8 +22,8 @@ pragma circom 2.1.9;
 //                              two Groth16 proofs.
 //
 // Companion circuit: QKBPresentationEcdsaLeaf (holds R_QKB constraints
-// 1, 2, 5, 6 + person-nullifier). Both proofs are submitted together to
-// QKBRegistryV3.register(...).
+// 1, 2, 5, 6 + scoped credential nullifier). Both proofs are submitted
+// together to QKBRegistryV3.register(...).
 //
 // NB on `leafTbsPaddedIn`: the Phase-1 gap documented in the unified
 // circuit's §4 carries over — the witness supplies leafTbsPaddedIn as a

@@ -6,7 +6,7 @@
 
 Phase 2's unified circuit — adding nullifier + chain-validation to the Phase-1 leaf — reaches 10.85 M constraints. snarkjs / ffjavascript fails `groth16 setup` on this size **deterministically** with `std::bad_alloc` inside the native tauG1/tauG2 section readers, at every Node heap budget we can provision on Fly (tested up to 80 GiB on `performance-12x:98304MB`, same failure at the same log line). Diagnosis: V8 ArrayBuffer 4 GiB per-object cap inside ffjavascript native bindings. Not fixable by more RAM.
 
-Phase 1's §5.4 fallback already specified the split: leaf-side circuit carrying per-person data + chain-side circuit carrying trusted-list membership, glued on-chain via `leafSpkiCommit` equality. `QKBPresentationEcdsaLeaf.circom` exists and compiles; `QKBPresentationEcdsaChain.circom` was never written. Phase 2 is reverting to this architecture.
+Phase 1's §5.4 fallback already specified the split: leaf-side circuit carrying credential-binding data + chain-side circuit carrying trusted-list membership, glued on-chain via `leafSpkiCommit` equality. `QKBPresentationEcdsaLeaf.circom` exists and compiles; `QKBPresentationEcdsaChain.circom` was never written. Phase 2 is reverting to this architecture.
 
 ## New architecture
 
@@ -23,7 +23,7 @@ Carries R_QKB constraints 1, 2, 5, 6 + the new nullifier primitive (§14.4). Wit
 [8]      ctxHash
 [9]      declHash
 [10]     timestamp
-[11]     nullifier         — NEW, §14.4 person-level
+[11]     nullifier         — NEW, §14.4 scoped credential namespace
 [12]     leafSpkiCommit    — output; glue to chain proof
 ```
 

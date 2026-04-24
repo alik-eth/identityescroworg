@@ -10,7 +10,7 @@ import { DeclarationHashes } from "./constants/DeclarationHashes.sol";
 ///           [8]     ctxHash
 ///           [9]     declHash
 ///           [10]    timestamp
-///           [11]    nullifier        (§14.4 person-level)
+///           [11]    nullifier        (§14.4 scoped credential namespace)
 ///           [12]    leafSpkiCommit   (glue output; equality-checked on-chain)
 interface IGroth16LeafVerifier {
     function verifyProof(
@@ -48,7 +48,7 @@ interface IGroth16ChainVerifier {
 ///         The Phase-2 unified 14-signal presentation circuit couldn't be
 ///         Groth16-setup (10.85 M constraints overflowed V8 ArrayBuffer
 ///         limits in ffjavascript). Reverted to Phase-1 §5.4 split: one
-///         proof for the leaf (pk + ctx + decl + nullifier + SPKI commit),
+///         proof for the leaf (pk + ctx + decl + scoped nullifier + SPKI commit),
 ///         one proof for the chain (rTL Merkle inclusion + algorithmTag),
 ///         glued on-chain by requiring both proofs expose the same
 ///         `leafSpkiCommit` as a public signal.

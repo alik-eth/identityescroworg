@@ -37,7 +37,7 @@
     "pubkeyLabel": "Public key (uncompressed, SEC1)",
     "contextLabel": "Context (optional)",
     "contextPlaceholder": "dao.example.org#airdrop",
-    "contextHelp": "Enter a context to prove Sybil-resistance per-app (e.g. 'dao.example.org#airdrop'). Leave blank for a global identity proof.",
+    "contextHelp": "Enter a context to scope this credential nullifier to one app or vote (e.g. 'dao.example.org#vote-2026'). Leave blank only for a reusable credential binding.",
     "timestampLabel": "Binding timestamp",
     "localeLabel": "Declaration language",
     "createBinding": "Create binding statement",

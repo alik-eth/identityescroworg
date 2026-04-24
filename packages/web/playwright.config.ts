@@ -29,5 +29,9 @@ export default defineConfig({
       name: 'real-prover',
       testMatch: /happy-path\.spec\.ts/,
     },
+    {
+      name: 'real-qes',
+      testMatch: /real-qes\.spec\.ts/,
+    },
   ],
 });
