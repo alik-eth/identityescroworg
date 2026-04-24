@@ -37,5 +37,9 @@ export default defineConfig({
       name: 'real-qes',
       testMatch: /real-qes\.spec\.ts/,
     },
+    {
+      name: 'ua-upload-real-diia',
+      testMatch: /ua-upload-real-diia\.spec\.ts/,
+    },
   ],
 });

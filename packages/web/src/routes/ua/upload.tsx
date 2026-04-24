@@ -286,8 +286,12 @@ export function UaUploadScreen() {
   );
 }
 
+// `/ua/*` routes sit two path segments deep, so `./trusted-cas/…` would
+// resolve under `/ua/` and hit the SPA index.html fallback (200 HTML ->
+// JSON.parse blows up at "<!doctype"). `../trusted-cas/…` walks up to the
+// SPA root under both dev server and file:// build.
 async function fetchTrustedCas(): Promise<TrustedCasFile> {
-  const res = await fetch('./trusted-cas/trusted-cas.json');
+  const res = await fetch('../trusted-cas/trusted-cas.json');
   if (!res.ok) {
     throw new QkbError('qes.unknownCA', { reason: 'trusted-cas-fetch', status: res.status });
   }
@@ -306,8 +310,8 @@ async function fetchMerkleProofForIntermediate(
   preloadedTrustedCas: TrustedCasFile,
 ): Promise<{ rTL: string; merklePath: string[]; merkleIndices: number[] }> {
   const [rootRes, layersRes] = await Promise.all([
-    fetch('./trusted-cas/root.json'),
-    fetch('./trusted-cas/layers.json'),
+    fetch('../trusted-cas/root.json'),
+    fetch('../trusted-cas/layers.json'),
   ]);
   if (!rootRes.ok) {
     throw new QkbError('registry.rootMismatch', { reason: 'root-fetch', status: rootRes.status });
