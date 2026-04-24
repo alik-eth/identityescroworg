@@ -11,7 +11,10 @@ pragma circom 2.1.9;
 //   [11]    timestamp
 //   [12]    nullifier             (scoped credential, §14.4)
 //   [13]    leafSpkiCommit        (glue to chain proof)
-//   [14]    dobCommit             (Poseidon(dobYmd, dobSourceTag); 0 if dobSupported=0)
+//   [14]    dobCommit             (dobSupported * Poseidon(dobYmd, dobSourceTag);
+//                                  exactly 0 when dobSupported=0, per the gate
+//                                  below — header contract is enforced in-
+//                                  circuit, not left to extractor convention)
 //   [15]    dobSupported          (0 or 1)
 //
 // Countries without DOB extraction link DobExtractorNull.circom, which emits
@@ -26,6 +29,7 @@ pragma circom 2.1.9;
 
 include "./binding/BindingParseV2Core.circom";
 include "./primitives/Sha256Var.circom";
+include "./primitives/Sha256CanonPad.circom";
 include "./primitives/EcdsaP256Verify.circom";
 include "./primitives/PoseidonChunkHashVar.circom";
 include "./primitives/NullifierDerive.circom";
@@ -167,14 +171,19 @@ template QKBPresentationEcdsaLeafV4() {
 
     // =========================================================================
     // 2. sha256(bindingCore) == messageDigest inside signedAttrs at mdOffsetInSA.
+    // Sha256CanonPad enforces FIPS 180-4 canonical padding on
+    // bindingCorePaddedIn w.r.t. (bindingCore, bindingCoreLen, bindingCorePaddedLen)
+    // so the digest committed to by this circuit really is
+    // sha256(bindingCore[0..bindingCoreLen)).
     // =========================================================================
-    component bcLt[MAX_BCANON];
+    component bcPad = Sha256CanonPad(MAX_BCANON);
     for (var i = 0; i < MAX_BCANON; i++) {
-        bcLt[i] = LessThan(16);
-        bcLt[i].in[0] <== i;
-        bcLt[i].in[1] <== bindingCoreLen;
-        bcLt[i].out * (bindingCorePaddedIn[i] - bindingCore[i]) === 0;
+        bcPad.data[i] <== bindingCore[i];
+        bcPad.paddedIn[i] <== bindingCorePaddedIn[i];
     }
+    bcPad.dataLen <== bindingCoreLen;
+    bcPad.paddedLen <== bindingCorePaddedLen;
+
     component hashBcanon = Sha256Var(MAX_BCANON);
     for (var i = 0; i < MAX_BCANON; i++) hashBcanon.paddedIn[i] <== bindingCorePaddedIn[i];
     hashBcanon.paddedLen <== bindingCorePaddedLen;
@@ -197,15 +206,17 @@ template QKBPresentationEcdsaLeafV4() {
     }
 
     // =========================================================================
-    // 3. sha256(signedAttrs) + EcdsaP256Verify with leaf SPKI.
+    // 3. sha256(signedAttrs) + EcdsaP256Verify with leaf SPKI. Same canonical
+    // padding enforcement as bindingCore above.
     // =========================================================================
-    component saLt[MAX_SA];
+    component saPad = Sha256CanonPad(MAX_SA);
     for (var i = 0; i < MAX_SA; i++) {
-        saLt[i] = LessThan(16);
-        saLt[i].in[0] <== i;
-        saLt[i].in[1] <== signedAttrsLen;
-        saLt[i].out * (signedAttrsPaddedIn[i] - signedAttrs[i]) === 0;
+        saPad.data[i] <== signedAttrs[i];
+        saPad.paddedIn[i] <== signedAttrsPaddedIn[i];
     }
+    saPad.dataLen <== signedAttrsLen;
+    saPad.paddedLen <== signedAttrsPaddedLen;
+
     component hashSA = Sha256Var(MAX_SA);
     for (var i = 0; i < MAX_SA; i++) hashSA.paddedIn[i] <== signedAttrsPaddedIn[i];
     hashSA.paddedLen <== signedAttrsPaddedLen;
@@ -318,11 +329,19 @@ template QKBPresentationEcdsaLeafV4() {
     dobHash.inputs[0] <== dobExtractor.dobYmd;
     dobHash.inputs[1] <== dobExtractor.sourceTag;
 
+    // When dobSupported=0 the header promises dobCommit=0, but extractors
+    // can keep a nonzero sourceTag in the unsupported path (DobExtractorDiiaUA
+    // holds sourceTag=1 as a compile-time constant). Gate the commitment so
+    // the public signal unambiguously encodes "no DOB" as 0 regardless of
+    // per-extractor sourceTag conventions.
+    signal dobCommitGated;
+    dobCommitGated <== dobExtractor.dobSupported * dobHash.out;
+
     // Public signals 14 + 15 are wired as constrained inputs so their index
     // order in the public-signal vector follows the spec (inputs-only list on
     // `component main`). The extractor's computed commitment must equal the
     // caller-supplied public input.
-    dobCommit    === dobHash.out;
+    dobCommit    === dobCommitGated;
     dobSupported === dobExtractor.dobSupported;
 }
 

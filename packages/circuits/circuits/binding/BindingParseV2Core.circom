@@ -39,6 +39,7 @@ pragma circom 2.1.9;
 include "circomlib/circuits/multiplexer.circom";
 include "circomlib/circuits/comparators.circom";
 include "circomlib/circuits/bitify.circom";
+include "circomlib/circuits/aliascheck.circom";
 include "./BindingKeyMatch.circom";
 include "./BindingHex.circom";
 include "./BindingDecimal.circom";
@@ -124,11 +125,38 @@ template BPFHexBytesVar(MAX_BYTES) {
     }
 }
 
+// Bits256ToField — packs a 256-bit big-endian integer into a single BN254
+// field element AND enforces that the integer is strictly less than the
+// BN254 scalar field modulus p. Without the range check the prover can
+// supply a hex value congruent-mod-p to the canonical one (e.g.
+// canonical + p), so two signed JSON bytes map to the same policyLeaf.
+//
+// BN254 p = 21888242871839275222246405745257275088548364400416034343698204186575808495617
+//        = 0x30644E72E131A029B85045B68181585D2833E84879B9709143E1F593F0000001
+//
+// Strategy: feed the 254 LOW-order bits into circomlib's AliasCheck (which
+// enforces "< p" in the standard 254-bit encoding) and force the top two
+// bits of the 256-bit digest to zero. Any 256-bit value with bit 255 or
+// 254 set is > p already, and any value with both top bits clear plus a
+// canonical 254-bit representation passing AliasCheck is < p.
 template Bits256ToField() {
     signal input digestBits[256];
     signal output packed;
+
+    // Top two bits of the 256-bit BE integer must be zero; otherwise the
+    // integer is ≥ 2^254 > p.
+    digestBits[0] === 0;
+    digestBits[1] === 0;
+
+    // Feed bits[2..255] (high → low) into AliasCheck as an LSB-first
+    // 254-bit vector so AliasCheck sees the same field value we pack.
+    component alias = AliasCheck();
+    for (var i = 0; i < 254; i++) {
+        alias.in[i] <== digestBits[255 - i];
+    }
+
     var acc = 0;
-    for (var i = 0; i < 256; i++) acc = acc * 2 + digestBits[i];
+    for (var i = 2; i < 256; i++) acc = acc * 2 + digestBits[i];
     packed <== acc;
 }
 
@@ -264,12 +292,17 @@ template BindingParseV2Core(MAX_B, MAX_CTX, MAX_TS_DIGITS) {
     verKey.offset <== versionValueOffset;
     for (var i = 0; i < 11; i++) verKey.key[i] <== VER_KEY[i];
 
-    // pk = "0x" + 130 hex chars
-    component pkSlice = BPFSlice(MAX_B, 132);
+    // pk = "0x" + 130 hex chars, closed by `"`.
+    // Terminator pin: without the closing-quote check the prover could
+    // sign a pk string longer than 65 bytes and have the circuit consume
+    // only the 65-byte prefix, so the committed pkX/pkY public signals
+    // would not match the pk the user saw + signed.
+    component pkSlice = BPFSlice(MAX_B, 133);
     for (var i = 0; i < MAX_B; i++) pkSlice.bytes[i] <== bytes[i];
     pkSlice.offset <== pkValueOffset;
     pkSlice.out[0] === 0x30;
     pkSlice.out[1] === 0x78;
+    pkSlice.out[132] === 0x22; // closing `"`
     component pkHex = HexBytesFromAscii(65);
     for (var i = 0; i < 130; i++) pkHex.ascii[i] <== pkSlice.out[2 + i];
     for (var i = 0; i < 65; i++) pkBytes[i] <== pkHex.bytes[i];
@@ -304,12 +337,16 @@ template BindingParseV2Core(MAX_B, MAX_CTX, MAX_TS_DIGITS) {
     stmtSlice.offset <== statementSchemaValueOffset;
     for (var i = 0; i < 20; i++) stmtSlice.out[i] === CORE_SCHEMA_VAL[i];
 
-    // nonce = "0x" + 64 hex chars
-    component nonceSlice = BPFSlice(MAX_B, 66);
+    // nonce = "0x" + 64 hex chars.
+    // Terminator pin: the JCS string value closes with `"` immediately
+    // after the 64 hex chars. Without this check the prover could sign a
+    // longer nonce and have the circuit consume only the 64-char prefix.
+    component nonceSlice = BPFSlice(MAX_B, 67);
     for (var i = 0; i < MAX_B; i++) nonceSlice.bytes[i] <== bytes[i];
     nonceSlice.offset <== nonceValueOffset;
     nonceSlice.out[0] === 0x30;
     nonceSlice.out[1] === 0x78;
+    nonceSlice.out[66] === 0x22; // closing `"`
     component nonceHex = HexBytesFromAscii(32);
     for (var i = 0; i < 64; i++) nonceHex.ascii[i] <== nonceSlice.out[2 + i];
     for (var i = 0; i < 32; i++) {
@@ -317,12 +354,18 @@ template BindingParseV2Core(MAX_B, MAX_CTX, MAX_TS_DIGITS) {
         nonceBytes[i] === nonceBytesIn[i];
     }
 
-    // context = "0x" + ctxHexLen hex chars
+    // context = "0x" + ctxHexLen hex chars.
+    // Terminator pin: closing `"` follows ctxValueOffset + 2 + ctxHexLen.
     component ctxPrefix = BPFSlice(MAX_B, 2);
     for (var i = 0; i < MAX_B; i++) ctxPrefix.bytes[i] <== bytes[i];
     ctxPrefix.offset <== ctxValueOffset;
     ctxPrefix.out[0] === 0x30;
     ctxPrefix.out[1] === 0x78;
+
+    component ctxClose = Multiplexer(1, MAX_B);
+    for (var i = 0; i < MAX_B; i++) ctxClose.inp[i][0] <== bytes[i];
+    ctxClose.sel <== ctxValueOffset + 2 + ctxHexLen;
+    ctxClose.out[0] === 0x22;
 
     component ctxHexSlice = BPFSliceVar(MAX_B, 2 * MAX_CTX);
     for (var i = 0; i < MAX_B; i++) ctxHexSlice.bytes[i] <== bytes[i];
@@ -360,12 +403,17 @@ template BindingParseV2Core(MAX_B, MAX_CTX, MAX_TS_DIGITS) {
     policyIdClose.sel <== policyIdValueOffset + policyIdLen;
     policyIdClose.out[0] === 0x22;
 
-    // policy.leafHash = "0x" + 64 hex chars, already reduced mod p off-chain.
-    component leafHashSlice = BPFSlice(MAX_B, 66);
+    // policy.leafHash = "0x" + 64 hex chars, closed by `"`.
+    // Terminator pin: pairs with the < p range check below — without
+    // this the prover could sign a longer leafHash string whose first
+    // 64 hex chars are the canonical value and the circuit would accept
+    // a policy leaf drawn from a suffix-extended signed JSON.
+    component leafHashSlice = BPFSlice(MAX_B, 67);
     for (var i = 0; i < MAX_B; i++) leafHashSlice.bytes[i] <== bytes[i];
     leafHashSlice.offset <== policyLeafHashValueOffset;
     leafHashSlice.out[0] === 0x30;
     leafHashSlice.out[1] === 0x78;
+    leafHashSlice.out[66] === 0x22; // closing `"`
 
     component leafHashHex = HexBytesFromAscii(32);
     for (var i = 0; i < 64; i++) leafHashHex.ascii[i] <== leafHashSlice.out[2 + i];
@@ -390,6 +438,9 @@ template BindingParseV2Core(MAX_B, MAX_CTX, MAX_TS_DIGITS) {
     for (var i = 0; i < 20; i++) policySchemaSlice.out[i] === CORE_SCHEMA_VAL[i];
 
     // policyVersion decimal digits — exact value equality against witness input.
+    // Terminator pin: policyVersion is the LAST key in the `policy` object
+    // under JCS key order, so the next byte must be `}`. Without this the
+    // prover could sign "policyVersion":1234 and have the circuit emit 12.
     component policyVersionSlice = BPFSlice(MAX_B, MAX_TS_DIGITS);
     for (var i = 0; i < MAX_B; i++) policyVersionSlice.bytes[i] <== bytes[i];
     policyVersionSlice.offset <== policyVersionValueOffset;
@@ -399,7 +450,17 @@ template BindingParseV2Core(MAX_B, MAX_CTX, MAX_TS_DIGITS) {
     policyVersion <== policyVersionParse.value;
     policyVersion === policyVersionIn;
 
-    // timestamp decimal digits
+    component policyVersionClose = Multiplexer(1, MAX_B);
+    for (var i = 0; i < MAX_B; i++) policyVersionClose.inp[i][0] <== bytes[i];
+    policyVersionClose.sel <== policyVersionValueOffset + policyVersionDigitCount;
+    policyVersionClose.out[0] === 0x7D; // `}` closes the policy object
+
+    // timestamp decimal digits.
+    // Terminator pin: timestamp is followed by `,` (next top-level key is
+    // `version` under JCS order). A missing terminator lets the prover
+    // emit a truncated timestamp while the QES-signed binding holds a
+    // longer one — the one practical Codex finding on public-signal
+    // integrity, because `timestamp` is emitted as leafSignals[11].
     component tsSlice = BPFSlice(MAX_B, MAX_TS_DIGITS);
     for (var i = 0; i < MAX_B; i++) tsSlice.bytes[i] <== bytes[i];
     tsSlice.offset <== tsValueOffset;
@@ -407,6 +468,11 @@ template BindingParseV2Core(MAX_B, MAX_CTX, MAX_TS_DIGITS) {
     for (var i = 0; i < MAX_TS_DIGITS; i++) tsParse.ascii[i] <== tsSlice.out[i];
     tsParse.numDigits <== tsDigitCount;
     tsValue <== tsParse.value;
+
+    component tsClose = Multiplexer(1, MAX_B);
+    for (var i = 0; i < MAX_B; i++) tsClose.inp[i][0] <== bytes[i];
+    tsClose.sel <== tsValueOffset + tsDigitCount;
+    tsClose.out[0] === 0x2C; // `,` before `"version"`
 
     // version = "QKB/2.0"
     var VER_VAL[8] = [0x51,0x4B,0x42,0x2F,0x32,0x2E,0x30,0x22];
