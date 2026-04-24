@@ -12,6 +12,7 @@ import {
   extractXmlSignatureCertificates,
   verifyXmlSignature,
 } from './fetch/xmlSignature.js';
+import { filterServicesByCountry } from './filter/countryFilter.js';
 import { filterQes } from './filter/qesServices.js';
 import { writeOutput } from './output/writer.js';
 import { buildTree } from './tree/merkle.js';
@@ -43,6 +44,7 @@ export interface RunOpts {
   xmlSignatureVerifier?: XmlSignatureVerifier;
   lotlTrustedCerts?: readonly Uint8Array[];
   allowInsecureTransport?: boolean | undefined;
+  filterCountry?: string;
 }
 
 export interface RunResult {
@@ -310,7 +312,8 @@ export async function run(opts: RunOpts): Promise<RunResult> {
     services.push(...parseMsTl(xml));
   }
   const qes = filterQes(services);
-  const extracted = extractCAs(qes);
+  const sliced = opts.filterCountry ? filterServicesByCountry(qes, opts.filterCountry) : qes;
+  const extracted = extractCAs(sliced);
 
   const leaves: bigint[] = [];
   const cas = [];
@@ -503,6 +506,7 @@ const main = (): void => {
       'source label(s) for this trusted-list root; defaults to combine input dirs for --combine-output',
     )
     .option('--tree-depth <n>', 'merkle tree depth', (v) => Number.parseInt(v, 10), TREE_DEPTH)
+    .option('--filter-country <iso>', 'restrict output to one ISO country code (e.g. EE, UA)')
     .option('--require-signatures', 'require XMLDSig verification for LOTL and MS trusted lists')
     .option('--warn-unsigned', 'warn when LOTL or MS trusted-list XMLDSig verification fails')
     .option(
@@ -598,6 +602,7 @@ const main = (): void => {
           signaturePolicy,
           ...(lotlTrustedCerts ? { lotlTrustedCerts } : {}),
           allowInsecureTransport: Boolean(o.allowInsecureTransport),
+          ...(o.filterCountry ? { filterCountry: o.filterCountry } : {}),
         });
       } catch (e) {
         console.error(e);
