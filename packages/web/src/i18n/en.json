@@ -10,7 +10,39 @@
     "generate": "Generate",
     "sign": "Sign",
     "upload": "Upload",
-    "register": "Register"
+    "register": "Register",
+    "proveAge": "Prove age"
+  },
+  "ua": {
+    "scopeLabel": "UA scope",
+    "scopeTitle": "Ukraine — QKB/2.0",
+    "landing": {
+      "heading": "Ukraine — QKB/2.0 registry",
+      "intro": "Per-country QKB/2.0 registry pinned to the Diia QES trust list and a v1 default policy leaf. Proofs submit to the Sepolia UA registry contract.",
+      "registry": "Registry",
+      "policyRoot": "Policy root",
+      "trustedListRoot": "Trusted-list root",
+      "deployedAt": "Deployed at"
+    },
+    "proveAge": {
+      "heading": "Prove adulthood",
+      "comingSoon": "Age attestation wiring lands in the next commit — the UA leaf ceremony artifacts are already pinned."
+    },
+    "upload": {
+      "intro": "Upload the Diia .p7s produced against your QKB/2.0 binding. We verify the QES, build the V4 leaf + chain witness, and generate Groth16 proofs for the UA registry.",
+      "missingV2": "No QKB/2.0 binding in this session. Start at /ua/generate and sign with Diia first.",
+      "done": "Proof bundle produced — redirecting to /ua/register."
+    },
+    "register": {
+      "intro": "Submit your QKB/2.0 binding to the UA registry on Sepolia. The leaf + chain Groth16 proofs carried here were produced from your signed binding.",
+      "registry": "UA registry",
+      "chainId": "Chain ID",
+      "missingV2": "No QKB/2.0 binding in this session. Start at Generate and sign with Diia.",
+      "missingProof": "No V4 proof bundle in this session. Run Upload to produce leaf + chain proofs first.",
+      "backToGenerate": "Back to /ua/generate →",
+      "backToUpload": "Back to /ua/upload →",
+      "wrongChain": "Wallet is on chainId {{actual}} — switch to Sepolia (chainId {{expected}}) before submitting."
+    }
   },
   "lang": {
     "label": "Language",
@@ -184,6 +216,10 @@
     "witness": {
       "offsetNotFound": "Could not locate a required field inside the binding.",
       "fieldTooLong": "A field in the binding exceeds the circuit length limit."
+    },
+    "qkb": {
+      "leafPublicSignals": "Leaf public-signal array has the wrong shape.",
+      "countryUnsupported": "This country is not supported by the registry."
     },
     "prover": {
       "wasmOOM": "The in-browser prover ran out of memory.",

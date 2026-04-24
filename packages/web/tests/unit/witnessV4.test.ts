@@ -7,7 +7,11 @@ import {
   policyLeafHashV1,
 } from '../../src/lib/bindingV2';
 import { buildPolicyInclusionProof, buildPolicyTreeFromLeaves } from '../../src/lib/policyTree';
-import { buildPhase2WitnessV4Draft, leafPublicSignalsV4 } from '../../src/lib/witnessV4';
+import {
+  buildPhase2WitnessV4Draft,
+  leafPublicSignalsV4,
+  parseLeafPublicSignals,
+} from '../../src/lib/witnessV4';
 import type { Phase2Witness } from '../../src/lib/witness';
 
 const VALID_SK = hexToBytes(
@@ -245,6 +249,40 @@ describe('buildPhase2WitnessV4Draft', () => {
         policyProof: proof,
       }),
     ).toThrowError(expect.objectContaining({ code: 'witness.fieldTooLong' }) as unknown as Error);
+  });
+});
+
+describe('parseLeafPublicSignals — 16-signal V4 shape', () => {
+  it('parses all 16 fields in defined order', () => {
+    const sig = [
+      '1', '2', '3', '4',
+      '5', '6', '7', '8',
+      '9',
+      '10',
+      '11',
+      '12',
+      '13',
+      '14',
+      '15',
+      '1',
+    ];
+    const parsed = parseLeafPublicSignals(sig);
+    expect(parsed.pkX).toEqual([1n, 2n, 3n, 4n]);
+    expect(parsed.pkY).toEqual([5n, 6n, 7n, 8n]);
+    expect(parsed.ctxHash).toBe(9n);
+    expect(parsed.policyLeafHash).toBe(10n);
+    expect(parsed.policyRoot).toBe(11n);
+    expect(parsed.timestamp).toBe(12n);
+    expect(parsed.nullifier).toBe(13n);
+    expect(parsed.leafSpkiCommit).toBe(14n);
+    expect(parsed.dobCommit).toBe(15n);
+    expect(parsed.dobSupported).toBe(1n);
+  });
+
+  it('rejects wrong-length arrays with a typed error', () => {
+    expect(() => parseLeafPublicSignals(Array(14).fill('0'))).toThrowError(
+      /leaf public signals must be length 16/,
+    );
   });
 });
 

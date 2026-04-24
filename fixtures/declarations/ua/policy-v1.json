@@ -1,0 +1,12 @@
+{
+  "leafSchema": "qkb-policy-leaf/v1",
+  "policyId": "qkb-default-ua",
+  "policyVersion": 1,
+  "bindingSchema": "qkb-binding-core/v1",
+  "contentHash": "0xfef523c6bee57ac2969d1bce6583f9b112a4859192cb7368929b4795654dfa90",
+  "metadataHash": "0x2217318fe19c2ba3ab6b7961a2b99211b55ffd8f85ea75fd699e04a2c6e4e497",
+  "notes": {
+    "contentHashSource": "sha256 of fixtures/declarations/uk.txt (utf-8, lf, no trailing newline); pinned in fixtures/declarations/digests.json",
+    "metadataHashSource": "sha256 of JCS({\"lang\":\"uk\",\"template\":\"qkb-default-ua/v1\"})"
+  }
+}
