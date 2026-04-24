@@ -10,7 +10,24 @@
     "generate": "Generate",
     "sign": "Sign",
     "upload": "Upload",
-    "register": "Register"
+    "register": "Register",
+    "proveAge": "Prove age"
+  },
+  "ua": {
+    "scopeLabel": "UA scope",
+    "scopeTitle": "Ukraine — QKB/2.0",
+    "landing": {
+      "heading": "Ukraine — QKB/2.0 registry",
+      "intro": "Per-country QKB/2.0 registry pinned to the Diia QES trust list and a v1 default policy leaf. Proofs submit to the Sepolia UA registry contract.",
+      "registry": "Registry",
+      "policyRoot": "Policy root",
+      "trustedListRoot": "Trusted-list root",
+      "deployedAt": "Deployed at"
+    },
+    "proveAge": {
+      "heading": "Prove adulthood",
+      "comingSoon": "Age attestation wiring lands in the next commit — the UA leaf ceremony artifacts are already pinned."
+    }
   },
   "lang": {
     "label": "Language",
