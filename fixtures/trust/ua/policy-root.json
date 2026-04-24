@@ -1,0 +1,14 @@
+{
+  "schema": "qkb-v4-policy-root/v1",
+  "country": "UA",
+  "policyLeafHashes": [
+    "0x2d00e73da8dd4dc99f04371d3ce01ecbcf4ad8e476c9017a304c57873494f812"
+  ],
+  "treeDepth": 4,
+  "policyRoot": "0x1eef6cacb886925d014ff151d4dbef9b37b16cc836f47b1ec89fc821496e2414",
+  "generatedAt": "2026-04-24T00:30:59.725Z",
+  "source": {
+    "seed": "fixtures/declarations/ua/policy-v1.json",
+    "ukDeclaration": "fixtures/declarations/uk.txt"
+  }
+}
