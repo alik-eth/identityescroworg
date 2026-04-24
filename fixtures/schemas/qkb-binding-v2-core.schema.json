@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://identityescrow.org/schemas/qkb-binding-v2-core.schema.json",
+  "title": "QKB Binding V2 Core (signed surface)",
+  "description": "Core-only subset of qkb-binding-v2.schema.json. These are the bytes (JCS-canonicalized) that must be Diia-signed and fed into the V4 leaf circuit. `display` and `extensions` are explicitly forbidden here — those live on the full binding object (qkb-binding-v2.schema.json) for rendering only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "statementSchema",
+    "pk",
+    "scheme",
+    "context",
+    "timestamp",
+    "nonce",
+    "policy",
+    "assertions"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "QKB/2.0"
+    },
+    "statementSchema": {
+      "type": "string",
+      "const": "qkb-binding-core/v1"
+    },
+    "pk": {
+      "type": "string",
+      "pattern": "^0x04[0-9a-fA-F]{128}$"
+    },
+    "scheme": {
+      "type": "string",
+      "enum": ["secp256k1"]
+    },
+    "context": {
+      "type": "string",
+      "pattern": "^0x([0-9a-fA-F]{2})*$"
+    },
+    "timestamp": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "nonce": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{64}$"
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["leafHash", "policyId", "policyVersion", "bindingSchema"],
+      "properties": {
+        "leafHash": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{64}$"
+        },
+        "policyId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9._/-]*$"
+        },
+        "policyVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "bindingSchema": {
+          "type": "string",
+          "const": "qkb-binding-core/v1"
+        }
+      }
+    },
+    "assertions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "keyControl",
+        "bindsContext",
+        "acceptsAttribution",
+        "revocationRequired"
+      ],
+      "properties": {
+        "keyControl": { "type": "boolean", "const": true },
+        "bindsContext": { "type": "boolean", "const": true },
+        "acceptsAttribution": { "type": "boolean", "const": true },
+        "revocationRequired": { "type": "boolean", "const": true }
+      }
+    }
+  }
+}

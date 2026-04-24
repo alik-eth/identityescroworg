@@ -39,6 +39,114 @@ Holder                  Circuits (Groth16)         On-chain
 
 The `R_QKB` relation asserts in-circuit: QES verify, certificate Merkle inclusion in the EU trusted list, binding → signed-attributes digest chain, binding contains the claimed `pk`, certificate validity window covers `B.timestamp`. Nothing else leaks.
 
+### Forward Path — Modular DOB + age proof
+
+`QKB/1` does not currently prove adulthood. Some QES profiles expose DOB, but not in one pan-EU field. The intended successor path is:
+
+- keep trust-chain validation in the existing chain circuit
+- keep key-binding and nullifier logic in the leaf circuit
+- make DOB extraction profile-specific behind a uniform public output
+- make age qualification a separate proof over a committed DOB
+
+That keeps the contract surface stable while allowing jurisdiction- or QTSP-specific DOB decoders to be added incrementally.
+
+```
+signed .p7s / cert ----> Chain circuit
+                         - proves trust-chain inclusion under r_TL
+                         - outputs: rTL, algorithmTag, leafSpkiCommit
+                                      |
+binding.qkb.json ----------->         |
+leaf cert / signedAttrs ----> Leaf circuit (profile-specific)
+                         - proves binding signed by cert
+                         - derives nullifier from stable signer identifier
+                         - optionally extracts DOB from cert/profile-specific fields
+                         - outputs:
+                           pkX[4], pkY[4], ctxHash,
+                           policyLeafHash, policyRoot, timestamp,
+                           nullifier, leafSpkiCommit,
+                           dobCommit, dobSupported
+                                      |
+                                      v
+                               Age circuit
+                         - proves dobCommit opens to dobYmd
+                         - proves dobYmd <= ageCutoffDate
+                         - outputs: dobCommit, ageCutoffDate, ageQualified
+                                      |
+                                      v
+                               Smart contract
+                         - verifies chain proof
+                         - verifies leaf proof
+                         - optionally verifies age proof
+                         - checks leafSpkiCommit / dobCommit linkage
+```
+
+The DOB module boundary is by certificate profile, not by country in the abstract. Examples:
+
+- standard RFC/ETSI DOB field
+- Ukrainian `2.5.29.9` profile mapping
+- future German or French provider-specific mappings
+
+Every supported extractor must normalize DOB to the same internal representation before commitment:
+
+```text
+dobYmd     = YYYYMMDD as integer
+dobCommit  = Poseidon(dobYmd, dobSourceTag)
+```
+
+The recommended successor contract surface is:
+
+```solidity
+struct Proof {
+    uint256[2] a;
+    uint256[2][2] b;
+    uint256[2] c;
+}
+
+struct ChainSignals {
+    uint256 rTL;
+    uint256 algorithmTag;
+    uint256 leafSpkiCommit;
+}
+
+struct LeafSignals {
+    uint256[4] pkX;
+    uint256[4] pkY;
+    uint256 ctxHash;
+    uint256 policyLeafHash;
+    uint256 policyRoot;
+    uint256 timestamp;
+    uint256 nullifier;
+    uint256 leafSpkiCommit;
+    uint256 dobCommit;
+    uint256 dobSupported;
+}
+
+struct AgeSignals {
+    uint256 dobCommit;
+    uint256 ageCutoffDate;
+    uint256 ageQualified;
+}
+
+function verifyRegistration(
+    Proof calldata chainProof,
+    ChainSignals calldata chainSignals,
+    Proof calldata leafProof,
+    LeafSignals calldata leafSignals,
+    Proof calldata ageProof,
+    AgeSignals calldata ageSignals,
+    bool requireAgeQualification
+) external view returns (bool);
+```
+
+If `requireAgeQualification == true`, the registry should:
+
+- verify the age proof
+- require `leafSignals.dobSupported == 1`
+- require `leafSignals.dobCommit == ageSignals.dobCommit`
+- require `ageSignals.ageQualified == 1`
+
+This keeps "trusted signer" separate from "adult signer". The current QKB path provides the former only.
+
 ### Phase 2 — QIE
 
 ```

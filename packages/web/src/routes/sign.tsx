@@ -24,9 +24,10 @@ export function SignScreen() {
   const session = loadSession();
 
   const bcanon = useMemo<Uint8Array | null>(() => {
-    if (!session.bcanonB64) return null;
-    return b64ToBytes(session.bcanonB64);
-  }, [session.bcanonB64]);
+    const b64 = session.bcanonV2B64 ?? session.bcanonB64;
+    if (!b64) return null;
+    return b64ToBytes(b64);
+  }, [session.bcanonV2B64, session.bcanonB64]);
 
   if (!bcanon) {
     return (
@@ -129,14 +130,18 @@ export function SignScreen() {
       <div className="mt-8 flex gap-3">
         <button
           type="button"
-          onClick={() => navigate({ to: '/generate' })}
+          onClick={() =>
+            navigate({ to: session.bcanonV2B64 ? '/ua/generate' : '/generate' })
+          }
           className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm rounded"
         >
           {t('common.back')}
         </button>
         <button
           type="button"
-          onClick={() => navigate({ to: '/upload' })}
+          onClick={() =>
+            navigate({ to: session.bcanonV2B64 ? '/ua/upload' : '/upload' })
+          }
           data-testid="sign-next"
           className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-900 text-sm font-semibold rounded-md"
         >

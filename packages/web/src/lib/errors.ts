@@ -11,6 +11,8 @@ export type ErrorCode =
   | 'qes.wrongAlgorithm'
   | 'witness.offsetNotFound'
   | 'witness.fieldTooLong'
+  | 'qkb.leafPublicSignals'
+  | 'qkb.countryUnsupported'
   | 'prover.wasmOOM'
   | 'prover.cancelled'
   | 'prover.artifactMismatch'
@@ -26,7 +28,8 @@ export class QkbError extends Error {
   readonly details: Readonly<Record<string, unknown>> | undefined;
 
   constructor(code: ErrorCode, details?: Record<string, unknown>) {
-    super(code);
+    const reason = typeof details?.reason === 'string' ? details.reason : undefined;
+    super(reason ? `${code}: ${reason}` : code);
     this.name = 'QkbError';
     this.code = code;
     this.messageKey = `errors.${code}`;
@@ -57,6 +60,8 @@ export const ALL_ERROR_CODES: readonly ErrorCode[] = [
   'qes.wrongAlgorithm',
   'witness.offsetNotFound',
   'witness.fieldTooLong',
+  'qkb.leafPublicSignals',
+  'qkb.countryUnsupported',
   'prover.wasmOOM',
   'prover.cancelled',
   'prover.artifactMismatch',

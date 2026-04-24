@@ -9,6 +9,7 @@ Fixtures live here so every package can read them without cross-package coupling
 - `lotl/2026-04-17-lotl.xml` — pinned EU LOTL snapshot. Obtained from `https://ec.europa.eu/tools/lotl/eu-lotl.xml` on the date.
 - `lotl/ms-tls/` — per-MS TL XML fragments referenced by the pinned LOTL.
 - `declarations/en.txt`, `declarations/uk.txt` — canonical declaration texts, LF line endings, UTF-8, no trailing newline. Their SHA-256 digests are hard-coded in `packages/circuits/circuits/binding/DeclarationWhitelist.circom` and `packages/contracts/src/constants/DeclarationHashes.sol`.
+- `schemas/` — forward-looking JSON Schemas for successor wire objects such as `QKB/2.0` binding and policy-root leaves. These are design targets until the runtime migrates off the current declaration-whitelist model.
 - `integration/ua-diia/` — pre-computed circuit inputs for the positive integration test (produced by `packages/circuits/inputs/fixture-builder.ts`).
 
 ## Ground rules

@@ -6,7 +6,7 @@ import { buildLeafWitness } from './witness-builder';
 const FIXTURE_DIR = resolve(__dirname, '..', '..', 'fixtures', 'integration', 'admin-ecdsa');
 
 describe('QKBPresentationEcdsaLeaf — end-to-end (real Diia admin QES binding)', function () {
-  // Leaf-side proof: constraints 1, 2, 5, 6 + person-nullifier (§14.4).
+  // Leaf-side proof: constraints 1, 2, 5, 6 + scoped credential nullifier (§14.4).
   // One EcdsaP256Verify plus three Sha256Var instantiations; fits the 22 GB
   // systemd cap with NODE_OPTIONS=--max-old-space-size=20480. The chain-side
   // proof is covered in qkb-ecdsa-chain.test.ts.

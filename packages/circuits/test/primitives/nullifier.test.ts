@@ -22,7 +22,7 @@ async function poseidonHash(inputs: bigint[]): Promise<bigint> {
   return p.F.toObject(p(inputs.map((v) => p.F.e(v))));
 }
 
-describe('NullifierDerive (Phase-2 QIE nullifier primitive, person-level)', function () {
+describe('NullifierDerive (Phase-2 QIE nullifier primitive, credential-scoped)', function () {
   this.timeout(600000);
 
   let circuit: CompiledCircuit;
@@ -90,7 +90,7 @@ describe('NullifierDerive (Phase-2 QIE nullifier primitive, person-level)', func
     expect(witnessA[2]).to.not.equal(witnessB[2]);
   });
 
-  it('nullifier changes when subject serial differs — unlinkability across users', async () => {
+  it('nullifier changes when subject serial differs — unlinkability across credential identifiers', async () => {
     const subjectSerialLen = 1n;
     const ctxHash = 0xbbbbn;
 

@@ -17,7 +17,8 @@ pragma circom 2.1.9;
 //   [9]     declHash
 //   [10]    timestamp
 //   [11]    nullifier        Poseidon(Poseidon-5(subjectSerialLimbs, len), ctxHash)
-//                            — person-level Sybil gate, §14.4.
+//                            — context-scoped credential-namespace gate, §14.4.
+//                              Not a pan-eIDAS natural-person identifier.
 //   [12]    leafSpkiCommit   Poseidon(Poseidon(leafXLimbs), Poseidon(leafYLimbs))
 //                            — binds this proof's leaf SPKI to the chain
 //                              proof's leaf SPKI via an on-chain equality
@@ -87,8 +88,8 @@ template QKBPresentationEcdsaLeaf() {
     signal input ctxHash;
     signal input declHash;
     signal input timestamp;
-    // Person-level nullifier (§14.4 amendment, 2026-04-18). Public input;
-    // the circuit derives it in §7 below and constrains equality.
+    // Scoped credential nullifier (§14.4 clarification, 2026-04-23). Public
+    // input; the circuit derives it in §7 below and constrains equality.
     signal input nullifier;
     // leafSpkiCommit is a PUBLIC INPUT (not output) so it lands at the last
     // position of the Solidity verifier's `input[13]` per the orchestration
@@ -298,11 +299,14 @@ template QKBPresentationEcdsaLeaf() {
     packXY.out === leafSpkiCommit;
 
     // =========================================================================
-    // 7. Person-level nullifier (§14.4 amendment, 2026-04-18).
+    // 7. Scoped credential nullifier (§14.4 clarification, 2026-04-23).
     //    Extract the subject.serialNumber (OID 2.5.4.5) value bytes from the
     //    leaf cert DER, pack into 4 × uint64 LE limbs, derive
     //        nullifier = Poseidon(Poseidon-5(limbs[0..3], len), ctxHash).
-    //    The limbs never leak; only the ctx-bound nullifier is public.
+    //    The limbs never leak; only the ctx-bound nullifier is public. This
+    //    deduplicates within the identifier namespace encoded in the QES
+    //    certificate. It does not prove one natural person across every
+    //    eIDAS Member State / QTSP namespace.
     // =========================================================================
     component subjectSerial = X509SubjectSerial(MAX_CERT);
     for (var i = 0; i < MAX_CERT; i++) subjectSerial.leafDER[i] <== leafDER[i];

@@ -1,6 +1,6 @@
 # Split-Proof Pivot — Orchestration Plan
 
-**Goal:** Revert Phase 2 from unified ECDSA presentation to Phase-1's §5.4 split-proof architecture (leaf + chain), extended with the person-nullifier in the leaf. Target: Sepolia V3 deploy + Fly-redeployed SPA demo passing live register flow end-to-end with person-level Sybil resistance.
+**Goal:** Revert Phase 2 from unified ECDSA presentation to Phase-1's §5.4 split-proof architecture (leaf + chain), extended with the scoped credential nullifier in the leaf. Target: Sepolia V3 deploy + Fly-redeployed SPA demo passing live register flow end-to-end with context-scoped QES identifier deduplication.
 
 **Spec:** `docs/superpowers/specs/2026-04-18-split-proof-pivot.md`
 
@@ -95,7 +95,7 @@ function register(
 
 Same shape for `registerEscrow` and `revokeEscrow` (both take the same dual-proof gate).
 
-### 2.7 Nullifier (§14.4 person-level, unchanged)
+### 2.7 Nullifier (§14.4 scoped credential namespace)
 
 ```
 subjectSerialLimbs[4]  = 4 × uint64 LE, zero-padded 32B of subject serialNumber content
@@ -104,7 +104,7 @@ secret                 = Poseidon(subjectSerialLimbs[0..3], subjectSerialLen)   
 nullifier              = Poseidon(secret, ctxHash)                               [Poseidon-2]
 ```
 
-Lives inside the leaf circuit. Reuses `X509SubjectSerial.circom` + `NullifierDerive.circom` already committed.
+Lives inside the leaf circuit. Reuses `X509SubjectSerial.circom` + `NullifierDerive.circom` already committed. This deduplicates only inside the identifier namespace encoded in `subject.serialNumber`; pan-eIDAS natural-person deduplication is explicitly outside the circuit and belongs in a future identity-escrow layer.
 
 ---
 

@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://identityescrow.org/schemas/qkb-policy-leaf-v1.schema.json",
+  "title": "QKB Policy Leaf V1",
+  "description": "Canonical record committed into the policy Merkle tree whose root is stored on-chain as policyRoot.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "leafSchema",
+    "policyId",
+    "policyVersion",
+    "bindingSchema",
+    "contentHash",
+    "metadataHash"
+  ],
+  "properties": {
+    "leafSchema": {
+      "type": "string",
+      "const": "qkb-policy-leaf/v1"
+    },
+    "policyId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9._/-]*$"
+    },
+    "policyVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "bindingSchema": {
+      "type": "string",
+      "const": "qkb-binding-core/v1"
+    },
+    "contentHash": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{64}$",
+      "description": "Hash of the canonical legal/policy text or bundle referenced by this policy."
+    },
+    "metadataHash": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{64}$",
+      "description": "Hash of auxiliary machine-readable metadata such as jurisdiction, template set, and rendering bundle."
+    },
+    "jurisdiction": {
+      "type": "string",
+      "maxLength": 32
+    },
+    "activeFrom": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "activeTo": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

@@ -10,7 +10,9 @@
  * `page.addInitScript` without having to click through every screen.
  */
 import type { Binding } from './binding';
+import type { BindingV2 } from './bindingV2';
 import type { Groth16Proof } from './prover';
+import type { SupportedCountry } from './countryConfig';
 
 const KEY = 'qkb.session.v1';
 
@@ -23,6 +25,20 @@ export interface Session {
   // Built on /generate → carried to /sign
   binding?: Binding;
   bcanonB64?: string; // RFC 8785 JCS bytes
+
+  // QKB/2.0 (per-country /ua/*). Orthogonal to the V1 pair above so a session
+  // can't half-contain one and half-contain the other.
+  country?: SupportedCountry;
+  bindingV2?: BindingV2;
+  bcanonV2B64?: string;
+
+  // V4 split-proof bundle (set by the UA upload path after both Groth16
+  // prove runs succeed). publicLeafV4 is 16 signals, publicChainV4 is 3.
+  // publicLeafV4[14] = dobCommit, publicLeafV4[15] = dobSupported.
+  proofLeafV4?: Groth16Proof;
+  publicLeafV4?: string[];
+  proofChainV4?: Groth16Proof;
+  publicChainV4?: string[];
 
   // From /upload
   cadesB64?: string;

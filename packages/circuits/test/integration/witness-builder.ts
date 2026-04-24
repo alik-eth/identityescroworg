@@ -8,7 +8,7 @@
 //
 // Why split: the unified QKBPresentationEcdsa.circom couldn't be Groth16-
 // setup by snarkjs at 10.85 M constraints (§14 spec pivot). The leaf proof
-// carries R_QKB constraints 1, 2, 5, 6 + the person-nullifier; the chain
+// carries R_QKB constraints 1, 2, 5, 6 + the scoped credential nullifier; the chain
 // proof carries constraints 3, 4. On-chain the two are glued by asserting
 // their leafSpkiCommit outputs are equal (QKBVerifier §2.5).
 

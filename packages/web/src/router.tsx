@@ -22,6 +22,7 @@ import { CustodianAgentLayout } from './routes/custodian.$agentId';
 import { CustodianInbox } from './routes/custodian.$agentId.inbox';
 import { CustodianReleases } from './routes/custodian.$agentId.releases';
 import { CustodianKeys } from './routes/custodian.$agentId.keys';
+import { buildUaRoutes } from './routes/ua/routes';
 
 const STEPS = [
   { to: '/generate', key: 'nav.generate' },
@@ -178,6 +179,8 @@ const custodianKeysRoute = createRoute({
   component: CustodianKeys,
 });
 
+const { uaRoute, children: uaChildren } = buildUaRoutes(rootRoute);
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   generateRoute,
@@ -196,6 +199,7 @@ const routeTree = rootRoute.addChildren([
       custodianKeysRoute,
     ]),
   ]),
+  uaRoute.addChildren(uaChildren),
 ]);
 
 export const router = createRouter({ routeTree });

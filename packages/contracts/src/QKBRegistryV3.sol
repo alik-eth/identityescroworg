@@ -13,9 +13,9 @@ import { IRegistryGate } from "./arbitrators/IRegistryGate.sol";
 ///         layout changes). Per the 2026-04-18 split-proof pivot, a
 ///         registration carries two Groth16 proofs:
 ///
-///           1. Leaf proof (13 public signals) — per-person data: pk, ctx,
-///              declaration, timestamp, nullifier, plus a `leafSpkiCommit`
-///              glue output.
+///           1. Leaf proof (13 public signals) — holder binding data: pk,
+///              ctx, declaration, timestamp, scoped credential nullifier,
+///              plus a `leafSpkiCommit` glue output.
 ///           2. Chain proof (5 public signals) — trusted-list membership:
 ///              rTL, algorithmTag (0 = RSA, 1 = ECDSA), and the same
 ///              `leafSpkiCommit` (must equal the leaf's).
@@ -75,7 +75,9 @@ contract QKBRegistryV3 is IRegistryGate {
 
     mapping(address => Binding) public bindings;
 
-    /// @dev Nullifier primitive (spec §14.4).
+    /// @dev Scoped credential nullifier primitive (spec §14.4). This prevents
+    ///      duplicate registration for the same context + QES identifier
+    ///      namespace; it is not a pan-eIDAS natural-person deduplicator.
     mapping(bytes32 => bool)    public usedNullifiers;
     mapping(bytes32 => address) public nullifierToPk;
     mapping(bytes32 => bytes32) public revokedNullifiers;
@@ -198,7 +200,7 @@ contract QKBRegistryV3 is IRegistryGate {
     /// @notice Register a fresh QKB binding. Dispatch on
     ///         `chainInputs.algorithmTag` — the authoritative tag lives on
     ///         the chain side per orchestration §2.2. Leaf carries no
-    ///         algorithmTag (it's per-person data).
+    ///         algorithmTag (it is credential-binding data).
     ///
     ///         Ordering: dispatch → rTL equality → proof verify (which
     ///         also short-circuits on declHash whitelist + leafSpkiCommit

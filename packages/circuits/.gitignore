@@ -2,7 +2,9 @@ build/
 dist/
 node_modules/
 ceremony/ptau/
+ptau/
 *.r1cs
 *.wasm
 *.zkey
 *.sym
+*.ptau

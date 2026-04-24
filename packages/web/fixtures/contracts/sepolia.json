@@ -31,5 +31,38 @@
     "chainZkeySha256": "8d1aed8e30a76770a8480e203a86c362f4421b6d800147d0ff4f960472ca9933",
     "publicSignals": { "leaf": 13, "chain": 3 }
   },
-  "notes": "Phase 2 split-proof V3 deploy. ECDSA leaf + chain verifiers are REAL Groth16 from the 2026-04-19 ceremony. RSA slots are stubs (no RSA ceremony — defer until real non-Diia QES test material is available). trustedListRoot is the currently deployed root; trustedListRootPending is the generated combined EU eIDAS + UA TL-EC root and must be broadcast with UpdateTrustedRoot.s.sol before the contract accepts proofs against the bundled public trusted-cas artifacts."
+  "notes": "Phase 2 split-proof V3 deploy. ECDSA leaf + chain verifiers are REAL Groth16 from the 2026-04-19 ceremony. RSA slots are stubs (no RSA ceremony — defer until real non-Diia QES test material is available). trustedListRoot is the currently deployed root; trustedListRootPending is the generated combined EU eIDAS + UA TL-EC root and must be broadcast with UpdateTrustedRoot.s.sol before the contract accepts proofs against the bundled public trusted-cas artifacts.",
+  "countries": {
+    "UA": {
+      "registry": "0x4c8541f4Ff16AE2650C4e146587E81eD56A2456C",
+      "registryVersion": "v4",
+      "country": "UA",
+      "leafVerifier": "0xF407AFCEE7b5eE2AE2ef52041DFC224Fed010Cc3",
+      "leafVerifierPrevious": "0x32e7A1F8Cd3051765D4748d94E48407b2994124b",
+      "leafVerifierRotatedAt": "2026-04-24T13:54:12Z",
+      "leafVerifierRotationTx": "0xa1451ae97c74ddbe53524a86c0832ac530f13af186e19e391b41d630ee7d7e3e",
+      "leafVerifierRotationReason": "M11 hardening — closes 6 Codex findings (SHA canonical padding, field terminators, Bits256ToField < p, dobCommit gated by dobSupported). New ceremony zkey 9370ac2514123f80b32936bf09e715f2975d46fb02ac15117d1e925873b6e22f (6.54M constraints, +2.4% vs V1 d43cc46c at 6.38M).",
+      "chainVerifier": "0xc1a0fd1e620398b019ff3941b6c601afe81b33b8",
+      "ageVerifier": "0x7ac13661E4B8a5AC44D116f5df11CA84eE81D09a",
+      "trustedListRoot": "0x25ce7bfa7693e391a7e1d5df666caa5b622bf709cc6797289a74bfc272462b3e",
+      "policyRoot": "0x011529dbfa29851faf7df3975b439caeeed62a22c4aecf6c31cef0805029db3c",
+      "policyRootPrevious": "0x1eef6cacb886925d014ff151d4dbef9b37b16cc836f47b1ec89fc821496e2414",
+      "policyRootRotatedAt": "2026-04-24T11:20:08Z",
+      "policyRootRotationTx": "0x13e0b98b71a3d176ae5336a8ffde5bc2b2788f8b8e16ca8c4375cf653ebb4146",
+      "policyRootRotationReason": "depth-mismatch fix: previous root computed at depth 4; circuit QKBPresentationEcdsaLeafV4 uses MERKLE_DEPTH=16. New root = buildPolicyTreeFromLeaves([uaV1Leaf], 16).",
+      "admin": "0xB8d121CD0B2D0AB3df2aFF0B45B2fD354FF4c1f7",
+      "deployedAt": "2026-04-24T01:34:04Z",
+      "deployTx": "0xb3cd9274fb9f7bfe5b4f653fe8fb58cb39d1c78b25a741c0ff13965e32277743",
+      "ceremony": {
+        "source": "2026-04-24-per-country-registries-m11-hardened",
+        "leafZkeySha256": "9370ac2514123f80b32936bf09e715f2975d46fb02ac15117d1e925873b6e22f",
+        "leafZkeySha256Previous": "d43cc46cba9ad2cc4097144c486b951270859df8ebac651bec0554082a56547c",
+        "ageZkeySha256": "5ab2eace51dd4f1587b66e0df8f7924ae71f20ed6116338ce46c43eb430b20dd",
+        "chainZkeySha256": "8d1aed8e30a76770a8480e203a86c362f4421b6d800147d0ff4f960472ca9933",
+        "chainVerifierReuse": "v3 ECDSA chain verifier, byte-identical zkey",
+        "publicSignals": { "leaf": 16, "chain": 3, "age": 3 }
+      },
+      "notes": "Per-country QKB/2.0 registry for Ukraine (Diia QES). Leaf verifier is country-specific (UA Diia trust + DOB extractor); age verifier is shared across countries; chain verifier is reused from the V3 deploy (ECDSA over BN254). trustedListRoot is the UA-only Poseidon-Merkle root over Diia QTSP services from the 2026-04-17 pinned EU LOTL snapshot. policyRoot pins the v1 default UA policy leaf set."
+    }
+  }
 }

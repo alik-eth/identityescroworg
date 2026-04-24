@@ -1,0 +1,19 @@
+{
+  "schema": "qkb-v4-ceremony-urls/v1",
+  "role": "chain",
+  "source": "v3-reuse",
+  "note": "V3 chain circuit (packages/circuits/circuits/QKBPresentationEcdsaChain.circom) is byte-identical in its public-signal shape to V4 chain expectations: [rTL, algorithmTag, leafSpkiCommit]. V3 ceremony artifacts at prove.identityescrow.org/ecdsa-chain/ are reused verbatim; no new ceremony run. URLs + SHAs copied from packages/circuits/ceremony/urls.json (V3 chain block, uploadedAt 2026-04-19T11:43:28Z).",
+  "circuit": "QKBPresentationEcdsaChain",
+  "wasmUrl": "https://prove.identityescrow.org/ecdsa-chain/QKBPresentationEcdsaChain.wasm",
+  "zkeyUrl": "https://prove.identityescrow.org/ecdsa-chain/qkb-chain.zkey",
+  "vkeyUrl": "https://prove.identityescrow.org/ecdsa-chain/verification_key.json",
+  "wasmSha256": "6e3976792705939ad705d503099adc368738928c9f87776ef6954b663f512af6",
+  "zkeySha256": "8d1aed8e30a76770a8480e203a86c362f4421b6d800147d0ff4f960472ca9933",
+  "vkeySha256": "249524591323d0d08f3d4ccdfcf8ea63d36ed4d3fc56c840c5dd48576e72b1c0",
+  "verifierSolSha256": "dd37b414788ddd36e73ca09393375fc02f6b330208048cded93c84bb9975e885",
+  "wasmBytes": 24671034,
+  "zkeyBytes": 2004855257,
+  "publicSignals": 3,
+  "powersOfTau": 22,
+  "constraints": 3152159
+}
