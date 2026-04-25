@@ -271,6 +271,9 @@ importers:
       '@qkb/qie-core':
         specifier: workspace:*
         version: link:../qie-core
+      '@qkb/sdk':
+        specifier: workspace:*
+        version: link:../sdk
       '@tailwindcss/vite':
         specifier: ^4.2.2
         version: 4.2.2(vite@5.4.21(@types/node@20.19.39)(lightningcss@1.32.0))
