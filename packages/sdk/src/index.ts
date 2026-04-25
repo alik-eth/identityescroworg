@@ -50,3 +50,33 @@ export {
   type PolicyBuiltTree,
   type PolicyInclusionProof,
 } from './policy/index.js';
+
+export {
+  DOB_SOURCE_TAGS,
+  assertGregorianDate,
+  dobSourceTagToField,
+  extractDobFromDiiaUA,
+  normalizeDobToIso,
+  normalizeDobToYmd,
+  runDobExtractors,
+  standardRfc3739DobExtractor,
+  uaSubjectDirectoryDobExtractor,
+  type CertificateDobView,
+  type DiiaDobExtraction,
+  type DobAttributeValue,
+  type DobEvidence,
+  type DobExtraction,
+  type DobExtractor,
+  type DobSourceTag,
+  type DobTrustLevel,
+} from './dob/index.js';
+
+export {
+  ALGORITHM_TAG_ECDSA,
+  ALGORITHM_TAG_RSA,
+  detectAlgorithmTag,
+  parseCades,
+  type AlgorithmTag,
+  type LeafAlg,
+  type ParsedCades,
+} from './cert/cades.js';
