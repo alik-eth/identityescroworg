@@ -80,3 +80,17 @@ export {
   type LeafAlg,
   type ParsedCades,
 } from './cert/cades.js';
+
+export {
+  loadArtifacts,
+  pickVariantUrls,
+  validateUrlsJson,
+  variantForAlgorithmTag,
+  type ArtifactCache,
+  type CircuitVariant,
+  type DualUrlsJson,
+  type Fetcher,
+  type LoadOptions,
+  type LoadedArtifacts,
+  type UrlsJson,
+} from './artifacts/index.js';
