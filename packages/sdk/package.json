@@ -16,6 +16,10 @@
     "./node": {
       "types": "./dist/node/index.d.ts",
       "import": "./dist/node/index.js"
+    },
+    "./prover/snarkjs": {
+      "types": "./dist/prover/snarkjs.d.ts",
+      "import": "./dist/prover/snarkjs.js"
     }
   },
   "main": "./dist/index.js",

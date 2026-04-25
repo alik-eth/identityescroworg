@@ -167,3 +167,20 @@ export {
   type RegisterArgsV4,
   type RegisterArgsV4Age,
 } from './registry/index.js';
+
+export {
+  MockProver,
+  proveSplit,
+  type AlgorithmArtifactUrls,
+  type CircuitArtifactUrls,
+  type IProver,
+  type MockProverOptions,
+  type ProofProgress,
+  type ProofSide,
+  type ProofStage,
+  type ProveOptions,
+  type ProveResult,
+  type SplitProgress,
+  type SplitProveOptions,
+  type SplitProveResult,
+} from './prover/index.js';
