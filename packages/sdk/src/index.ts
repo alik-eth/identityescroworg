@@ -145,6 +145,17 @@ export {
 } from './witness/builder.js';
 
 export {
+  encodeRegisterFromSignals,
+  encodeRegisterFromSignalsAge,
+  prepareWitnessV4,
+  type EncodeRegisterFromSignalsAgeInput,
+  type EncodeRegisterFromSignalsInput,
+  type EncodedRegister,
+  type EncodedRegisterAge,
+  type PrepareWitnessV4Input,
+} from './facade/index.js';
+
+export {
   BINDING_FIELD_ORDER,
   BINDING_SCHEME,
   BINDING_VERSION,
