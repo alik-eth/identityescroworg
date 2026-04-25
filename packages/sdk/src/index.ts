@@ -176,6 +176,8 @@ export {
   REGISTRY_V4_ERROR_SELECTORS,
   agePublicSignalsV4,
   ageInputsV4FromPublicSignals,
+  classifyV4RegistryRevert,
+  classifyV4WalletRevert,
   assertAgeInputsV4Shape,
   assertLeafInputsV4AgeShape,
   assertLeafInputsV4Shape,
