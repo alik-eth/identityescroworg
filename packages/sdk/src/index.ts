@@ -41,3 +41,12 @@ export {
   type BuildPolicyLeafV1Input,
   type PolicyLeafV1,
 } from './binding/index.js';
+
+export {
+  buildPolicyInclusionProof,
+  buildPolicyTreeFromLeaves,
+  recomputePolicyRoot,
+  zeroHashes,
+  type PolicyBuiltTree,
+  type PolicyInclusionProof,
+} from './policy/index.js';
