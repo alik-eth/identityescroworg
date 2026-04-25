@@ -136,6 +136,32 @@ export {
 } from './witness/index.js';
 
 export {
+  buildLeafWitness,
+  buildPhase2Witness,
+  computeLeafSpkiCommit,
+  computeNullifier,
+  type BuildPhase2WitnessInput,
+  type BuildWitnessInput,
+} from './witness/builder.js';
+
+export {
+  BINDING_FIELD_ORDER,
+  BINDING_SCHEME,
+  BINDING_VERSION,
+  DECLARATIONS,
+  NONCE_LENGTH_V1,
+  PK_UNCOMPRESSED_LENGTH_V1,
+  bindingHash,
+  buildBinding,
+  buildTBS,
+  canonicalizeBinding,
+  declarationDigestHex,
+  type Binding,
+  type BuildBindingInput,
+  type Locale,
+} from './binding/v1.js';
+
+export {
   REGISTRY_V4_ERROR_SELECTORS,
   agePublicSignalsV4,
   ageInputsV4FromPublicSignals,
