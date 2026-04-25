@@ -22,20 +22,8 @@ export default defineConfig({
       testMatch: /smoke\.spec\.ts/,
     },
     {
-      name: 'flow',
-      testMatch: /flow\.spec\.ts/,
-    },
-    {
       name: 'ua',
       testMatch: /ua-register\.spec\.ts/,
-    },
-    {
-      name: 'real-prover',
-      testMatch: /happy-path\.spec\.ts/,
-    },
-    {
-      name: 'real-qes',
-      testMatch: /real-qes\.spec\.ts/,
     },
     {
       name: 'ua-upload-real-diia',

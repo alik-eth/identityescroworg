@@ -46,7 +46,7 @@ describe('roleFromPath', () => {
   });
   it('returns holder for /escrow/setup and the default step routes', () => {
     expect(roleFromPath('/escrow/setup')).toBe('holder');
-    expect(roleFromPath('/generate')).toBe('holder');
+    expect(roleFromPath('/ua/generate')).toBe('holder');
     expect(roleFromPath('/')).toBe('holder');
   });
 });

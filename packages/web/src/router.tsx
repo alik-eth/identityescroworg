@@ -9,10 +9,6 @@ import { useTranslation } from 'react-i18next';
 import { LanguageSwitch } from './components/LanguageSwitch';
 import { RoleProvider, RoleSwitcher } from './components/RoleSwitcher';
 import { IndexScreen } from './routes/index';
-import { GenerateScreen } from './routes/generate';
-import { SignScreen } from './routes/sign';
-import { UploadScreen } from './routes/upload';
-import { RegisterScreen } from './routes/register';
 import { EscrowSetupScreen } from './routes/escrowSetup';
 import { EscrowRecoverScreen } from './routes/escrowRecover';
 import { EscrowNotaryScreen } from './routes/escrowNotary';
@@ -23,13 +19,6 @@ import { CustodianInbox } from './routes/custodian.$agentId.inbox';
 import { CustodianReleases } from './routes/custodian.$agentId.releases';
 import { CustodianKeys } from './routes/custodian.$agentId.keys';
 import { buildUaRoutes } from './routes/ua/routes';
-
-const STEPS = [
-  { to: '/generate', key: 'nav.generate' },
-  { to: '/sign', key: 'nav.sign' },
-  { to: '/upload', key: 'nav.upload' },
-  { to: '/register', key: 'nav.register' },
-] as const;
 
 function RootLayoutInner() {
   const { t } = useTranslation();
@@ -45,24 +34,6 @@ function RootLayoutInner() {
               {t('app.title')}
             </h1>
           </Link>
-          <nav className="hidden md:flex items-center gap-1 text-sm">
-            {STEPS.map((step, i) => (
-              <Link
-                key={step.to}
-                to={step.to}
-                className="px-3 py-1.5 rounded-full text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 transition-colors"
-                activeProps={{
-                  className:
-                    'px-3 py-1.5 rounded-full text-emerald-300 bg-emerald-500/10 border border-emerald-500/30',
-                }}
-              >
-                <span className="font-mono text-[10px] text-slate-500 mr-1">
-                  {String(i + 1).padStart(2, '0')}
-                </span>
-                {t(step.key)}
-              </Link>
-            ))}
-          </nav>
           <div className="flex items-center gap-3">
             <RoleSwitcher />
             <LanguageSwitch />
@@ -93,30 +64,6 @@ const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
   component: IndexScreen,
-});
-
-const generateRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/generate',
-  component: GenerateScreen,
-});
-
-const signRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/sign',
-  component: SignScreen,
-});
-
-const uploadRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/upload',
-  component: UploadScreen,
-});
-
-const registerRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/register',
-  component: RegisterScreen,
 });
 
 const escrowSetupRoute = createRoute({
@@ -183,10 +130,6 @@ const { uaRoute, children: uaChildren } = buildUaRoutes(rootRoute);
 
 const routeTree = rootRoute.addChildren([
   indexRoute,
-  generateRoute,
-  signRoute,
-  uploadRoute,
-  registerRoute,
   escrowSetupRoute,
   escrowRecoverRoute,
   escrowNotaryRoute,
