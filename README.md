@@ -147,6 +147,19 @@ If `requireAgeQualification == true`, the registry should:
 
 This keeps "trusted signer" separate from "adult signer". The current QKB path provides the former only.
 
+### Proving topology — offline CLI, not browser
+
+Groth16 proofs for the UA V4 leaf circuit (6.54M constraints, ~3.4 GB zkey) are produced **offline on the Holder's machine** via [`@qkb/cli`](packages/qkb-cli) and submitted to `QKBRegistryV4.register(...)` via wallet — the SPA never sees the user's QES `.p7s`. This is both a privacy property (the legal-identity-bearing signature stays local) and a hard capacity reality.
+
+A Playwright benchmark at [`packages/web/tests/e2e/wasm-prover-benchmark.spec.ts`](packages/web/tests/e2e/wasm-prover-benchmark.spec.ts) documents the in-browser feasibility ceiling against the live R2-hosted UA V4 leaf artifacts:
+
+| Phase | Wall | Peak chromium RSS | Peak JS heap |
+|---|---|---|---|
+| witness gen (~110 s on 6.54M constraints) + zkey load | **119 s** | **2.65 GB** | 756 MB |
+| actual Groth16 prove compute | *never reached* | — | — |
+
+The renderer climbs past 2.65 GB **just to load the zkey** before any prove compute begins; on a typical 8 GB consumer laptop the renderer would OOM before the prove step starts. Run with `E2E_WASM_BENCH=1 pnpm exec playwright test --project=wasm-prover-benchmark` (cold first run downloads ~3.4 GB; cache survives across runs). See [`packages/web/tests/e2e/wasm-prover-benchmark.RESULTS.md`](packages/web/tests/e2e/wasm-prover-benchmark.RESULTS.md) for the full debug breakdown across five iterations.
+
 ### Phase 2 — QIE
 
 ```
@@ -169,7 +182,7 @@ Qualified Trust Service Providers act as dumb custodians. Release yields the raw
 - [`packages/lotl-flattener`](packages/lotl-flattener) — offline CLI; EU LOTL → Poseidon Merkle CA set (`trusted-cas.json`, `root.json`). Phase 2 adds `qie-agents.json`.
 - [`packages/circuits`](packages/circuits) — Circom circuits for `R_QKB` (RSA + ECDSA-P256 variants), Groth16 artifacts, generated `Verifier.sol`.
 - [`packages/contracts`](packages/contracts) — `QKBVerifier` library + `QKBRegistry` reference contract (Foundry). Phase 2 adds `AuthorityArbitrator` (with evidence-envelope emission) and the escrow state machine (`ACTIVE → RELEASE_PENDING → RELEASED` + Holder cancellation window); `TimelockArbitrator` is stubbed and deferred post-MVP.
-- [`packages/web`](packages/web) — TanStack Router static SPA; binding generator, in-browser snarkjs prover, registry client. EN + UK. Phase 2 adds `/escrow/setup` and the notary-assisted `/escrow/notary` recovery flow (standalone self-recovery remains reachable via `?mode=self`).
+- [`packages/web`](packages/web) — TanStack Router static SPA; binding generator + registry client at `/ua/*` (V4 country-scoped). Real Groth16 proving runs offline via [`@qkb/cli`](packages/qkb-cli) — see [Proving topology](#proving-topology--offline-cli-not-browser) above. EN + UK. Phase 2 adds `/escrow/setup` and the notary-assisted `/escrow/notary` recovery flow (standalone self-recovery remains reachable via `?mode=self`).
 - [`packages/qie-core`](packages/qie-core) *(Phase 2)* — hybrid KEM, Shamir, envelope codec, predicate evaluator. Pure TS, browser + Node.
 - [`packages/qie-agent`](packages/qie-agent) *(Phase 2)* — Fastify HTTP custodian reference implementation.
 - [`packages/qie-cli`](packages/qie-cli) *(Phase 2)* — operator/holder/recipient CLI.
