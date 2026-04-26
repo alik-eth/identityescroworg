@@ -21,6 +21,7 @@
     "@noble/secp256k1": "^2.1.0",
     "@qkb/qie-agent": "workspace:*",
     "@qkb/qie-core": "workspace:*",
+    "@qkb/sdk": "workspace:*",
     "@tailwindcss/vite": "^4.2.2",
     "@tanstack/react-query": "^5.51.0",
     "@tanstack/react-router": "^1.45.0",
