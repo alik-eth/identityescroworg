@@ -590,6 +590,18 @@ async function main() {
     policyMerkleIndices: tree.indices.map((v) => v.toString()),
   };
 
+  // EXPORT_INPUT_ONLY=1 dumps the assembled `input` object as a committable
+  // fixture and exits before the (~5-minute, build-artifact-dependent) prove.
+  // Used to feed the browser wasm-prover benchmark without re-running the
+  // synthetic key generation each time.
+  if (process.env.EXPORT_INPUT_ONLY === '1') {
+    mkdirSync(OUT_DIR, { recursive: true });
+    const inputPath = join(OUT_DIR, 'leaf-synthetic-qkb2.input.json');
+    writeFileSync(inputPath, JSON.stringify(input, null, 2));
+    console.log('wrote', inputPath);
+    process.exit(0);
+  }
+
   // 9.4 fullProve (witness + prove + verify).
   console.log('calling snarkjs.groth16.fullProve — expect ~5 min for 6.38M constraints');
   const t0 = Date.now();
