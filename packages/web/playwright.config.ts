@@ -29,5 +29,9 @@ export default defineConfig({
       name: 'ua-upload-real-diia',
       testMatch: /ua-upload-real-diia\.spec\.ts/,
     },
+    {
+      name: 'wasm-prover-benchmark',
+      testMatch: /wasm-prover-benchmark\.spec\.ts/,
+    },
   ],
 });

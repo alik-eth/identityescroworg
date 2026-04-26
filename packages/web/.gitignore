@@ -3,4 +3,6 @@ dist
 release
 playwright-report
 test-results
+tests/e2e/results
+tests/e2e/.r2-cache
 .turbo

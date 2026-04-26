@@ -511,9 +511,15 @@ async function main() {
   const nullifier = await poseidon([secret, ctxHash]);
   console.log('nullifier:', nullifier.toString());
 
-  // DOB: no 2.5.29.9 OID in synthetic leaf DER → dobSupported=0,
-  // dobYmd=0, sourceTag=1. dobCommit = Poseidon(0, 1).
-  const dobCommit = await poseidon([0n, 1n]);
+  // DOB: no 2.5.29.9 OID in synthetic leaf DER → dobSupported=0.
+  //
+  // Post-M11 hardening, the circuit gates dobCommit by dobSupported:
+  // `dobCommitGated = dobSupported === 1 ? extractorCommit : 0`, then
+  // asserts `dobCommit === dobCommitGated`. So when dobSupported=0 the
+  // public-input dobCommit MUST be 0. (Pre-M11 the circuit allowed any
+  // dobCommit while dobSupported=0 — the historical Poseidon(0,1) value
+  // was a leftover from that phase and is now a constraint violation.)
+  const dobCommit = 0n;
   const dobSupported = 0n;
 
   // 9.3 Build witness input JSON.
@@ -589,6 +595,18 @@ async function main() {
     policyMerklePath: tree.path.map((v) => v.toString()),
     policyMerkleIndices: tree.indices.map((v) => v.toString()),
   };
+
+  // EXPORT_INPUT_ONLY=1 dumps the assembled `input` object as a committable
+  // fixture and exits before the (~5-minute, build-artifact-dependent) prove.
+  // Used to feed the browser wasm-prover benchmark without re-running the
+  // synthetic key generation each time.
+  if (process.env.EXPORT_INPUT_ONLY === '1') {
+    mkdirSync(OUT_DIR, { recursive: true });
+    const inputPath = join(OUT_DIR, 'leaf-synthetic-qkb2.input.json');
+    writeFileSync(inputPath, JSON.stringify(input, null, 2));
+    console.log('wrote', inputPath);
+    process.exit(0);
+  }
 
   // 9.4 fullProve (witness + prove + verify).
   console.log('calling snarkjs.groth16.fullProve — expect ~5 min for 6.38M constraints');
