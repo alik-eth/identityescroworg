@@ -24,11 +24,16 @@ import {
   existsSync,
   statSync,
   createReadStream,
+  createWriteStream,
+  unlinkSync,
 } from 'node:fs';
 import { resolve, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '../../../..');
@@ -73,14 +78,75 @@ test.describe('UA V4 leaf — browser wasm prover benchmark', () => {
         return;
       }
       const stats = statSync(filePath);
-      res.statusCode = 200;
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader(
-        'Content-Type',
-        filename.endsWith('.wasm') ? 'application/wasm' : 'application/octet-stream',
-      );
-      res.setHeader('Content-Length', String(stats.size));
-      res.setHeader('Cache-Control', 'public, max-age=86400');
+      const total = stats.size;
+      const commonHeaders: Record<string, string> = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Range',
+        'Access-Control-Expose-Headers': 'Accept-Ranges, Content-Length, Content-Range',
+        'Accept-Ranges': 'bytes',
+        'Content-Type': filename.endsWith('.wasm')
+          ? 'application/wasm'
+          : 'application/octet-stream',
+        'Cache-Control': 'public, max-age=86400',
+      };
+
+      // CORS preflight for Range header
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204, commonHeaders);
+        res.end();
+        return;
+      }
+
+      // snarkjs (via ffjavascript FastFile) issues HTTP Range requests to
+      // chunk-read the multi-GB zkey. Without 206 Partial-Content support
+      // every request returns the full 3.4 GB stream and the browser fetch
+      // bails partway through. Parse and honor `bytes=START-END`.
+      const range = req.headers['range'];
+      if (typeof range === 'string') {
+        const m = /^bytes=(\d*)-(\d*)$/.exec(range.trim());
+        if (m) {
+          const startStr = m[1] ?? '';
+          const endStr = m[2] ?? '';
+          let start: number;
+          let end: number;
+          if (startStr === '' && endStr !== '') {
+            // suffix-length form: bytes=-N → last N bytes
+            const suffix = Number(endStr);
+            start = Math.max(0, total - suffix);
+            end = total - 1;
+          } else {
+            start = startStr === '' ? 0 : Number(startStr);
+            end = endStr === '' ? total - 1 : Number(endStr);
+          }
+          if (
+            !Number.isFinite(start) ||
+            !Number.isFinite(end) ||
+            start < 0 ||
+            end >= total ||
+            start > end
+          ) {
+            res.writeHead(416, {
+              ...commonHeaders,
+              'Content-Range': `bytes */${total}`,
+            });
+            res.end();
+            return;
+          }
+          const chunkLen = end - start + 1;
+          res.writeHead(206, {
+            ...commonHeaders,
+            'Content-Range': `bytes ${start}-${end}/${total}`,
+            'Content-Length': String(chunkLen),
+          });
+          createReadStream(filePath, { start, end }).pipe(res);
+          return;
+        }
+      }
+
+      res.writeHead(200, {
+        ...commonHeaders,
+        'Content-Length': String(total),
+      });
       createReadStream(filePath).pipe(res);
     });
     await new Promise<void>((r) => fixtureServer!.listen(0, '127.0.0.1', r));
@@ -115,22 +181,35 @@ test.describe('UA V4 leaf — browser wasm prover benchmark', () => {
       const url = route.request().url();
       const filename = basename(new URL(url).pathname);
       const cachePath = resolve(cacheDir, filename);
-      if (!existsSync(cachePath)) {
+      if (!existsSync(cachePath) || statSync(cachePath).size === 0) {
+        // 0-byte file = aborted prior run. Clean it up before re-fetching.
+        if (existsSync(cachePath)) unlinkSync(cachePath);
         console.log(`[r2-cache] MISS ${filename} — fetching ${url}`);
         const t0 = Date.now();
         const res = await fetch(url);
-        if (!res.ok) {
+        if (!res.ok || !res.body) {
           await route.abort();
-          throw new Error(`R2 fetch failed: ${res.status} ${res.statusText} for ${url}`);
+          throw new Error(
+            `R2 fetch failed: status=${res.status} body=${!!res.body} for ${url}`,
+          );
         }
-        // Stream the response body to disk so we don't hold 3.8 GB resident
-        // in the Node heap on the cold path. Reusing a Buffer is fine for
-        // the 40 MB wasm; for the 3.8 GB zkey we flush as we go.
-        const body = Buffer.from(await res.arrayBuffer());
-        writeFileSync(cachePath, body);
+        // Stream straight to disk — the 3.55 GB zkey blows past Node's
+        // 2 GB Buffer cap (`Buffer.from(await arrayBuffer())` throws
+        // RangeError above 2^31 - 1 bytes). Use the stream pipeline so
+        // memory stays bounded.
+        try {
+          await pipeline(
+            Readable.fromWeb(res.body as unknown as NodeReadableStream),
+            createWriteStream(cachePath),
+          );
+        } catch (err) {
+          if (existsSync(cachePath)) unlinkSync(cachePath);
+          throw err;
+        }
+        const size = statSync(cachePath).size;
         const wall = ((Date.now() - t0) / 1000).toFixed(1);
         console.log(
-          `[r2-cache] STORED ${filename} (${(body.byteLength / 1024 / 1024).toFixed(1)} MB in ${wall}s)`,
+          `[r2-cache] STORED ${filename} (${(size / 1024 / 1024).toFixed(1)} MB in ${wall}s)`,
         );
       } else {
         const size = statSync(cachePath).size;
