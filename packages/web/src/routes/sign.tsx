@@ -130,18 +130,14 @@ export function SignScreen() {
       <div className="mt-8 flex gap-3">
         <button
           type="button"
-          onClick={() =>
-            navigate({ to: session.bcanonV2B64 ? '/ua/generate' : '/generate' })
-          }
+          onClick={() => navigate({ to: '/ua/generate' })}
           className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm rounded"
         >
           {t('common.back')}
         </button>
         <button
           type="button"
-          onClick={() =>
-            navigate({ to: session.bcanonV2B64 ? '/ua/upload' : '/upload' })
-          }
+          onClick={() => navigate({ to: '/ua/upload' })}
           data-testid="sign-next"
           className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-900 text-sm font-semibold rounded-md"
         >

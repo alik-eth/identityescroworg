@@ -14,7 +14,7 @@ export function IndexScreen() {
       <p className="mt-6 text-slate-400 max-w-xl mx-auto">{t('index.subheading')}</p>
       <div className="mt-10 flex justify-center">
         <Link
-          to="/generate"
+          to="/ua"
           className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg transition-colors text-sm"
         >
           {t('index.start')}

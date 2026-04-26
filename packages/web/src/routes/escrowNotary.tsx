@@ -224,7 +224,7 @@ export function EscrowNotaryScreen() {
                 {t('escrow.notary.done')} ({state.shares.length} shares)
               </p>
               <a
-                href="/generate"
+                href="/ua/generate"
                 data-testid="rebind-link"
                 className="inline-block bg-emerald-500/10 border border-emerald-500/30 px-4 py-2 rounded"
               >
