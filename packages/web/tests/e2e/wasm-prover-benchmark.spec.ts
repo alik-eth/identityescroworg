@@ -17,9 +17,18 @@
  * only that the harness ran end-to-end, not that proving succeeded.
  */
 import { test, expect } from '@playwright/test';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import {
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  existsSync,
+  statSync,
+  createReadStream,
+} from 'node:fs';
+import { resolve, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '../../../..');
@@ -43,6 +52,48 @@ test.describe('UA V4 leaf — browser wasm prover benchmark', () => {
   test.skip(!process.env.E2E_WASM_BENCH, 'set E2E_WASM_BENCH=1 to run');
   test.setTimeout(20 * 60_000);
 
+  // The R2 bucket doesn't serve CORS for cross-origin browser fetches, and
+  // the 3.8 GB zkey body is too large to round-trip through Playwright's
+  // CDP-based `route.fulfill`. Workaround: spin up a tiny CORS-enabled HTTP
+  // server that streams cached files from disk, then 302-redirect any
+  // `prove.identityescrow.org` request to it. The cache survives across
+  // runs so the (slow, ~5–15 min) initial R2 download only happens once.
+  const cacheDir = resolve(__dirname, '.r2-cache');
+  let fixtureServer: Server | null = null;
+  let fixturePort = 0;
+
+  test.beforeAll(async () => {
+    mkdirSync(cacheDir, { recursive: true });
+    fixtureServer = createServer((req, res) => {
+      const filename = basename(req.url ?? '/');
+      const filePath = resolve(cacheDir, filename);
+      if (!existsSync(filePath)) {
+        res.statusCode = 404;
+        res.end(`not in cache: ${filename}`);
+        return;
+      }
+      const stats = statSync(filePath);
+      res.statusCode = 200;
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader(
+        'Content-Type',
+        filename.endsWith('.wasm') ? 'application/wasm' : 'application/octet-stream',
+      );
+      res.setHeader('Content-Length', String(stats.size));
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      createReadStream(filePath).pipe(res);
+    });
+    await new Promise<void>((r) => fixtureServer!.listen(0, '127.0.0.1', r));
+    fixturePort = (fixtureServer!.address() as AddressInfo).port;
+    console.log(`[fixture-server] listening on http://127.0.0.1:${fixturePort}`);
+  });
+
+  test.afterAll(async () => {
+    if (fixtureServer) {
+      await new Promise<void>((r) => fixtureServer!.close(() => r()));
+    }
+  });
+
   test('snarkjs.groth16.fullProve against synthetic input + R2 artifacts', async ({
     page,
   }) => {
@@ -54,6 +105,47 @@ test.describe('UA V4 leaf — browser wasm prover benchmark', () => {
     });
     page.on('pageerror', (err) => {
       console.error('[browser:pageerror]', err.message);
+    });
+
+    // For each prove.identityescrow.org request: ensure the cache is warm
+    // (fetch from R2 once) then 302-redirect to the local fixture server.
+    // The browser follows the redirect, the fixture server streams from
+    // disk with CORS headers, snarkjs gets the bytes.
+    await page.route('**/prove.identityescrow.org/**', async (route) => {
+      const url = route.request().url();
+      const filename = basename(new URL(url).pathname);
+      const cachePath = resolve(cacheDir, filename);
+      if (!existsSync(cachePath)) {
+        console.log(`[r2-cache] MISS ${filename} — fetching ${url}`);
+        const t0 = Date.now();
+        const res = await fetch(url);
+        if (!res.ok) {
+          await route.abort();
+          throw new Error(`R2 fetch failed: ${res.status} ${res.statusText} for ${url}`);
+        }
+        // Stream the response body to disk so we don't hold 3.8 GB resident
+        // in the Node heap on the cold path. Reusing a Buffer is fine for
+        // the 40 MB wasm; for the 3.8 GB zkey we flush as we go.
+        const body = Buffer.from(await res.arrayBuffer());
+        writeFileSync(cachePath, body);
+        const wall = ((Date.now() - t0) / 1000).toFixed(1);
+        console.log(
+          `[r2-cache] STORED ${filename} (${(body.byteLength / 1024 / 1024).toFixed(1)} MB in ${wall}s)`,
+        );
+      } else {
+        const size = statSync(cachePath).size;
+        console.log(
+          `[r2-cache] HIT ${filename} (${(size / 1024 / 1024).toFixed(1)} MB)`,
+        );
+      }
+      await route.fulfill({
+        status: 302,
+        headers: {
+          Location: `http://127.0.0.1:${fixturePort}/${filename}`,
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: '',
+      });
     });
 
     // Boot the SPA preview server so the wasm/zkey fetch happens from a
