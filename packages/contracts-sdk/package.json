@@ -1,0 +1,17 @@
+{
+  "name": "@qkb/contracts-sdk",
+  "version": "0.1.0",
+  "description": "Solidity SDK for gating contracts on verified-Ukrainian status (QKB protocol).",
+  "license": "MIT",
+  "files": [
+    "src/**/*.sol",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "forge build --root .",
+    "test": "forge test --root ."
+  }
+}
