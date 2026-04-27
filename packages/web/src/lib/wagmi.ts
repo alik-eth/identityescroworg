@@ -8,7 +8,7 @@ const TESTING = import.meta.env.VITE_CHAIN === 'sepolia';
 export const wagmiConfig: Config = getDefaultConfig({
   appName: 'Identity Escrow',
   projectId: import.meta.env.VITE_WALLETCONNECT_PROJECT_ID ?? '',
-  chains: TESTING ? [sepolia] : [base, sepolia],
+  chains: TESTING ? [sepolia, base] : [base, sepolia],
   ssr: false,
 });
 

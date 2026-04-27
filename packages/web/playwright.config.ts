@@ -9,12 +9,17 @@ export default defineConfig({
   reporter: 'list',
   use: {
     baseURL: 'http://127.0.0.1:4173',
+    trace: 'on-first-retry',
   },
   webServer: {
     command: 'pnpm run build && pnpm run preview',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    timeout: 180_000,
+    env: {
+      VITE_CHAIN: 'sepolia',
+      VITE_WALLETCONNECT_PROJECT_ID: 'e2e-mock-walletconnect-project-id',
+    },
   },
   projects: [
     {
@@ -32,6 +37,11 @@ export default defineConfig({
     {
       name: 'wasm-prover-benchmark',
       testMatch: /wasm-prover-benchmark\.spec\.ts/,
+    },
+    {
+      name: 'chromium',
+      use: { browserName: 'chromium' },
+      testMatch: /(landing|flow-happy|flow-already-minted|flow-deadline-expired|i18n|mobile)\.spec\.ts/,
     },
   ],
 });
