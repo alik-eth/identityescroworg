@@ -32,7 +32,14 @@ export function IndexScreen() {
             )}
           </p>
 
-          <hr className="rule" style={{ marginTop: '6rem', marginBottom: '4rem' }} />
+          <hr
+            className="rule"
+            style={{
+              marginTop: '6rem',
+              marginBottom: '4rem',
+              borderTopColor: 'var(--seal)',
+            }}
+          />
 
           <section aria-labelledby="privacy-heading">
             <h2
@@ -53,6 +60,12 @@ export function IndexScreen() {
                     letterSpacing: '0.08em',
                   }}
                 >
+                  <span
+                    aria-hidden="true"
+                    style={{ color: 'var(--seal)', marginRight: '0.5em' }}
+                  >
+                    ·
+                  </span>
                   {t('landing.privacy.onLedgerLabel', 'What is on the ledger')}
                 </dt>
                 <dd className="text-xl" style={{ color: 'var(--ink)' }}>
@@ -72,6 +85,12 @@ export function IndexScreen() {
                     letterSpacing: '0.08em',
                   }}
                 >
+                  <span
+                    aria-hidden="true"
+                    style={{ color: 'var(--seal)', marginRight: '0.5em' }}
+                  >
+                    ·
+                  </span>
                   {t('landing.privacy.notOnLedgerLabel', 'What is not on the ledger')}
                 </dt>
                 <dd className="text-xl" style={{ color: 'var(--ink)' }}>
@@ -91,6 +110,12 @@ export function IndexScreen() {
                     letterSpacing: '0.08em',
                   }}
                 >
+                  <span
+                    aria-hidden="true"
+                    style={{ color: 'var(--seal)', marginRight: '0.5em' }}
+                  >
+                    ·
+                  </span>
                   {t(
                     'landing.privacy.recoveryLabel',
                     'What can be recovered, by whom, under what process',

@@ -68,6 +68,19 @@ export function MintScreen() {
               : t('mint.title', 'Mint your certificate')}
           </h1>
           <hr className="rule" />
+          {dep && (
+            <p
+              className="text-mono text-xs mb-4"
+              style={{
+                color: 'var(--seal)',
+                fontVariant: 'small-caps',
+                letterSpacing: '0.12em',
+              }}
+            >
+              Issued by authority · {dep.registry.slice(0, 6)}…
+              {dep.registry.slice(-4)} · {chainLabel}
+            </p>
+          )}
           <div className={txMined ? 'cert-stamp-in' : ''}>
             <CertificatePreview
               tokenId={previewTokenId}
