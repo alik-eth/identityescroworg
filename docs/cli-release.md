@@ -47,6 +47,28 @@ gating — losing the gate later is harder to spot.
 - GitHub release: `softprops/action-gh-release@v2` creates the release on
   the first matrix step that runs and appends each subsequent binary.
 
+## Homebrew tap setup (one-time)
+
+Before the first release, create the tap repo at
+`https://github.com/qkb-eth/homebrew-qkb`:
+
+1. Create the repo (private or public, Homebrew works either way; public
+   is conventional). Initialize with a README.
+2. Copy `docs/cli-release-homebrew/Formula/qkb.rb` from this repo into
+   `Formula/qkb.rb` in the tap repo. Commit and push.
+3. Provision the `HOMEBREW_TAP_TOKEN` secret in this repo's settings:
+   a fine-grained PAT scoped to the tap repo with `Contents: read & write`.
+
+After step 3, every `cli-v*` tag push to this repo runs the workflow's
+`update-tap` job, which clones the tap repo, rewrites the four `sha256`
+lines and the `version` line in `Formula/qkb.rb`, and pushes a commit
+`qkb cli-v<X.Y.Z>`. Users then `brew tap qkb-eth/qkb && brew install qkb`.
+
+The formula template in `docs/cli-release-homebrew/Formula/qkb.rb` is
+load-bearing for the tap repo's initial state. If you change the binary
+file naming (e.g. add a new architecture, rename `qkb-linux-x64`), update
+the template here AND the `update-tap` job's loop.
+
 ## Local dry-run
 
 The workflow can't be run locally end-to-end because of the secrets, but
