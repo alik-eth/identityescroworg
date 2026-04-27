@@ -29,6 +29,7 @@ RUN pnpm install --frozen-lockfile=false --filter @qkb/web...
 # Dependency packages must be built first — web imports them via "./dist".
 RUN pnpm -F @qkb/qie-core build \
  && pnpm -F @qkb/qie-agent build \
+ && pnpm -F @qkb/sdk build \
  && pnpm -F @qkb/web build
 
 # ---- Runtime ----------------------------------------------------------------
