@@ -103,4 +103,36 @@ contract IdentityEscrowNFTTest is Test {
         vm.expectRevert(bytes("ALREADY_MINTED"));
         nft.mint();
     }
+
+    function test_tokenURI_returnsValidJson() public {
+        bytes32 n = bytes32(uint256(0xDEADBEEF));
+        registry.set(ALICE, n);
+        vm.warp(1735689600); // pinned for determinism
+        vm.prank(ALICE);
+        uint256 tokenId = nft.mint();
+        string memory uri = nft.tokenURI(tokenId);
+        bytes memory u = bytes(uri);
+        assertGt(u.length, 100);
+        assertEq(string(_slice(u, 0, 29)), "data:application/json;base64,");
+    }
+
+    function test_tokenURI_snapshotForKnownNullifier() public {
+        bytes32 n = bytes32(uint256(0xDEADBEEF));
+        registry.set(ALICE, n);
+        vm.warp(1735689600);
+        vm.prank(ALICE);
+        uint256 tokenId = nft.mint();
+        string memory uri = nft.tokenURI(tokenId);
+        bytes32 hashed = keccak256(bytes(uri));
+        bytes memory expected = vm.readFileBinary(
+            "packages/contracts/test/fixtures/snapshots/cert-token-1-deadbeef.txt"
+        );
+        bytes32 expectedHash = abi.decode(expected, (bytes32));
+        assertEq(hashed, expectedHash, "renderer drift detected - bump snapshot intentionally");
+    }
+
+    function _slice(bytes memory b, uint start, uint len) private pure returns (bytes memory r) {
+        r = new bytes(len);
+        for (uint i = 0; i < len; i++) r[i] = b[start + i];
+    }
 }
