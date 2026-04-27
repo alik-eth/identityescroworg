@@ -6,9 +6,12 @@ export default defineConfig({
   timeout: 60_000,
   fullyParallel: false,
   reporter: 'list',
+  retries: 1,
   use: {
     trace: 'retain-on-failure',
-    viewport: { width: 1440, height: 900 },
+    // Per-test viewports come from describe blocks in the spec
+    // (desktop 1440x900, tablet 768x1024, mobile 390x844).
+    // No global viewport here — let the spec drive it.
   },
   projects: [
     {
