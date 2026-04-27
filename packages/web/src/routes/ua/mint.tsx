@@ -6,6 +6,7 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
 } from 'wagmi';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useTranslation } from 'react-i18next';
 import { deploymentForChainId, qkbRegistryV4Abi, identityEscrowNftAbi } from '@qkb/sdk';
 import { CertificatePreview } from '../../components/CertificatePreview';
@@ -14,7 +15,7 @@ import { DocumentFooter } from '../../components/DocumentFooter';
 
 export function MintScreen() {
   const { t } = useTranslation();
-  const { address } = useAccount();
+  const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const dep = deploymentForChainId(chainId);
 
@@ -77,7 +78,15 @@ export function MintScreen() {
             />
           </div>
           <div className="mt-8">
-            {!minted && !txMined && (
+            {!minted && !txMined && !isConnected && (
+              <div className="flex flex-col items-start gap-3">
+                <p className="text-sm" style={{ color: 'var(--ink)', opacity: 0.7 }}>
+                  {t('mint.connectPrompt', 'Connect a wallet to mint your certificate.')}
+                </p>
+                <ConnectButton showBalance={false} accountStatus="address" chainStatus="icon" />
+              </div>
+            )}
+            {!minted && !txMined && isConnected && (
               <button
                 onClick={onMint}
                 disabled={isPending || !nullifier}

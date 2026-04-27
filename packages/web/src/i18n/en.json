@@ -22,6 +22,7 @@
   "mint": {
     "title": "Mint your certificate",
     "titleHolder": "Your certificate",
+    "connectPrompt": "Connect a wallet to mint your certificate.",
     "pending": "Minting…",
     "cta": "Mint Certificate",
     "opensea": "View on OpenSea",
