@@ -140,3 +140,34 @@ test('prod — /integrations styled', async ({ page }) => {
   expect(monitor.pageErrors).toEqual([]);
   expect(monitor.consoleErrors).toEqual([]);
 });
+
+test('prod — /ua/mint disconnected renders mint chrome', async ({ page }) => {
+  const monitor = await captureNetwork(page);
+  await page.goto(`${PROD}/ua/mint`, { waitUntil: 'networkidle', timeout: 30_000 });
+  // Disconnected: route renders the mint heading + a disabled "Mint Certificate"
+  // button (the route itself doesn't gate on isConnected; that's a known UX gap).
+  await expect(page.getByRole('heading', { name: /Mint your certificate/i })).toBeVisible({
+    timeout: 15_000,
+  });
+  const mintBtn = page.getByRole('button', { name: /Mint Certificate/i });
+  await expect(mintBtn).toBeVisible({ timeout: 10_000 });
+  await expect(mintBtn).toBeDisabled();
+  await page.evaluate(() => (document as Document & { fonts: { ready: Promise<void> } }).fonts.ready);
+  await page.screenshot({ path: `${SCREENSHOT_DIR}/mint.png`, fullPage: true });
+  const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  console.log('[/ua/mint body bg]', bg);
+  console.log('[/ua/mint consoleErrors]', monitor.consoleErrors.length);
+  for (const e of monitor.consoleErrors) console.log('  err:', e);
+  expect(bg).toBe('rgb(244, 239, 230)');
+  const non2xx = monitor.captured.filter((r) => r.status >= 400);
+  for (const r of non2xx) console.log('  ', r.status, r.url);
+  expect(non2xx.length).toBe(0);
+  expect(monitor.pageErrors).toEqual([]);
+  // CertificatePreview renders an SVG with height="auto" (legitimate CSS-driven
+  // sizing, but the browser logs an attribute parse warning). Pre-existing,
+  // outside M9 scope. Filter only that exact warning.
+  const unexpectedErrors = monitor.consoleErrors.filter(
+    (e) => !/<svg> attribute height: Expected length, "auto"/.test(e),
+  );
+  expect(unexpectedErrors).toEqual([]);
+});
