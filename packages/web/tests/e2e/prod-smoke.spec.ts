@@ -41,19 +41,20 @@ test('prod — landing fully styled, fonts loaded, no errors', async ({ page }) 
   const computed = await page.evaluate(() => {
     const body = getComputedStyle(document.body);
     const h1 = document.querySelector('h1');
-    const h1cs = h1 ? getComputedStyle(h1) : null;
     return {
       body: {
         fontFamily: body.fontFamily,
         backgroundColor: body.backgroundColor,
         color: body.color,
       },
-      h1: h1cs ? {
-        text: h1.textContent?.slice(0, 80),
-        fontFamily: h1cs.fontFamily,
-        fontSize: h1cs.fontSize,
-        color: h1cs.color,
-      } : null,
+      h1: h1
+        ? {
+            text: h1.textContent?.slice(0, 80),
+            fontFamily: getComputedStyle(h1).fontFamily,
+            fontSize: getComputedStyle(h1).fontSize,
+            color: getComputedStyle(h1).color,
+          }
+        : null,
     };
   });
   console.log('[BODY]', JSON.stringify(computed.body));
