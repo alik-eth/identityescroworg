@@ -18,6 +18,7 @@
   "deployedAt": "2026-04-19T12:00:00Z",
   "phase1RegistryDeprecated": "0x7F36aF783538Ae8f981053F2b0E45421a1BF4815",
   "phase2V2RegistryDeprecated": "0xcac30ff7B0566b6E991061cAA5C169c82A4319a4",
+  "phase2V4RegistryUaDeprecated": "0x4c8541f4Ff16AE2650C4e146587E81eD56A2456C",
   "ceremony": {
     "source": "2026-04-19-split-proof-ecdsa",
     "leafZkeySha256": "0fdbc671e087ae2d7cad58e7c33191251622f5d2b687f7f91827a8b1641299fb",
@@ -27,8 +28,16 @@
   "notes": "Phase 2 split-proof V3 deploy. ECDSA leaf + chain verifiers are REAL Groth16 from the 2026-04-19 ceremony. RSA slots are stubs (no RSA ceremony — defer until real non-Diia QES test material is available). trustedListRoot is the real Diia LOTL Poseidon-Merkle root; rotate via setRsaLeafVerifier/setRsaChainVerifier when a real RSA ceremony lands.",
   "countries": {
     "UA": {
-      "registry": "0x4c8541f4Ff16AE2650C4e146587E81eD56A2456C",
-      "registryVersion": "v4",
+      "registry": "0xd33B73EB9c78d7AcE7AB84adAF4c518573Ce47a6",
+      "registryVersion": "v4-with-nullifierOf",
+      "registryPrevious": "0x4c8541f4Ff16AE2650C4e146587E81eD56A2456C",
+      "registryRotatedAt": "2026-04-27T09:13:03Z",
+      "registryRotationTx": "0xc3f6c8d8a5d233540badf2a26a1fe8c7e5131c3fda94a4609c3900d23ce8b722",
+      "registryRotationReason": "v5 phase — added nullifierOf(address) mapping + isVerified(address) view, populated during register(). Required for IdentityEscrowNFT mint gating.",
+      "identityEscrowNft": "0x30E13c76D0BB02Ab4a65048B6546ABC3ADDabA48",
+      "identityEscrowNftDeployTx": "0x10b33248edbcbbc8aeac88a6ddcd60c40f877816f2e65a56b6ea364852010496",
+      "mintDeadline": 1792833194,
+      "mintDeadlineISO": "2026-10-24T09:13:14Z",
       "country": "UA",
       "leafVerifier": "0xF407AFCEE7b5eE2AE2ef52041DFC224Fed010Cc3",
       "leafVerifierPrevious": "0x32e7A1F8Cd3051765D4748d94E48407b2994124b",
@@ -44,8 +53,8 @@
       "policyRootRotationTx": "0x13e0b98b71a3d176ae5336a8ffde5bc2b2788f8b8e16ca8c4375cf653ebb4146",
       "policyRootRotationReason": "depth-mismatch fix: previous root computed at depth 4; circuit QKBPresentationEcdsaLeafV4 uses MERKLE_DEPTH=16. New root = buildPolicyTreeFromLeaves([uaV1Leaf], 16).",
       "admin": "0xB8d121CD0B2D0AB3df2aFF0B45B2fD354FF4c1f7",
-      "deployedAt": "2026-04-24T01:34:04Z",
-      "deployTx": "0xb3cd9274fb9f7bfe5b4f653fe8fb58cb39d1c78b25a741c0ff13965e32277743",
+      "deployedAt": "2026-04-27T09:13:03Z",
+      "deployTx": "0xc3f6c8d8a5d233540badf2a26a1fe8c7e5131c3fda94a4609c3900d23ce8b722",
       "ceremony": {
         "source": "2026-04-24-per-country-registries-m11-hardened",
         "leafZkeySha256": "9370ac2514123f80b32936bf09e715f2975d46fb02ac15117d1e925873b6e22f",
@@ -55,7 +64,7 @@
         "chainVerifierReuse": "v3 ECDSA chain verifier, byte-identical zkey",
         "publicSignals": { "leaf": 16, "chain": 3, "age": 3 }
       },
-      "notes": "Per-country QKB/2.0 registry for Ukraine (Diia QES). M11-hardened leafVerifier (constructed from the 2026-04-24 re-ceremony closing 6 Codex findings). chainVerifier reused from the V3 deploy (ECDSA over BN254, unaffected by hardening). ageVerifier unaffected. trustedListRoot is the UA-only Poseidon-Merkle root over Diia QTSP services from the 2026-04-17 pinned EU LOTL snapshot. policyRoot pins the v1 default UA policy leaf set (depth-16 canonical)."
+      "notes": "v5 phase — fresh QKBRegistryV4 deploy adding nullifierOf(address) mapping + isVerified(address) view, populated during register(). Required for IdentityEscrowNFT mint gating. Ceremony artifacts unchanged from M11-hardened deploy (same leafVerifier/chainVerifier/ageVerifier addresses, same zkey SHAs). Previous registry at registryPrevious abandoned per spec — single Diia registration there is non-binding for v5; clean break."
     }
   }
 }
