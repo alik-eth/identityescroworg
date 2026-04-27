@@ -6,16 +6,12 @@ app = "identityescrow"
 primary_region = "ams"
 
 [build]
-  dockerfile = "packages/web/Dockerfile"
   [build.args]
     VITE_CHAIN = "sepolia"
-    # Vite inlines VITE_* at build time, so the WalletConnect projectId must
-    # be a build arg — Fly runtime secrets cannot reach a static SPA bundle.
-    # Sentinel value silences RainbowKit's "no projectId" guard; injected
-    # wallets (MetaMask via EIP-6963) work without a real WC project. Swap to
-    # a real WalletConnect Cloud projectId via [build.args] before launch if
-    # WC mobile bridge is required.
-    VITE_WALLETCONNECT_PROJECT_ID = "e2e-mock-walletconnect-project-id"
+    # Vite inlines VITE_* at build time. WalletConnect projectIds are public
+    # (every WC-enabled dapp ships theirs in the JS bundle), so committing
+    # this string is fine.
+    VITE_WALLETCONNECT_PROJECT_ID = "c46544572774f96e20db476d5cc565be"
 
 [http_service]
   internal_port = 8080

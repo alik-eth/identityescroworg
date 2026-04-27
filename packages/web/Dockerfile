@@ -6,7 +6,7 @@
 FROM docker.io/library/node:20-alpine AS builder
 
 ARG VITE_CHAIN=sepolia
-ARG VITE_WALLETCONNECT_PROJECT_ID=e2e-mock-walletconnect-project-id
+ARG VITE_WALLETCONNECT_PROJECT_ID
 ENV VITE_CHAIN=$VITE_CHAIN
 ENV VITE_WALLETCONNECT_PROJECT_ID=$VITE_WALLETCONNECT_PROJECT_ID
 
@@ -17,6 +17,7 @@ WORKDIR /app
 # Copy only the workspace surface needed for install + build.
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* tsconfig.base.json ./
 COPY packages/web ./packages/web
+COPY packages/sdk ./packages/sdk
 COPY packages/qie-core ./packages/qie-core
 COPY packages/qie-agent ./packages/qie-agent
 COPY fixtures ./fixtures
