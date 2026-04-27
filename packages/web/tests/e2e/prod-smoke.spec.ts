@@ -35,6 +35,12 @@ test('prod — landing fully styled, fonts loaded, no errors', async ({ page }) 
   await expect(page.getByRole('heading', { name: /Verified Identity/i })).toBeVisible({
     timeout: 15_000,
   });
+  await expect(
+    page.getByRole('heading', {
+      level: 2,
+      name: /Identity, escrowed|Депонована ідентичність/,
+    }),
+  ).toBeVisible({ timeout: 10_000 });
   await page.evaluate(() => (document as Document & { fonts: { ready: Promise<void> } }).fonts.ready);
   await page.screenshot({ path: `${SCREENSHOT_DIR}/landing.png`, fullPage: true });
 
