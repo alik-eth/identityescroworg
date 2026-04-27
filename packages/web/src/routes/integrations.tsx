@@ -42,22 +42,24 @@ const client = createPublicClient({ chain: base, transport: http() });
 const ok = await isVerified(client, QKB_DEPLOYMENTS.base.registry, addr);`}
           </pre>
           <h2 className="text-2xl mb-3">Deployed registries</h2>
-          <table className="text-mono text-sm">
-            <thead>
-              <tr>
-                <th className="pr-6 text-left">Network</th>
-                <th className="text-left">Address</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(QKB_DEPLOYMENTS).map(([k, v]) => (
-                <tr key={k}>
-                  <td className="pr-6 py-1">{k}</td>
-                  <td className="py-1">{v.registry}</td>
+          <div className="overflow-x-auto">
+            <table className="text-mono text-sm">
+              <thead>
+                <tr>
+                  <th className="pr-6 text-left">Network</th>
+                  <th className="text-left">Address</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {Object.entries(QKB_DEPLOYMENTS).map(([k, v]) => (
+                  <tr key={k}>
+                    <td className="pr-6 py-1">{k}</td>
+                    <td className="py-1 break-all">{v.registry}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
       <DocumentFooter />
