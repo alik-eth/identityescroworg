@@ -2,7 +2,17 @@
   "landing": {
     "title": "Verified Identity. On-chain.",
     "lede": "Mint your Verified Ukrainian certificate. Your identity stays on your machine — only the proof reaches the chain.",
-    "subline": "Powered by Diia QES + Groth16. Your identity bytes never enter this browser."
+    "subline": "Powered by Diia QES + Groth16. Your identity bytes never enter this browser.",
+    "privacy": {
+      "heading": "Identity, escrowed.",
+      "onLedgerLabel": "What is on the ledger",
+      "onLedgerBody": "a nullifier — context-bound, one-way, unlinkable across applications.",
+      "notOnLedgerLabel": "What is not on the ledger",
+      "notOnLedgerBody": "name, address, document numbers, signature, certificate contents.",
+      "recoveryLabel": "What can be recovered, by whom, under what process",
+      "recoveryBody": "by the issuing authority, under lawful order, at meaningful compute cost. Not by third parties.",
+      "closing": "This is identity escrow. Every-day pseudonymity for the holder; recoverable accountability for the state. The same trust structure as the qualified electronic signature itself — preserved on-chain."
+    }
   },
   "cli": {
     "title": "Install the CLI",
