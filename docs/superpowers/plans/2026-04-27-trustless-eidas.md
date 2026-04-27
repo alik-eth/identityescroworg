@@ -1,5 +1,16 @@
 # Trustless eIDAS Trust Root Updates Implementation Plan
 
+> **STATUS — DEFERRED 2026-04-27.** Plan parked before any task started. Two reasons surfaced during Task 1 fixture-pin work:
+>
+> 1. **Trust improvement is marginal at current scale.** Today's admin is Safe 2-of-3 + 7-day timelock. The trustless path improves trust from "2 keys + 7-day window without detection" to "regulator's signing key only" — real but not urgent at zero production users.
+> 2. **Real cost is higher than spec estimated.** The actual `TL-UA-EC.xml` is signed RSA-2048-SHA256 (not ECDSA-P256), and the signing cert is self-signed (no chain-back-to-root). Revised constraint budget is ~85–100M (not 65–70M), ~18–24h ceremony, ~40 GB zkey, plus the chain-verify model in §4.2 doesn't apply to UA's flat self-signed structure.
+>
+> **Resume conditions** (any one): real production users asking for it; grant funding (DG-CNECT / NLnet / EF public-goods); admin trust becomes a concrete blocker for a deployment partner.
+>
+> **What's still good in this plan:** the spec at `docs/superpowers/specs/2026-04-27-trustless-eidas.md` and the file/task decomposition below remain a sound starting point. On resume, revise §4.2 (trust anchor) for self-signed regulators, §5.1 (constraint budget + RSA primitive) for RSA-2048-SHA256, and re-cost the ceremony.
+
+---
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Extend `QKBRegistryV4` with a permissionless ZK-verified `setTrustedListRoot` path so anyone observing a fresh signed national TSL can advance the on-chain trust root with no admin involvement.
