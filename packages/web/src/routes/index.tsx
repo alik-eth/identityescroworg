@@ -10,8 +10,11 @@ export function IndexScreen() {
       <PaperGrain />
       <div className="doc-grid pt-24 relative z-10">
         <div />
-        <div className="max-w-3xl">
-          <h1 className="text-7xl leading-none mb-8" style={{ color: 'var(--ink)' }}>
+        <div className="min-w-0 max-w-3xl">
+          <h1
+            className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl leading-none mb-8"
+            style={{ color: 'var(--ink)' }}
+          >
             {t('landing.title', 'Verified Identity. On-chain.')}
           </h1>
           <p className="text-xl mb-12 max-w-2xl" style={{ color: 'var(--ink)' }}>
@@ -34,7 +37,7 @@ export function IndexScreen() {
           <section aria-labelledby="privacy-heading">
             <h2
               id="privacy-heading"
-              className="text-6xl leading-none mb-12"
+              className="text-4xl sm:text-5xl md:text-6xl leading-none mb-12"
               style={{ color: 'var(--ink)' }}
             >
               {t('landing.privacy.heading', 'Identity, escrowed.')}

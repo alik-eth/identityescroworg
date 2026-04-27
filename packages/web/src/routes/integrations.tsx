@@ -7,9 +7,9 @@ export function IntegrationsScreen() {
     <main className="relative min-h-screen">
       <div className="doc-grid pt-12">
         <div />
-        <div className="max-w-3xl">
+        <div className="min-w-0 max-w-3xl">
           <Link to="/" className="text-mono text-xs">← back</Link>
-          <h1 className="text-5xl my-6">Integrate QKB verification</h1>
+          <h1 className="text-4xl md:text-5xl my-6">Integrate QKB verification</h1>
           <p className="mb-6 text-lg">
             Gate your contract or webapp on QKB-verified Ukrainian status.
           </p>

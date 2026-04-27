@@ -50,12 +50,13 @@ export function CliInstall() {
   return (
     <main className="relative min-h-screen">
       <div className="doc-grid pt-12">
-        <div className="text-mono text-xs pt-2 sticky top-12 self-start">
+        <div className="hidden md:block text-mono text-xs pt-2 sticky top-12 self-start">
           <Link to="/" className="block mb-3">← back</Link>
           <StepIndicator current={1} />
         </div>
-        <div className="max-w-3xl">
-          <h1 className="text-5xl mb-6" style={{ color: 'var(--ink)' }}>
+        <div className="min-w-0 max-w-3xl">
+          <Link to="/" className="md:hidden text-mono text-xs block mb-4">← back</Link>
+          <h1 className="text-4xl md:text-5xl mb-6" style={{ color: 'var(--ink)' }}>
             {t('cli.title', 'Install the CLI')}
           </h1>
           <p className="mb-8 text-lg max-w-2xl">
@@ -80,7 +81,7 @@ export function CliInstall() {
           <hr className="rule" />
           <h2 className="text-2xl mb-3">{t('cli.run', 'Generate the proof')}</h2>
           <pre
-            className="text-mono text-sm p-4 mb-6"
+            className="text-mono text-sm p-4 mb-6 overflow-x-auto"
             style={{ background: 'var(--ink)', color: 'var(--bone)' }}
           >
 {proveCmd}
