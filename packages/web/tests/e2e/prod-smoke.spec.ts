@@ -163,11 +163,5 @@ test('prod — /ua/mint disconnected renders mint chrome', async ({ page }) => {
   for (const r of non2xx) console.log('  ', r.status, r.url);
   expect(non2xx.length).toBe(0);
   expect(monitor.pageErrors).toEqual([]);
-  // CertificatePreview renders an SVG with height="auto" (legitimate CSS-driven
-  // sizing, but the browser logs an attribute parse warning). Pre-existing,
-  // outside M9 scope. Filter only that exact warning.
-  const unexpectedErrors = monitor.consoleErrors.filter(
-    (e) => !/<svg> attribute height: Expected length, "auto"/.test(e),
-  );
-  expect(unexpectedErrors).toEqual([]);
+  expect(monitor.consoleErrors).toEqual([]);
 });

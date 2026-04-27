@@ -1,6 +1,9 @@
-// Static guard: built dist/index.html must reference assets with relative
-// URLs so it boots from the file:// scheme. This is the cheapest test that
-// catches an accidental `base: '/'` regression in vite.config.ts.
+// Static guard: built dist/index.html must reference local assets with
+// absolute paths (`/assets/...`). The SPA is served over HTTPS at a domain
+// root with deep client-side routes (`/ua/cli`, etc.); under SPA fallback
+// the browser would otherwise resolve `./assets/...` against the current
+// path and the Caddy try_files would return index.html (text/html) for
+// `/ua/assets/index-*.css` — fatal for styles + JS load.
 //
 // Skipped when dist/ is absent (the e2e workflow rebuilds before running).
 
@@ -12,8 +15,8 @@ import { fileURLToPath } from 'node:url';
 const here = dirname(fileURLToPath(import.meta.url));
 const distHtml = resolve(here, '../../dist/index.html');
 
-describe.skipIf(!existsSync(distHtml))('dist/ smoke (file:// safety)', () => {
-  it('references assets with relative URLs (no leading "/")', () => {
+describe.skipIf(!existsSync(distHtml))('dist/ smoke (deep-route safety)', () => {
+  it('references local assets with absolute paths starting with "/"', () => {
     const html = readFileSync(distHtml, 'utf8');
     const srcRefs = [...html.matchAll(/(?:src|href)="([^"]+)"/g)].map((m) => m[1] ?? '');
     const local = srcRefs.filter(
@@ -21,7 +24,7 @@ describe.skipIf(!existsSync(distHtml))('dist/ smoke (file:// safety)', () => {
     );
     expect(local.length).toBeGreaterThan(0);
     for (const u of local) {
-      expect(u, `asset ${u} must NOT be absolute (would 404 under file://)`).not.toMatch(
+      expect(u, `asset ${u} must be absolute (relative breaks on deep routes)`).toMatch(
         /^\//,
       );
     }
