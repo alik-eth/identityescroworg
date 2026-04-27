@@ -144,14 +144,15 @@ test('prod — /integrations styled', async ({ page }) => {
 test('prod — /ua/mint disconnected renders mint chrome', async ({ page }) => {
   const monitor = await captureNetwork(page);
   await page.goto(`${PROD}/ua/mint`, { waitUntil: 'networkidle', timeout: 30_000 });
-  // Disconnected: route renders the mint heading + a disabled "Mint Certificate"
-  // button (the route itself doesn't gate on isConnected; that's a known UX gap).
+  // Disconnected: route renders the mint heading + an inline ConnectButton
+  // (the route gates on isConnected — see f49c317).
   await expect(page.getByRole('heading', { name: /Mint your certificate/i })).toBeVisible({
     timeout: 15_000,
   });
-  const mintBtn = page.getByRole('button', { name: /Mint Certificate/i });
-  await expect(mintBtn).toBeVisible({ timeout: 10_000 });
-  await expect(mintBtn).toBeDisabled();
+  await expect(page.getByText(/Connect a wallet to mint/i)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('button', { name: /connect wallet/i })).toBeVisible({
+    timeout: 10_000,
+  });
   await page.evaluate(() => (document as Document & { fonts: { ready: Promise<void> } }).fonts.ready);
   await page.screenshot({ path: `${SCREENSHOT_DIR}/mint.png`, fullPage: true });
   const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
