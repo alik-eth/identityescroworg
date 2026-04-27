@@ -8,6 +8,7 @@ import { IndexScreen } from './routes/index';
 import { CliInstall } from './routes/ua/cli';
 import { SubmitScreen } from './routes/ua/submit';
 import { MintScreen } from './routes/ua/mint';
+import { IntegrationsScreen } from './routes/integrations';
 
 function RootLayout() {
   return <Outlet />;
@@ -39,7 +40,19 @@ const mintRoute = createRoute({
   component: MintScreen,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, cliRoute, submitRoute, mintRoute]);
+const integrationsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/integrations',
+  component: IntegrationsScreen,
+});
+
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  cliRoute,
+  submitRoute,
+  mintRoute,
+  integrationsRoute,
+]);
 
 export const router = createRouter({ routeTree });
 
