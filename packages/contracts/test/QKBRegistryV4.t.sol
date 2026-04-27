@@ -379,6 +379,40 @@ contract QKBRegistryV4Test is Test {
         assertEq(pk, w.addr);
     }
 
+    // ---------- nullifierOf / isVerified surface ----------
+
+    function test_register_setsNullifierOfMappingForMsgSender() public {
+        (QKBRegistryV4 r,,) = _deployForRegister();
+        QKBRegistryV4.ChainProof memory cp = _chainProof(_RTL_VAL, 0, _SPKI_VAL);
+        (QKBRegistryV4.LeafProof memory lp,) =
+            _leafProof(_POLICY_VAL, _SPKI_VAL, uint256(0x1234), 0, 0);
+        address user = address(0xC0FFEE);
+        vm.prank(user);
+        bytes32 id = r.register(cp, lp);
+        assertEq(r.nullifierOf(user), id, "nullifierOf must equal binding id");
+        assertTrue(r.isVerified(user), "msg.sender must be verified after register");
+        assertEq(r.nullifierOf(address(0xBAD)), bytes32(0), "unrelated address unverified");
+        assertFalse(r.isVerified(address(0xBAD)));
+    }
+
+    function test_isVerified_returnsFalseBeforeRegister() public {
+        (QKBRegistryV4 r,,) = _deployForRegister();
+        assertFalse(r.isVerified(address(0xBEEF)));
+        assertEq(r.nullifierOf(address(0xBEEF)), bytes32(0));
+    }
+
+    function test_register_secondCallFromDifferentSenderRevertsDuplicateNullifier() public {
+        (QKBRegistryV4 r,,) = _deployForRegister();
+        QKBRegistryV4.ChainProof memory cp = _chainProof(_RTL_VAL, 0, _SPKI_VAL);
+        (QKBRegistryV4.LeafProof memory lp,) =
+            _leafProof(_POLICY_VAL, _SPKI_VAL, uint256(0xABCD), 0, 0);
+        vm.prank(address(0xAAAA));
+        r.register(cp, lp);
+        vm.prank(address(0xBBBB));
+        vm.expectRevert(QKBRegistryV4.DuplicateNullifier.selector);
+        r.register(cp, lp);
+    }
+
     // ---------- proveAdulthood() ----------
 
     uint256 private constant _DOB_COMMIT = uint256(0xD0B);
