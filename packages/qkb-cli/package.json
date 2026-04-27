@@ -6,6 +6,7 @@
   "bin": { "qkb": "dist/src/cli.js" },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "build:binaries": "bash scripts/build-binaries.sh",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "start": "node --max-old-space-size=16384 dist/src/cli.js"

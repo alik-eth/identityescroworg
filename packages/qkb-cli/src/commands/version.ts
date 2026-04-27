@@ -1,20 +1,14 @@
 /**
- * `qkb version` — print the package version. Reads from package.json
- * relative to the compiled bin so it works whether invoked as
- * `node dist/src/cli.js version` (development build) or as a bun-compiled
- * single-file binary (the bundle inlines the JSON via createRequire).
+ * `qkb version` — print the package version.
+ *
+ * Imports package.json statically so the version is inlined at build time.
+ * This keeps the bun-compiled single-file binary self-contained — no runtime
+ * filesystem lookup that breaks when the executable is moved off the source
+ * tree.
  */
 
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import pkg from '../../package.json' with { type: 'json' };
 
 export function runVersion(): void {
-  const here = dirname(fileURLToPath(import.meta.url));
-  // dist/src/commands/version.js → ../../../package.json
-  const pkgPath = join(here, '..', '..', '..', 'package.json');
-  const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as {
-    version: string;
-  };
   console.log(`qkb v${pkg.version}`);
 }
