@@ -232,3 +232,16 @@ export {
   type CountryConfig,
   type SupportedCountry,
 } from './country/index.js';
+
+// M4: viem read helpers + deployments fixture + freshly-built ABIs.
+export { isVerified, nullifierOf, trustedListRoot } from './registry/index.js';
+
+export {
+  QKB_DEPLOYMENTS,
+  deploymentForChainId,
+  type QkbDeployment,
+  type QkbNetwork,
+} from './deployments.js';
+
+export { qkbRegistryV4Abi } from './abi/QKBRegistryV4.js';
+export { identityEscrowNftAbi } from './abi/IdentityEscrowNFT.js';
