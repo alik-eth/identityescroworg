@@ -16,6 +16,7 @@ via_ir = true
 fs_permissions = [
   { access = "read",       path = "./packages/contracts/test/fixtures" },
   { access = "read-write", path = "./packages/contracts/test/fixtures/snapshots" },
+  { access = "read-write", path = "./packages/web/tests/fixtures" },
 ]
 
 [profile.ci]
