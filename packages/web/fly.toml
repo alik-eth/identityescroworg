@@ -1,0 +1,34 @@
+# Fly.io config for the QKB Identity Escrow static SPA.
+# Production domain: identityescrow.org (attached out-of-band via `flyctl certs add`
+# once Cloudflare DNS records are pointed at this app's dedicated IPs).
+
+app = "identityescrow"
+primary_region = "ams"
+
+[build]
+  dockerfile = "packages/web/Dockerfile"
+  [build.args]
+    VITE_CHAIN = "sepolia"
+    # Vite inlines VITE_* at build time, so the WalletConnect projectId must
+    # be a build arg — Fly runtime secrets cannot reach a static SPA bundle.
+    # Sentinel value silences RainbowKit's "no projectId" guard; injected
+    # wallets (MetaMask via EIP-6963) work without a real WC project. Swap to
+    # a real WalletConnect Cloud projectId via [build.args] before launch if
+    # WC mobile bridge is required.
+    VITE_WALLETCONNECT_PROJECT_ID = "e2e-mock-walletconnect-project-id"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 1
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 200
+    soft_limit = 100
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512
