@@ -147,6 +147,91 @@ contract QKBRegistryV5 is IQKBRegistry {
         admin = newAdmin;
     }
 
-    /* ---------- register() — body lands in §6.2..§6.7 ---------- */
-    // function register(...) external { ... }
+    /* ---------- register() — frozen ABI per orchestration §0.3 ---------- */
+
+    /// 14 BN254 field-element public signals — order is FROZEN.
+    struct PublicSignals {
+        uint256 msgSender;          // [0]  ≤ 2^160
+        uint256 timestamp;          // [1]  ≤ 2^64
+        uint256 nullifier;          // [2]  Poseidon₂ output
+        uint256 ctxHashHi;          // [3]
+        uint256 ctxHashLo;          // [4]
+        uint256 bindingHashHi;      // [5]
+        uint256 bindingHashLo;      // [6]
+        uint256 signedAttrsHashHi;  // [7]
+        uint256 signedAttrsHashLo;  // [8]
+        uint256 leafTbsHashHi;      // [9]
+        uint256 leafTbsHashLo;      // [10]
+        uint256 policyLeafHash;     // [11]
+        uint256 leafSpkiCommit;     // [12]
+        uint256 intSpkiCommit;      // [13]
+    }
+
+    struct Groth16Proof {
+        uint256[2]    a;
+        uint256[2][2] b;
+        uint256[2]    c;
+    }
+
+    /* ---------- register() errors (one per gate, named for diagnostics) ---------- */
+
+    error BadProof();        // Gate 1: Groth16 verifier returned false.
+
+    /// @notice 5-gate registration. Gates land incrementally:
+    ///   Gate 1 (this commit, §6.2): Groth16 verify call.
+    ///   Gate 2a (§6.3): bind public-input commits to calldata.
+    ///   Gate 2b (§6.4): 2× P256Verify (leaf + intermediate).
+    ///   Gate 3 (§6.5):  trust-list Merkle proof.
+    ///   Gate 4 (§6.6):  policy-list Merkle proof.
+    ///   Gate 5 (§6.7):  timing + sender + replay (write-out path).
+    /// @dev    Calldata layout per orchestration §0.3:
+    ///         (proof, sig, leafSpki, intSpki, signedAttrs, leafSig, intSig,
+    ///          trustMerklePath, trustMerklePathBits,
+    ///          policyMerklePath, policyMerklePathBits)
+    function register(
+        Groth16Proof   calldata proof,
+        PublicSignals  calldata sig,
+        bytes          calldata leafSpki,
+        bytes          calldata intSpki,
+        bytes          calldata signedAttrs,
+        bytes32[2]     calldata leafSig,
+        bytes32[2]     calldata intSig,
+        bytes32[16]    calldata trustMerklePath,
+        uint256                 trustMerklePathBits,
+        bytes32[16]    calldata policyMerklePath,
+        uint256                 policyMerklePathBits
+    ) external {
+        // Suppress unused-parameter warnings for fields gated in subsequent
+        // commits (§6.3..§6.7). They become live as each gate lands.
+        leafSpki; intSpki; signedAttrs; leafSig; intSig;
+        trustMerklePath; trustMerklePathBits; policyMerklePath; policyMerklePathBits;
+
+        /* ===== Gate 1 (§6.2): Groth16 verify ===== */
+        // Pack the 14-signal public-input array. Order MUST match V5 spec
+        // §0.1 exactly; auto-generated snarkjs verifiers consume `uint[14]`.
+        uint256[14] memory input = [
+            sig.msgSender,
+            sig.timestamp,
+            sig.nullifier,
+            sig.ctxHashHi,
+            sig.ctxHashLo,
+            sig.bindingHashHi,
+            sig.bindingHashLo,
+            sig.signedAttrsHashHi,
+            sig.signedAttrsHashLo,
+            sig.leafTbsHashHi,
+            sig.leafTbsHashLo,
+            sig.policyLeafHash,
+            sig.leafSpkiCommit,
+            sig.intSpkiCommit
+        ];
+        if (!groth16Verifier.verifyProof(proof.a, proof.b, proof.c, input)) {
+            revert BadProof();
+        }
+
+        // Gates 2a..5 land in §6.3..§6.7. Until then register() succeeds
+        // after Gate 1 — happy-path tests for downstream gates can submit
+        // fully-populated calldata that just doesn't trigger any later
+        // revert until the gate it tests is implemented.
+    }
 }
