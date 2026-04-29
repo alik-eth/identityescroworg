@@ -820,7 +820,10 @@ packages/contracts/
     Poseidon. Concrete enforcement model:
 
     ```bash
-    # From repo root:
+    # Canonical (matches the forge test / forge build pattern):
+    pnpm --filter @qkb/contracts check:poseidon
+
+    # Equivalent direct invocation (also works from repo root):
     pnpm exec tsx packages/contracts/script/check-poseidon-reproducibility.ts
     ```
 
