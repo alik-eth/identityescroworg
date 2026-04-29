@@ -9,8 +9,8 @@
 //   3. SpkiCommit = Poseidon₂( Poseidon₆(X_limbs), Poseidon₆(Y_limbs) ).
 //
 // Built up across Tasks 2.1 → 2.4 of the per-worker plan; this file currently
-// implements length pre-check + DER walk (X/Y extraction). Limb decomposition
-// lands in Task 2.3, full Poseidon hash in Task 2.4.
+// implements length pre-check, DER walk (X/Y extraction), and 6×43-bit
+// little-endian limb decomposition. Full Poseidon hash lands in Task 2.4.
 
 export interface ParsedSpki {
     x: Buffer; // 32 bytes, big-endian P-256 X coordinate
@@ -51,6 +51,25 @@ export function parseP256Spki(spki: Buffer): ParsedSpki {
         x: Buffer.from(spki.subarray(27, 59)),
         y: Buffer.from(spki.subarray(59, 91)),
     };
+}
+
+// Decompose a 32-byte big-endian value into 6 little-endian limbs of 43 bits
+// each — the limb encoding the V5 circuit consumes (matches V4's
+// `Bytes32ToLimbs643` template at packages/circuits/circuits/primitives/
+// Bytes32ToLimbs643.circom). 6 × 43 = 258 bits of capacity > 256 bits of
+// input, so the top limb has at most 41 significant bits; all 6 limbs fit
+// strictly under 2^43.
+export function decomposeTo643Limbs(value: Buffer): bigint[] {
+    if (value.length !== 32) {
+        throw new Error(`decomposeTo643Limbs: expected 32 bytes, got ${value.length}`);
+    }
+    const valueAsBigInt = BigInt(`0x${value.toString('hex')}`);
+    const mask = (1n << 43n) - 1n;
+    const limbs: bigint[] = [];
+    for (let i = 0; i < 6; i++) {
+        limbs.push((valueAsBigInt >> BigInt(43 * i)) & mask);
+    }
+    return limbs;
 }
 
 export function spkiCommit(_spki: Buffer): bigint {

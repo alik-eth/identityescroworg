@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { parseP256Spki } from '../scripts/spki-commit-ref';
+import { decomposeTo643Limbs, parseP256Spki } from '../scripts/spki-commit-ref';
 
 const LEAF_SPKI_PATH = resolve(__dirname, '../fixtures/integration/admin-ecdsa/leaf-spki.bin');
 
@@ -48,5 +48,45 @@ describe('parseP256Spki — DER walk', () => {
         const spki = loadLeafSpki();
         spki[26] = 0x02; // compressed-point indicator; circuit consumes only uncompressed
         expect(() => parseP256Spki(spki)).toThrow(/uncompressed|prefix/i);
+    });
+});
+
+describe('decomposeTo643Limbs', () => {
+    it('decomposes zero into six zero limbs', () => {
+        const limbs = decomposeTo643Limbs(Buffer.alloc(32));
+        expect(limbs).toEqual([0n, 0n, 0n, 0n, 0n, 0n]);
+    });
+
+    it('decomposes the unit vector 0x00…01 into limbs[0]=1', () => {
+        const buf = Buffer.alloc(32);
+        buf[31] = 1; // big-endian: low byte
+        const limbs = decomposeTo643Limbs(buf);
+        expect(limbs[0]).toBe(1n);
+        expect(limbs.slice(1).every((l) => l === 0n)).toBe(true);
+    });
+
+    it('round-trips: limbs reconstruct the original 32-byte value', () => {
+        const buf = Buffer.from(
+            '00112233445566778899aabbccddeeff' + '0123456789abcdef0123456789abcdef',
+            'hex',
+        );
+        const limbs = decomposeTo643Limbs(buf);
+        let reconstructed = 0n;
+        for (let i = 0; i < 6; i++) reconstructed += limbs[i] << BigInt(43 * i);
+        const valueAsBigInt = BigInt(`0x${buf.toString('hex')}`);
+        expect(reconstructed).toBe(valueAsBigInt);
+    });
+
+    it('all limbs fit in 43 bits for the maximal 256-bit input', () => {
+        const buf = Buffer.alloc(32, 0xff);
+        const limbs = decomposeTo643Limbs(buf);
+        for (const l of limbs) {
+            expect(l).toBeLessThan(1n << 43n);
+        }
+    });
+
+    it('rejects non-32-byte input', () => {
+        expect(() => decomposeTo643Limbs(Buffer.alloc(31))).toThrow(/expected 32 bytes/i);
+        expect(() => decomposeTo643Limbs(Buffer.alloc(33))).toThrow(/expected 32 bytes/i);
     });
 });
