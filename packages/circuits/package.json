@@ -6,7 +6,8 @@
   "scripts": {
     "test": "mocha --reporter spec --timeout 600000 -r ts-node/register 'test/**/*.test.ts'",
     "build": "bash ceremony/scripts/compile.sh",
-    "lint": "biome check ."
+    "lint": "biome check .",
+    "extract:spkis": "ts-node scripts/extract-spkis.ts"
   },
   "devDependencies": {
     "@types/chai": "^4.3.16",
