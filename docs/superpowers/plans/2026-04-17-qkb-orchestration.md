@@ -160,7 +160,7 @@ Contracts deploy to **Ethereum Sepolia** (chainId 11155111). Arbitrum Sepolia is
 - `urls.json` IS committed — URLs and hashes are public and auditable. Consumers (web + CI nightly e2e) read it at build time.
 - web-eng fetches both files at runtime via standard `fetch()` against the URLs in `urls.json`. Integrity check: local SHA-256 must equal `wasmSha256` / `zkeySha256` before handoff to snarkjs. Mismatch → ProverError('prover.artifactMismatch').
 - Re-uploading after a new ceremony is idempotent from the user's perspective: new URLs + hashes commit to `urls.json`, SPA picks them up on next build.
-- Production consideration: for a 4 GB zkey, browser-side proving is slow + memory-heavy. If UX demands it, introduce a `/api/prove` endpoint that keeps the zkey server-side (on the Fly web machine's volume) and streams only the proof back — in that mode R2 hosts only the `.wasm`.
+- Production consideration: for a 4 GB zkey, browser-side proving is slow + memory-heavy. If UX demands it, introduce a `/api/prove` endpoint that keeps the zkey server-side and streams only the proof back — in that mode R2 hosts only the `.wasm`.
 
 ### 4.1 Binding B encoding locks (post-dispatch decisions)
 

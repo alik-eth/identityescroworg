@@ -108,7 +108,7 @@ None. V3 registry (`QKBRegistryV3`) stays on-chain untouched; new bindings go to
 | M7  | Ceremonies: shared chain + shared age + UA leaf     | blocks M8                    |
 | M8  | Sepolia deploy of UA (+ shared verifiers)           | blocks M9                    |
 | M9  | Web UA integration end-to-end                       | blocks M10                   |
-| M10 | Fly redeploy + DNS rebind                           | terminal milestone           |
+| M10 | Static-host redeploy + DNS rebind                   | terminal milestone           |
 
 ---
 
@@ -2648,48 +2648,43 @@ git commit -am "test(web): Playwright real-qes-ua spec skeleton"
 
 ---
 
-## M10 — Fly redeploy + DNS rebind
+## M10 — Static-host redeploy + DNS rebind
 
-### Task 10.1: Fresh Fly app launch
+> Hosting target is out of scope for this plan; the build is host-agnostic
+> (`pnpm -F @qkb/web build` → `dist/`). The steps below are placeholders
+> to be filled in once a host is chosen.
 
-- [ ] **Step 1: Launch**
+### Task 10.1: Publish the SPA bundle
 
-```bash
-cd packages/web
-fly launch --name identityescrow --region ams --no-deploy
-```
-
-Edit `fly.toml` as needed (static build, SPA fallback).
-
-- [ ] **Step 2: Deploy**
+- [ ] **Step 1: Build**
 
 ```bash
-pnpm build
-fly deploy
+pnpm -F @qkb/web build
 ```
+
+- [ ] **Step 2: Deploy** to the chosen static host (decision pending).
+  Whichever host is picked must SPA-fallback unknown paths to
+  `/index.html` so deep links like `/ua/generate` work on reload.
 
 - [ ] **Step 3: Verify**
 
 ```bash
-curl -I https://identityescrow.fly.dev/
-curl https://identityescrow.fly.dev/ua/generate | head -c 200
+curl -I https://identityescrow.org/
+curl https://identityescrow.org/ua/generate | head -c 200
 ```
 
 Expected: 200 OK; HTML contains the SPA root.
 
-- [ ] **Step 4: Rebind DNS**
+- [ ] **Step 4: Confirm DNS**
 
-Update the `identityescrow.org` CNAME at the DNS registrar to point at the new `identityescrow.fly.dev`. Wait for propagation, then:
+`identityescrow.org` resolves to the new host. Issue/renew TLS as
+required by that host.
 
-```bash
-fly certs create identityescrow.org
-```
-
-- [ ] **Step 5: Commit Fly config**
+- [ ] **Step 5: Commit any host config**
 
 ```bash
-git add packages/web/fly.toml
-git commit -m "deploy(web): Fly app identityescrow relaunched at identityescrow.org/ua/"
+git add <whatever-the-chosen-host-needs>
+git commit -m "deploy(web): identityescrow.org publishing /ua/"
 ```
 
 ### Task 10.2: End-to-end smoke against production

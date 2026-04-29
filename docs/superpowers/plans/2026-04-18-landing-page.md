@@ -779,7 +779,7 @@ git commit -m "docs: landing-page + /demo route split — README + CHANGELOG"
 
 ---
 
-## Task 9: Fly deploy + production smoke
+## Task 9: Web deploy + production smoke
 
 **Files:** none (deploy only).
 
@@ -787,7 +787,8 @@ git commit -m "docs: landing-page + /demo route split — README + CHANGELOG"
 
 From repo root:
 ```bash
-fly deploy -c fly.web.toml
+pnpm -F @qkb/web build
+# Publish packages/web/dist/ to the chosen static host (decision pending).
 ```
 
 - [ ] **Step 2: Smoke-test production**

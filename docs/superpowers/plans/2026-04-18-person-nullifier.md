@@ -900,43 +900,29 @@ git -C /data/Develop/qie-wt/contracts commit \
     -m "contracts: pump stub ECDSA verifier + proof fixture (person-nullifier rebuild)"
 ```
 
-- [ ] **Step 4: Real ceremony on Fly.io — `performance-12x` (12 CPU / 48 GB)**
+- [ ] **Step 4: Real ceremony on a local 48+ GB host**
 
-Spin a throwaway machine sized ≥40 GB RAM and ≥6 cores. `performance-12x` gives 12 vCPU / 48 GB and is the floor for this work (groth16 setup peaks ~30–40 GB on the ECDSA circuit). Do NOT downgrade to `performance-10x`; prior Phase-1 run came within 4 GB of OOM there.
+Use a workstation, personal server, or rented bare-metal sized ≥40 GB
+RAM and ≥6 cores. groth16 setup peaks ~30–40 GB on the ECDSA circuit;
+do NOT attempt this on a 32 GB box without swap headroom — prior runs
+came within 4 GB of OOM there.
 
 ```bash
-# Launch ephemeral ceremony machine in ams (closest to AMS2 R2 endpoint).
-fly machine run ghcr.io/iden3/snarkjs:latest \
-  --name qkb-ceremony-$(date +%Y%m%d) \
-  --region ams \
-  --vm-size performance-12x \
-  --volume qkb_ceremony:/data \
-  --volume-size 50 \
-  --command sleep infinity
+# All commands run locally. Build artifacts beforehand.
+pnpm -F @qkb/circuits build
+bash packages/circuits/ceremony/scripts/fetch-ptau.sh
+NODE_OPTIONS='--max-old-space-size=45056' \
+  bash packages/circuits/ceremony/scripts/setup.sh
 
-# Upload .r1cs + ptau + setup script to the machine.
-MACHINE_ID=$(fly machine list --json | jq -r '.[] | select(.name | startswith("qkb-ceremony-")) | .id' | head -1)
-fly ssh sftp shell -a qkb-circuits <<EOF
-  put packages/circuits/build/qkb-presentation/QKBPresentationEcdsa.r1cs /data/circuit.r1cs
-  put packages/circuits/ceremony/ptau/ptau_23.ptau /data/ptau_23.ptau
-  put packages/circuits/ceremony/scripts/fly-setup-remote.sh /data/setup.sh
-EOF
-
-# Execute.
-fly ssh console -a qkb-circuits --machine $MACHINE_ID \
-  --command "bash /data/setup.sh 2>&1 | tee /data/run.log"
-
-# Pull artifacts back.
-fly ssh sftp get -a qkb-circuits /data/qkb.zkey /tmp/qkb.zkey
-fly ssh sftp get -a qkb-circuits /data/verification_key.json \
-  packages/circuits/ceremony/verification_key.json
-fly ssh sftp get -a qkb-circuits /data/QKBGroth16Verifier.sol \
-  packages/circuits/ceremony/QKBGroth16Verifier.sol
-fly ssh sftp get -a qkb-circuits /data/zkey.sha256 \
-  packages/circuits/ceremony/zkey.sha256
-
-# Destroy the ceremony machine.
-fly machine destroy $MACHINE_ID --force
+# Outputs land under packages/circuits/build/qkb-presentation/:
+#   qkb.zkey, verification_key.json, QKBGroth16Verifier.sol, zkey.sha256
+# Promote to packages/circuits/ceremony/ as committed artifacts.
+cp packages/circuits/build/qkb-presentation/verification_key.json \
+   packages/circuits/ceremony/verification_key.json
+cp packages/circuits/build/qkb-presentation/QKBGroth16Verifier.sol \
+   packages/circuits/ceremony/QKBGroth16Verifier.sol
+cp packages/circuits/build/qkb-presentation/zkey.sha256 \
+   packages/circuits/ceremony/zkey.sha256
 ```
 
 - [ ] **Step 5: Upload `qkb.zkey` to Cloudflare R2 via the S3 API**
@@ -1024,11 +1010,12 @@ git commit -m "circuits: ceremony — re-run for person-nullifier on perf-12x; R
 **Files:**
 - No file changes; this is a manual verification step.
 
-- [ ] **Step 1: Fly-deploy the rebuilt web SPA**
+- [ ] **Step 1: Deploy the rebuilt web SPA**
 
 ```bash
 cd /data/Develop/identityescroworg
-fly deploy -c fly.web.toml
+pnpm -F @qkb/web build
+# Publish packages/web/dist/ to the chosen static host (decision pending).
 ```
 
 - [ ] **Step 2: Manual Playwright E2E with the admin Diia .p7s**

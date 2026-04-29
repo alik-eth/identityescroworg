@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Close the four Phase-1 circuit-side deviations before any QIE-core work starts — RSA variant, unified single-proof ECDSA, nullifier primitive, Fly ceremony ×2, R2 upload. Every downstream package depends on the 14-signal public layout that lands here.
+**Goal:** Close the four Phase-1 circuit-side deviations before any QIE-core work starts — RSA variant, unified single-proof ECDSA, nullifier primitive, local ceremony ×2, R2 upload. Every downstream package depends on the 14-signal public layout that lands here.
 
-**Architecture:** Two new main circuits (`QKBPresentationRsa.circom`, `QKBPresentationEcdsa.circom`) replace the Phase-1 leaf-only `QKBPresentationEcdsaLeaf`. Both share the nullifier sub-template. Both run full Fly ceremonies. Stubs land first for downstream integration.
+**Architecture:** Two new main circuits (`QKBPresentationRsa.circom`, `QKBPresentationEcdsa.circom`) replace the Phase-1 leaf-only `QKBPresentationEcdsaLeaf`. Both share the nullifier sub-template. Both run full local ceremonies. Stubs land first for downstream integration.
 
-**Tech Stack:** Circom 2.1.9, snarkjs, circomlib, `@zk-email/circuits`, `circom-ecdsa-p256`. Node 20. Fly machines `performance-12x` / 48 GB. Cloudflare R2.
+**Tech Stack:** Circom 2.1.9, snarkjs, circomlib, `@zk-email/circuits`, `circom-ecdsa-p256`. Node 20. Local 48+ GB host. Cloudflare R2.
 
 Spec reference: `docs/superpowers/specs/2026-04-17-qie-phase2-design.md` §14.
 
@@ -188,7 +188,7 @@ git commit -m "feat(circuits): S0.4 unified ECDSA circuit — 14 signals, ~10.5M
 
 - [ ] **Step 2: Implement RSA circuit.** Same structure as ECDSA but substitutes `RsaPkcs1V15Verify` (from `@zk-email/circuits`) for the leaf + chain verify steps. Uses `RsaSpkiExtract2048` from Phase 1. `algorithmTag = 0` constant.
 
-  Constraint budget estimate: ~6.5 M (RSA-2048 verify is cheaper than ECDSA-P256; two of them + chain Merkle ≈ 6.5 M). Fits `performance-10x` (40 GB) — can run on a smaller Fly tier if budget matters.
+  Constraint budget estimate: ~6.5 M (RSA-2048 verify is cheaper than ECDSA-P256; two of them + chain Merkle ≈ 6.5 M). Fits a 40 GB host comfortably.
 
 - [ ] **Step 3: Public signals match §14.3.** `algorithmTag = 0`.
 
@@ -200,20 +200,18 @@ git commit -m "feat(circuits): S0.5 RSA variant — 14 signals, ~6.5M constraint
 
 ---
 
-## Task 6: Fly ceremony — ECDSA variant
+## Task 6: Local ceremony — ECDSA variant
 
-- [ ] **Step 1: Update `ceremony/scripts/fly-setup-remote.sh`** to take a
-  variant argument (`ecdsa` | `rsa`) and target the matching `.r1cs`.
+- [ ] **Step 1: Extend `ceremony/scripts/setup.sh`** (or add a sibling
+  `setup-variant.sh`) to take a variant argument (`ecdsa` | `rsa`) and
+  target the matching `.r1cs`.
 
-- [ ] **Step 2: Run ceremony.** Fly machine spec `performance-12x`, 48 GB RAM:
-  1. `fly apps create qkb-ceremony-ecdsa-<handle>`.
-  2. `fly volumes create ceremony_data --size 40 --region fra`.
-  3. Upload `.r1cs.zst` + setup script.
-  4. On-machine: `curl` ptau 2^24, `snarkjs groth16 setup` under tmux.
-  5. `snarkjs zkey contribute` (dev contribution; the production contribution ceremony with external participants is Phase 3).
-  6. `snarkjs zkey export verificationkey + solidityverifier`.
-  7. `sha256sum qkb.zkey > zkey_ecdsa.sha256`.
-  8. SFTP-pull all artifacts.
+- [ ] **Step 2: Run ceremony.** Local 48+ GB host:
+  1. `fetch-ptau.sh` to pull ptau 2^24 (~18 GB).
+  2. `snarkjs groth16 setup` under tmux. `NODE_OPTIONS='--max-old-space-size=45056'`.
+  3. `snarkjs zkey contribute` (dev contribution; the production contribution ceremony with external participants is Phase 3).
+  4. `snarkjs zkey export verificationkey + solidityverifier`.
+  5. `sha256sum qkb.zkey > zkey_ecdsa.sha256`.
 
 - [ ] **Step 3: Local round-trip.** `snarkjs groth16 fullprove` against the
   real Diia fixture input.json, `groth16 verify` locally. Must print `OK!`.
@@ -222,21 +220,18 @@ git commit -m "feat(circuits): S0.5 RSA variant — 14 signals, ~6.5M constraint
   `QKBPresentationEcdsa.wasm` + `qkb_ecdsa.zkey`. Domain
   `prove.identityescrow.org` already bound.
 
-- [ ] **Step 5: Tear down.** `fly machine destroy && fly volumes destroy &&
-  fly apps destroy`.
-
-- [ ] **Step 6: Commit.**
+- [ ] **Step 5: Commit.**
 ```bash
-git commit -m "feat(circuits): S0.6 real ECDSA unified ceremony — Fly performance-12x, zkey on R2"
+git commit -m "feat(circuits): S0.6 real ECDSA unified ceremony — local host, zkey on R2"
 ```
 
 ---
 
-## Task 7: Fly ceremony — RSA variant
+## Task 7: Local ceremony — RSA variant
 
-Same as Task 6 but for the RSA circuit. Smaller; `performance-10x` (40 GB) is enough.
+Same as Task 6 but for the RSA circuit. Smaller; 40 GB is enough.
 
-- [ ] **Commit.** `feat(circuits): S0.7 real RSA ceremony — Fly performance-10x, zkey on R2`.
+- [ ] **Commit.** `feat(circuits): S0.7 real RSA ceremony — local host, zkey on R2`.
 
 ---
 
@@ -266,10 +261,10 @@ git commit -m "feat(circuits): S0.8 urls.json schema — per-variant ceremony ar
 - [ ] **Step 1:** Extend `packages/circuits/CLAUDE.md` with §§:
   - Sprint-0 amendment summary (what changed, why).
   - Two-variant ceremony procedure (run both or one).
-  - Flyctl procedure promoted from "fallback" to "canonical".
+  - Local ceremony procedure documented as canonical.
   - Nullifier primitive explainer + privacy implications.
 
-- [ ] **Step 2: Commit.** `docs(circuits): S0.9 CLAUDE.md — variants + Fly ceremony + nullifier`.
+- [ ] **Step 2: Commit.** `docs(circuits): S0.9 CLAUDE.md — variants + local ceremony + nullifier`.
 
 ---
 
@@ -278,7 +273,7 @@ git commit -m "feat(circuits): S0.8 urls.json schema — per-variant ceremony ar
 - [ ] All 14 public signals exposed in the order specified in spec §14.3.
 - [ ] `algorithmTag` is a CONSTANT in each variant's main template, not a witness-supplied value (prevents a malicious prover from swapping).
 - [ ] `nullifier` is covered by at least one KAT + one E2E test that asserts determinism across two different context values.
-- [ ] Both ceremonies ran on Fly and local-verify passes.
+- [ ] Both ceremonies ran on the local 48+ GB host and local-verify passes.
 - [ ] Both `.zkey` + `.wasm` on R2 and `urls.json` sha256 matches on-disk sha256.
 - [ ] No committed `.zkey` files (>100 MB blob rejected by GitHub).
 - [ ] `ceremony/QKBGroth16Verifier{Ecdsa,Rsa}.sol` forge-compile clean.

@@ -173,7 +173,7 @@ public:
 
 #### Ceremony
 
-- rapidsnark on perf-16x Fly machine (64 GB RAM)
+- rapidsnark on a 64+ GB host (local workstation or rented bare-metal)
 - ~12–18 hours setup + contribution
 - ~30 GB final zkey
 - R2-hosted artifacts (URLs in `@qkb/sdk` country config)
@@ -445,7 +445,7 @@ One integration test running the full pipeline against a pinned fixture: flatten
 | **M2** | Flattener extension — `--emit-update-witness` flag + parity test | `pnpm -F @qkb/lotl-flattener test` |
 | **M3** | Circuit + sub-circuit Circom + tests against synthetic fixture | `pnpm -F @qkb/circuits test` |
 | **M4** | Circuit integration test against real `TL-UA-EC` fixture | Same suite |
-| **M5** | Ceremony on perf-16x Fly box | Artifacts uploaded to R2, sha256 pinned, ~30 GB zkey |
+| **M5** | Ceremony on a 64+ GB local host | Artifacts uploaded to R2, sha256 pinned, ~30 GB zkey |
 | **M6** | `QKBRegistryV4` extension + `IGroth16TslUpdateVerifierV4` interface + forge tests (stub verifier) | `forge test` |
 | **M7** | CLI extension — `qkb prove-tsl-update` + `qkb submit-tsl-update` | Produces a valid proof against pinned witness |
 | **M8** | Pump real verifier; admin (timelock) wires verifier + anchor on UA Sepolia deploy | Etherscan storage view |

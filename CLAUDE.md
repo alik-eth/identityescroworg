@@ -49,7 +49,7 @@ The lead operates in the main checkout at `/data/Develop/identityescroworg/`. Ne
 
 ## Todo list discipline
 
-Lead maintains one long-running task list spanning the whole orchestration — not per-worker task lists. Each task is either a lead-side action (scaffold, review, pump, merge, deploy) or a cross-worker coordination gate (supply LOTL snapshot, supply signed fixture, Fly deploy).
+Lead maintains one long-running task list spanning the whole orchestration — not per-worker task lists. Each task is either a lead-side action (scaffold, review, pump, merge, deploy) or a cross-worker coordination gate (supply LOTL snapshot, supply signed fixture, web deploy).
 
 Status patterns that have worked:
 - `in_progress` for ongoing duties (review loop, artifact pumping, CLAUDE.md coverage) — these stay `in_progress` across the whole phase.
@@ -158,7 +158,7 @@ Inspect the commit diff manually for:
 
 Phase 1:
 - **Sepolia**: `forge script script/Deploy.s.sol --rpc-url $SEPOLIA_RPC_URL --broadcast --verify --etherscan-api-key $ETHERSCAN_KEY`. Admin key from root `.env`.
-- **Fly.io**: web SPA at `identityescrow.org`. `cd packages/web && fly deploy`. App name `identityescrow`. DNS configured externally.
+- **Web hosting**: deployment target is out of scope for the orchestration playbook. The static SPA build (`pnpm -F @qkb/web build`) is host-agnostic; pick a static host as a separate decision.
 
 Phase 2:
 - Fresh `QKBRegistryV2` deploy (not upgrade — contract is non-upgradeable).
@@ -210,5 +210,5 @@ Default answers that have been validated in session:
 
 Keep a one-line summary current here:
 
-- **Phase 1 QKB** — in flight. Circuits on T9a (split into 9a.1–9a.4). Contracts + flattener + web done through their respective plans minus T10/T11 ceremony and Fly deployment. Real-QES validation passes end-to-end against Diia.
+- **Phase 1 QKB** — in flight. Circuits on T9a (split into 9a.1–9a.4). Contracts + flattener + web done through their respective plans minus T10/T11 ceremony and web deployment. Real-QES validation passes end-to-end against Diia.
 - **Phase 2 QIE** — design + plans frozen and amended for full E2E (PRIVACY, revoke, arbitrator UIs, v2 registry migration). Dispatch gated on Phase 1 deploy.

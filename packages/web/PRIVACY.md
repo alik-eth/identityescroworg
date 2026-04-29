@@ -59,10 +59,10 @@ above — primarily `/escrow/setup`, `/escrow/recover`, `/escrow/manage`,
    `features/qie/keystore.ts`). A plain-hex view sits behind a
    user-triggered `<details>` reveal with an explicit warning.
 
-8. **CSP at the edge.** The Fly deployment sets CSP headers
-   (`Caddyfile`) that disallow `data:` images in input-reflective
-   contexts, disallow inline scripts, and restrict `connect-src` to the
-   configured RPC + the known agent endpoints (resolved from the pumped
+8. **CSP at the edge.** Production hosting must set CSP headers that
+   disallow `data:` images in input-reflective contexts, disallow inline
+   scripts, and restrict `connect-src` to the configured RPC + the known
+   agent endpoints (resolved from the pumped
    `fixtures/qie/qie-agents.json`).
 
 9. **Authority wallet separation.** `/arbitrator/authority` MUST be

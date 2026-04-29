@@ -12,8 +12,8 @@ Phase 2 delivers **Qualified Identity Escrow (QIE)** as an overlay on the Phase 
 Phase 2 also **closes four gaps inherited from Phase 1** (amendments §14 of this spec):
 
 1. **RSA-PKCS#1 v1.5 variant** of the presentation proof. Phase 1 shipped ECDSA-P256 only (Diia). Phase 2 adds RSA-2048 so Polish Szafir, Estonian SK, and other RSA-issuing QTSPs work.
-2. **Unified single-proof circuit.** Phase 1's §5.4 split-proof fallback (leaf-only + deferred chain) is collapsed back into one proof that carries `rTL` + `algorithmTag` in its public signals, matching the original `R_QKB` specification. The 28 GB peak memory that forced the split in Phase 1 is comfortably accommodated by `performance-12x` Fly machines (48 GB); ceremony happens there as standard operating procedure.
-3. **Flyctl-based ceremony** documented as the canonical production path — covers setup, contribute, export, R2 upload. Local dev boxes are for development-stub circuits only.
+2. **Unified single-proof circuit.** Phase 1's §5.4 split-proof fallback (leaf-only + deferred chain) is collapsed back into one proof that carries `rTL` + `algorithmTag` in its public signals, matching the original `R_QKB` specification. The 28 GB peak memory that forced the split in Phase 1 is accommodated by running the ceremony on a local 48+ GB host as standard operating procedure.
+3. **Local ceremony procedure** documented as the canonical production path — covers setup, contribute, export, R2 upload. Stub circuits remain for fast iteration during integration work.
 4. **Nullifier primitive for deduplication** — one new public signal, one new on-chain mapping, enables Sybil-resistance per context, revocation-readiness, and escrow-link-on-release (§14.4).
 
 Out of scope: key-recovery escrow (`sk` is never escrowed), threshold decryption, QTSP-issued QEAAs, real-LOTL QIE service-type URI integration (Phase 2 ships with a synthetic LOTL extension), Feldman VSS (Phase 3), threshold ML-KEM (no mature library yet).
@@ -275,9 +275,8 @@ layout change downstream.
   leaf verify, the Merkle inclusion of the intermediate under `rTL`,
   `B.pk` match, context + declaration + timestamp binds.
 - Estimated constraint budget: ~10–11 M (leaf ECDSA 7.6 M + chain ECDSA
-  2.5 M + Merkle 0.4 M). Budget covered by `performance-12x` Fly
-  machines with 48 GB, which we already validated tolerate ≥28 GB setup
-  peaks comfortably.
+  2.5 M + Merkle 0.4 M). Budget covered by a 48 GB local host, which
+  we already validated tolerates ≥28 GB setup peaks comfortably.
 - `leafSpkiCommit` is removed from the public signals — it only existed
   to glue the split proofs together, and the single-proof circuit has
   no glue. The contract's `QKBVerifier.Inputs` struct loses the field.
@@ -368,31 +367,25 @@ Ceremony impact:
 - Public-signal count 14 (from 13 in original design, 12 in Phase-1
   shipped variant).
 
-### 14.5 Flyctl ceremony as standard procedure
+### 14.5 Local ceremony as standard procedure
 
-The Phase-1 precedent (`packages/circuits/ceremony/scripts/fly-setup-remote.sh`)
-becomes the documented production path:
+Run the ceremony on a single 48+ GB local host (workstation / personal
+server / rented bare-metal). The flow:
 
-1. `fly apps create qkb-ceremony-<handle>` + `fly volumes create
-   ceremony_data --size 40 --region fra`.
-2. `fly machine run node:20-bookworm --vm-size performance-12x
-   --vm-memory 49152 --volume ceremony_data:/data sleep infinity`
-   (48 GB RAM covers unified-proof setup with comfortable headroom).
-3. SFTP-upload compressed `.r1cs.zst` (2×SHA256Var + 2×ECDSA + Merkle
-   = ~10 M constraints compresses ~25× with zstd — under 100 MB
-   transfer).
-4. On-machine: `curl` ptau 2^24 from googleapis CDN (~18 GB — larger
-   circuit needs a larger ceremony).
-5. `snarkjs groth16 setup → zkey contribute → export` in a detached
-   tmux session. `NODE_OPTIONS='--max-old-space-size=45056'`.
-6. Compress + SFTP-pull the `.zkey` back. Local sha256 verify against
-   on-machine hash.
-7. `aws s3 cp` (R2-compatible) upload of `.zkey` + `.wasm` to the R2
+1. Compile the circuit locally; emit `.r1cs` + `.wasm` under
+   `packages/circuits/build/qkb-presentation/`.
+2. Fetch ptau 2^24 (~18 GB) once via `ceremony/scripts/fetch-ptau.sh`.
+3. `snarkjs groth16 setup → zkey contribute → export verificationkey →
+   export solidityverifier` under
+   `NODE_OPTIONS='--max-old-space-size=45056'`. The existing
+   `ceremony/scripts/setup.sh` already wraps this with a systemd memory
+   cap.
+4. Local sha256 of the resulting `.zkey`; compare against expected
+   value if reproducing a prior ceremony.
+5. `aws s3 cp` (R2-compatible) upload of `.zkey` + `.wasm` to the R2
    bucket `proving-1` under `prove.identityescrow.org`.
-8. `fly machine destroy && fly volumes destroy && fly apps destroy` —
-   ephemeral infra, ceremony cost ≈ $1–2 total.
 
-Per-variant artifacts (RSA + ECDSA) → two parallel ceremonies, two
+Per-variant artifacts (RSA + ECDSA) → two ceremonies, two
 entries in `urls.json`. Consumers key by `algorithmTag`.
 
 Local dev boxes continue to run the **stub** circuit flow
@@ -414,7 +407,7 @@ primitive reads the Phase 1 public signals:
    dispatch.
 4. Update `packages/web` witness builder for 14 signals + nullifier
    computation.
-5. Run real unified-proof ceremonies (×2 variants) on Fly.
+5. Run real unified-proof ceremonies (×2 variants) locally.
 6. Swap stub verifiers for real in the Sepolia deploy.
 7. **Then** begin QIE-core, qie-agent, QIE routes.
 

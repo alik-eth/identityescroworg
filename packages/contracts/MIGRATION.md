@@ -48,7 +48,7 @@ New relying-party integrations should target v2 exclusively.
 
 1. Circuits-eng ships fresh 14-signal `QKBGroth16VerifierRSA.sol` and
    `QKBGroth16VerifierEcdsa.sol` from the Phase 2 ceremony
-   (`performance-12x` Fly machine — spec §14.2).
+   (local 48+ GB machine — spec §14.2).
 2. Lead deploys each verifier to Sepolia and records the addresses.
 3. Lead runs `DeployRegistryV2.s.sol` with
    `RSA_VERIFIER_ADDR`, `ECDSA_VERIFIER_ADDR`, `ROOT_TL`,
@@ -81,9 +81,8 @@ targeting V2. Setting up the Groth16 proving key for that circuit
 circuit compiles to ~10.85 M R1CS constraints and snarkjs /
 ffjavascript hits V8's 4 GiB ArrayBuffer per-object limit inside the
 native tauG1/tauG2 section readers during `groth16 setup`. Confirmed
-across four attempts on a Fly `performance-12x:98304MB` VM (80 GiB
-Node heap, 96 GiB physical). Not fixable by adding RAM; the limit is
-V8 + ffjavascript-native.
+across four attempts on a 96 GiB host (80 GiB Node heap). Not fixable
+by adding RAM; the limit is V8 + ffjavascript-native.
 
 Spec: `docs/superpowers/specs/2026-04-18-split-proof-pivot.md`.
 
@@ -92,8 +91,8 @@ The pivot reverts to Phase-1's §5.4 split architecture:
 - **Leaf circuit** — 13 public signals, ~7.68 M constraints. Carries
   per-person data: `pkX` / `pkY` limbs, `ctxHash`, `declHash`,
   `timestamp`, `nullifier`, and a `leafSpkiCommit` output that glues to
-  the chain proof. pow-24 ptau, ~30 GB setup peak — fits a
-  `performance-4x:16384MB` Fly box.
+  the chain proof. pow-24 ptau, ~30 GB setup peak — fits a 16 GB host
+  with swap headroom.
 - **Chain circuit** — 5 public signals, ~3.20 M constraints. Carries
   trusted-list Merkle inclusion: `rTL`, `algorithmTag`, and the same
   `leafSpkiCommit`. pow-22 ptau, ~12 GB setup peak. Shares layout

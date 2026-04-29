@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans. Steps use checkbox syntax.
 
-**Goal:** Revert the unified `QKBPresentationEcdsa.circom` (10.85 M constraints, impossible to setup) back to Phase-1 §5.4 split: leaf + chain circuits, glued by `leafSpkiCommit` equality on-chain. Add the person-nullifier to the leaf. Run both ceremonies on a small Fly VM. Upload to R2.
+**Goal:** Revert the unified `QKBPresentationEcdsa.circom` (10.85 M constraints, impossible to setup) back to Phase-1 §5.4 split: leaf + chain circuits, glued by `leafSpkiCommit` equality on-chain. Add the person-nullifier to the leaf. Run both ceremonies on a 16 GB local host. Upload to R2.
 
 **Spec:** `docs/superpowers/specs/2026-04-18-split-proof-pivot.md`
 **Orchestration:** `docs/superpowers/plans/2026-04-18-split-proof-orchestration.md` (READ §2 before touching anything — interface contracts are frozen)
@@ -80,11 +80,11 @@ component main {public [pkX, pkY, ctxHash, declHash, timestamp, nullifier]}
 
 This gives the 13-signal public layout per orchestration §2.1: 12 inputs + `leafSpkiCommit` output = 13 total.
 
-- [ ] **Step 2: Local compile — SKIPPED (offloaded to Fly)**
+- [ ] **Step 2: Local compile — SKIPPED (deferred to ceremony host)**
 
-Local workstation is RAM-constrained (31 GB total, Desktop apps + multiple claude CLIs already eating baseline). A 7.68 M-constraint circom compile peaks ~6 GB and has OOM'd local dev before. The Fly ceremony VM (C5) runs the compile anyway, with gate enforcement there. Skip local compile.
+Local workstation is RAM-constrained (31 GB total, Desktop apps + multiple claude CLIs already eating baseline). A 7.68 M-constraint circom compile peaks ~6 GB and has OOM'd local dev before. The ceremony host (C5) runs the compile anyway, with gate enforcement there. Skip local compile.
 
-If you want a sanity check without compiling, run `grep -nE 'signal input|signal output|component' circuits/QKBPresentationEcdsaLeaf.circom` to eyeball the wire shape. The Fly ceremony script will fail-loud if constraints > 8 M.
+If you want a sanity check without compiling, run `grep -nE 'signal input|signal output|component' circuits/QKBPresentationEcdsaLeaf.circom` to eyeball the wire shape. The ceremony script will fail-loud if constraints > 8 M.
 
 - [ ] **Step 3: Commit**
 
@@ -296,9 +296,9 @@ component main {public [rTL, algorithmTag]}
     = QKBPresentationEcdsaChain();
 ```
 
-- [ ] **Step 2: Local compile — SKIPPED (offloaded to Fly)**
+- [ ] **Step 2: Local compile — SKIPPED (deferred to ceremony host)**
 
-Same rationale as C1 Step 2 — local workstation is RAM-constrained. Chain is smaller (~3.2 M) so it would probably fit locally, but keeping the pattern uniform: all compiles happen on the Fly ceremony VM, where the gate (hard cap 4.0 M for pow-22) fires during setup.
+Same rationale as C1 Step 2 — local workstation is RAM-constrained. Chain is smaller (~3.2 M) so it would probably fit locally, but keeping the pattern uniform: all compiles happen on the ceremony host, where the gate (hard cap 4.0 M for pow-22) fires during setup.
 
 Eyeball the wire shape via grep if desired.
 
@@ -379,45 +379,37 @@ git commit -m "chore(circuits): split witness builders + stub proof fixtures (le
 
 ---
 
-## Task C5: Run leaf ceremony on Fly
+## Task C5: Run leaf ceremony locally
 
 **Files:**
-- Modify: `ceremony/scripts/fly-ceremony-ecdsa.sh` — split into `fly-ceremony-leaf.sh` and `fly-ceremony-chain.sh`, or parameterize.
+- Modify: `ceremony/scripts/setup.sh` — accept `CIRCUIT_NAME` + `PTAU_POWER` env vars and target the matching `.r1cs`. Add a sibling `prove-leaf.sh` / `prove-chain.sh` if helpful.
 
-- [ ] **Step 1: Parameterize or rewrite the ceremony script**
+- [ ] **Step 1: Parameterize the local ceremony script**
 
 Key changes vs the existing unified script:
 - `PTAU_POWER=24` for leaf, `PTAU_POWER=22` for chain
 - `CIRCUIT_NAME=QKBPresentationEcdsaLeaf` or `QKBPresentationEcdsaChain` (env-parameterized)
-- VM `--vm-memory 16384` (down from 98304)
+- Host RAM: 16 GB minimum (down from a 98 GB attempt)
 - Gate constraint cap: 8 M leaf, 4 M chain
 - R2 upload path: `ecdsa-leaf/` vs `ecdsa-chain/`
 
-- [ ] **Step 2: Fly machine run — leaf**
+- [ ] **Step 2: Local ceremony — leaf**
 
 ```bash
-fly machine run ubuntu:22.04 \
-  --app qkb-ceremony \
-  --region ams \
-  --vm-size performance-4x \
-  --vm-memory 16384 \
-  --volume qkb_ceremony:/data \
-  --volume-size 60 \
-  --env CIRCUIT_NAME=QKBPresentationEcdsaLeaf \
-  --env PTAU_POWER=24 \
-  --env CEREMONY_BRANCH=feat/qie-circuits \
-  --env R2_ACCOUNT_ID=$R2_ACCOUNT_ID \
-  --env R2_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID \
-  --env R2_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY \
-  --env R2_BUCKET=$R2_BUCKET \
-  -- bash -c "curl -fsSL https://raw.githubusercontent.com/alik-eth/identityescroworg/feat/qie-circuits/packages/circuits/ceremony/scripts/fly-ceremony-split.sh | bash"
+# All commands run locally. Set CIRCUIT_NAME / PTAU_POWER per variant.
+CIRCUIT_NAME=QKBPresentationEcdsaLeaf \
+PTAU_POWER=24 \
+NODE_OPTIONS='--max-old-space-size=14336' \
+  bash packages/circuits/ceremony/scripts/setup.sh
 ```
 
-Monitor via `fly logs -a qkb-ceremony`. Expected setup time: ~25 min.
+Expected setup time: ~25 min on a host with 16+ GB RAM.
 
-- [ ] **Step 3: Pull artifacts + commit metadata**
+- [ ] **Step 3: Promote artifacts + commit metadata**
 
-After ceremony completes, SFTP-pull `QKBGroth16Verifier.sol` → rename to `QKBGroth16VerifierEcdsaLeaf.sol`. Pull `verification_key.json` + `zkey.sha256`. Commit under `ceremony/ecdsa-leaf/`.
+After ceremony completes, copy `QKBGroth16Verifier.sol` →
+`ceremony/ecdsa-leaf/QKBGroth16VerifierEcdsaLeaf.sol`. Move
+`verification_key.json` + `zkey.sha256` under `ceremony/ecdsa-leaf/`.
 
 ```bash
 git add ceremony/ecdsa-leaf/QKBGroth16VerifierEcdsaLeaf.sol \
@@ -427,24 +419,16 @@ git add ceremony/ecdsa-leaf/QKBGroth16VerifierEcdsaLeaf.sol \
 git commit -m "ceremony(circuits): leaf ECDSA groth16 — v1"
 ```
 
-- [ ] **Step 4: Destroy the machine**
-
-```bash
-MACHINE_ID=$(fly machines list -a qkb-ceremony --json | jq -r '.[0].id')
-fly machine destroy $MACHINE_ID -a qkb-ceremony --force
-```
-
 ---
 
-## Task C6: Run chain ceremony on Fly
+## Task C6: Run chain ceremony locally
 
 Same pattern as C5 with `CIRCUIT_NAME=QKBPresentationEcdsaChain`, `PTAU_POWER=22`. Smaller ptau, smaller zkey, ~10 min compute. Upload to `ecdsa-chain/`.
 
 - [ ] **Step 1:** Execute ceremony.
-- [ ] **Step 2:** Pull + commit `ceremony/ecdsa-chain/QKBGroth16VerifierEcdsaChain.sol` + VK + hash.
+- [ ] **Step 2:** Promote + commit `ceremony/ecdsa-chain/QKBGroth16VerifierEcdsaChain.sol` + VK + hash.
 - [ ] **Step 3:** Update `ceremony/urls.json` with chain entries.
-- [ ] **Step 4:** Destroy the machine.
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add ceremony/ecdsa-chain/* ceremony/urls.json
@@ -497,5 +481,5 @@ Do NOT proceed to the next task without lead greenlight — except C1→C2 which
 |---|---|---|
 | Leaf constraint blow-up | C1 Step 2 > 7.95 M | Message lead — possible `X509SubjectSerial` optimization or MAX_CERT trim |
 | Chain constraint blow-up | C2 Step 2 > 4.0 M | Message lead — possible MAX_CERT trim or Merkle depth cut |
-| Fly machine OOM | C5/C6 setup crashes | `fly machine destroy`, re-run with `performance-8x:32768MB` |
+| Local OOM | C5/C6 setup crashes | bump `MEM_CAP` / `NODE_OPTIONS` and retry, or move to a 32 GB host |
 | R2 upload fails | C5/C6 Step 3 | Re-run just the upload; zkey is preserved on `/data` volume |

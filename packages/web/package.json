@@ -12,7 +12,6 @@
     "test:e2e": "playwright test",
     "compute-policy-root": "node scripts/compute-policy-root.mjs",
     "package": "pnpm run build && node scripts/pack.mjs",
-    "deploy:fly": "cd ../.. && flyctl deploy --config packages/web/fly.toml --dockerfile packages/web/Dockerfile",
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {

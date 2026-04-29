@@ -254,8 +254,8 @@ The Phase 2 routes land in this worktree. Conventions locked by the
   e2e for these routes is therefore blocked until `base` is revisited;
   unit tests using React Testing Library + jsdom fully cover the
   component behavior in the meantime (`escrowNotary.render.test.tsx`,
-  `escrowRecover.mode.test.tsx`). When deploying to Fly or similar the
-  host must SPA-fallback-serve `index.html` for all paths.
+  `escrowRecover.mode.test.tsx`). Whichever static host is chosen must
+  SPA-fallback-serve `index.html` for all paths.
 
 ## Phase 2 QIE — in-browser demo (D2–D7)
 
@@ -324,8 +324,8 @@ that the MVP acceptance suite depends on.
 ## Phase handoffs
 
 - **Phase 1 QKB:** leaf-only Groth16 proof; chain constraint enforced
-  off-circuit. Target deploy: Sepolia + Fly.io static host at
-  `identityescrow.org`.
+  off-circuit. Target deploy: Sepolia + a static host at
+  `identityescrow.org` (host TBD).
 - **Phase 2 QIE:** introduces escrow commitments (non-empty `context`
   field in the binding, Poseidon-hashed to `ctxHash`), arbitrator UI,
   revoke-binding flow, split chain-proof verification. The

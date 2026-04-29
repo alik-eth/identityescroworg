@@ -1,6 +1,6 @@
 # Split-Proof Pivot — Orchestration Plan
 
-**Goal:** Revert Phase 2 from unified ECDSA presentation to Phase-1's §5.4 split-proof architecture (leaf + chain), extended with the scoped credential nullifier in the leaf. Target: Sepolia V3 deploy + Fly-redeployed SPA demo passing live register flow end-to-end with context-scoped QES identifier deduplication.
+**Goal:** Revert Phase 2 from unified ECDSA presentation to Phase-1's §5.4 split-proof architecture (leaf + chain), extended with the scoped credential nullifier in the leaf. Target: Sepolia V3 deploy + redeployed SPA demo passing live register flow end-to-end with context-scoped QES identifier deduplication.
 
 **Spec:** `docs/superpowers/specs/2026-04-18-split-proof-pivot.md`
 
@@ -130,10 +130,10 @@ Ordered, with triggers:
 
 - **S1** — Before dispatch: resurrect workers via `Agent({name:...})` (team was killed by earlier OOM). Hand each their plan path + this orchestration link.
 - **S2** — After `circuits-eng` commits stub ceremony outputs: pump `QKBGroth16VerifierStubEcdsaLeaf.sol` + `QKBGroth16VerifierStubEcdsaChain.sol` + leaf/chain stub VKs + stub proof fixtures into `contracts` worktree.
-- **S3** — After `circuits-eng` completes real ceremonies on Fly: pump real `QKBGroth16VerifierEcdsaLeaf.sol` + `QKBGroth16VerifierEcdsaChain.sol` into contracts; pump R2 URLs + SHA256s + zkey metadata into web's `prover.config.ts`.
+- **S3** — After `circuits-eng` completes real ceremonies locally: pump real `QKBGroth16VerifierEcdsaLeaf.sol` + `QKBGroth16VerifierEcdsaChain.sol` into contracts; pump R2 URLs + SHA256s + zkey metadata into web's `prover.config.ts`.
 - **S4** — After `contracts-eng` green: Sepolia V3 deploy via `forge script`.
 - **S5** — After Sepolia addresses settle: pump `sepolia.json` addresses to web worktree.
-- **S6** — After `web-eng` green: `fly deploy -c fly.web.toml`.
+- **S6** — After `web-eng` green: build (`pnpm -F @qkb/web build`) and publish `packages/web/dist/` to the chosen static host.
 - **S7** — Manual Playwright E2E on `identityescrow.org` + Sepolia.
 
 ---
@@ -144,27 +144,27 @@ Two ceremonies per algorithm — ECDSA goes first (we have a real Diia fixture);
 
 ### 6.1 Leaf ceremony (ECDSA)
 
-- VM: `performance-4x:16384MB` (4 vCPU / 16 GB)
-- ptau: pow-24 (18 GB download, ~15 min on 1 Gbps Fly network)
+- Host: 16 GB local box (4 vCPU / 16 GB minimum)
+- ptau: pow-24 (18 GB download, ~15 min on 1 Gbps link)
 - Expected setup time: ~25 min
 - Zkey: ~5.5 GB
 - Upload: R2 bucket at `ecdsa-leaf/qkb-leaf.zkey` + `ecdsa-leaf/QKBPresentationEcdsaLeaf.wasm`
 
 ### 6.2 Chain ceremony (ECDSA)
 
-- VM: `performance-4x:16384MB` (same box, reused after leaf)
+- Host: 16 GB local box (same machine, reused after leaf)
 - ptau: pow-22 (4.5 GB)
 - Expected setup time: ~10 min
 - Zkey: ~2.3 GB
 - Upload: R2 bucket at `ecdsa-chain/qkb-chain.zkey` + `ecdsa-chain/QKBPresentationEcdsaChain.wasm`
 
-Total ceremony budget: ~40 min compute + upload, < $1 Fly cost.
+Total ceremony budget: ~40 min compute + upload on a workstation.
 
 ### 6.3 Ceremony failure modes
 
 - **ptau too small**: bump to next power and restart. Circuit should report `peak constraints` at compile; we gate at `2 × constraints ≤ 2^power`.
-- **Heap OOM with valid ptau**: set `NODE_OPTIONS=--max-old-space-size=12288` (12 GiB, leaving 4 GiB for native); if still fails, upgrade VM to `performance-8x:32768MB`. Small circuits should not need this.
-- **Setup succeeds but produces zero-byte zkey**: already guarded in `fly-ceremony-ecdsa.sh` (test -s after setup).
+- **Heap OOM with valid ptau**: set `NODE_OPTIONS=--max-old-space-size=12288` (12 GiB, leaving 4 GiB for native); if still fails, run on a 32 GB host. Small circuits should not need this.
+- **Setup succeeds but produces zero-byte zkey**: already guarded in `setup.sh` (test -s after setup).
 
 ---
 
