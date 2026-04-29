@@ -8,6 +8,7 @@ import { IndexScreen } from './routes/index';
 import { CliInstall } from './routes/ua/cli';
 import { SubmitScreen } from './routes/ua/submit';
 import { MintScreen } from './routes/ua/mint';
+import { MintNftScreen } from './routes/ua/mintNft';
 import { RegisterV5Screen } from './routes/ua/registerV5';
 import { IntegrationsScreen } from './routes/integrations';
 
@@ -47,6 +48,12 @@ const registerV5Route = createRoute({
   component: RegisterV5Screen,
 });
 
+const mintNftRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/ua/mintNft',
+  component: MintNftScreen,
+});
+
 const integrationsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/integrations',
@@ -59,6 +66,7 @@ const routeTree = rootRoute.addChildren([
   submitRoute,
   mintRoute,
   registerV5Route,
+  mintNftRoute,
   integrationsRoute,
 ]);
 

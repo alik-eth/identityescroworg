@@ -244,4 +244,30 @@ export {
 } from './deployments.js';
 
 export { qkbRegistryV4Abi } from './abi/QKBRegistryV4.js';
+export { qkbRegistryV5Abi } from './abi/QKBRegistryV5.js';
 export { identityEscrowNftAbi } from './abi/IdentityEscrowNFT.js';
+
+export {
+  PUBLIC_SIGNALS_V5_LENGTH,
+  REGISTRY_V5_ERROR_SELECTORS,
+  assertRegisterArgsV5Shape,
+  classifyV5RegistryRevert,
+  encodeV5RegisterCalldata,
+  publicSignalsFromArray,
+  publicSignalsToArray,
+  type Groth16ProofV5,
+  type PublicSignalsV5,
+  type RegisterArgsV5,
+} from './registry/registryV5.js';
+
+export {
+  bytes32ToHiLo,
+  hiLoToBytes32,
+} from './core/bytes32ToHiLo.js';
+
+export {
+  buildV5Witness,
+  type BindingV2Offsets,
+  type BuildV5WitnessInput,
+  type QKBPresentationV5WitnessInput,
+} from './witness/v5.js';

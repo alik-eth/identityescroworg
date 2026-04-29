@@ -41,7 +41,7 @@ export default defineConfig({
     {
       name: 'v5',
       use: { browserName: 'chromium' },
-      testMatch: /v5-(register-route|flow)\.spec\.ts/,
+      testMatch: /v5-(register-route|mint|flow)\.spec\.ts/,
     },
     {
       name: 'chromium',
