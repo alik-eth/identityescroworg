@@ -4,6 +4,7 @@ pragma solidity 0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {QKBRegistryV5, IGroth16VerifierV5} from "../src/QKBRegistryV5.sol";
 import {Groth16VerifierV5} from "../src/Groth16VerifierV5.sol";
+import {P256Verify} from "../src/libs/P256Verify.sol";
 
 /// @notice §6.2 Gate-1 (Groth16 verify) tests. Subsequent gate commits add
 /// negative tests for Gates 2a..5 to this file (bind, P256, trust Merkle,
@@ -25,6 +26,21 @@ contract QKBRegistryV5RegisterTest is Test {
     bytes32 internal initialTrustRoot  = bytes32(uint256(0xA));
     bytes32 internal initialPolicyRoot = bytes32(uint256(0xB));
 
+    /// Real Diia admin-leaf SPKI (fixture pinned via the §2.1 mirror).
+    /// SpkiCommit for these bytes equals the §9.1 admin-leaf-ecdsa decimal.
+    bytes internal leafSpki;
+    bytes internal intSpki;
+    /// Pre-computed signal values for these baseline SPKIs.
+    /// (Gate 2a will compare these to whatever the contract derives from
+    /// the calldata; we compute them once in setUp via P256Verify so the
+    /// test stays in sync with the library logic.)
+    uint256 internal baselineLeafSpkiCommit;
+    uint256 internal baselineIntSpkiCommit;
+
+    /// signedAttrs baseline = empty bytes. sha256("") split into Hi (top 16)
+    /// and Lo (bottom 16) bytes packed into uint256.
+    bytes internal constant BASELINE_SIGNED_ATTRS = "";
+
     function setUp() public {
         verifier = new Groth16VerifierV5();
         registry = new QKBRegistryV5(
@@ -33,6 +49,23 @@ contract QKBRegistryV5RegisterTest is Test {
             initialTrustRoot,
             initialPolicyRoot
         );
+
+        leafSpki = vm.readFileBinary(
+            "./packages/contracts/test/fixtures/v5/admin-ecdsa/leaf-spki.bin"
+        );
+        require(leafSpki.length == 91, "leafSpki fixture length");
+
+        // We don't have an intermediate-SPKI binary on disk yet, but the
+        // parity JSON has its hex form. For Gate 2a we just need any
+        // structurally-valid 91-byte named-curve SPKI; reuse leafSpki to
+        // keep the test self-contained. (Real-Diia intermediate gets used
+        // in §6.7's end-to-end happy path test.)
+        intSpki = leafSpki;
+
+        baselineLeafSpkiCommit = P256Verify.spkiCommit(
+            leafSpki, registry.poseidonT3(), registry.poseidonT7()
+        );
+        baselineIntSpkiCommit = baselineLeafSpkiCommit; // intSpki = leafSpki
     }
 
     /// Build a baseline register() argument tuple. Gates 2-5 don't yet
@@ -47,7 +80,12 @@ contract QKBRegistryV5RegisterTest is Test {
         });
     }
 
-    function _baselineSignals(address sender) internal pure returns (QKBRegistryV5.PublicSignals memory) {
+    function _baselineSignals(address sender) internal view returns (QKBRegistryV5.PublicSignals memory) {
+        // Hi/Lo split of sha256(BASELINE_SIGNED_ATTRS) — Hi = top 16 bytes,
+        // Lo = bottom 16 bytes (the V5 convention for fitting a 256-bit
+        // hash into two BN254 field elements). This matches what Gate 2a
+        // will compute on-chain.
+        (uint256 saHi, uint256 saLo) = _hashHiLo(BASELINE_SIGNED_ATTRS);
         return QKBRegistryV5.PublicSignals({
             msgSender:         uint256(uint160(sender)),
             timestamp:         100,
@@ -56,17 +94,21 @@ contract QKBRegistryV5RegisterTest is Test {
             ctxHashLo:         0,
             bindingHashHi:     0,
             bindingHashLo:     0,
-            signedAttrsHashHi: 0,
-            signedAttrsHashLo: 0,
+            signedAttrsHashHi: saHi,
+            signedAttrsHashLo: saLo,
             leafTbsHashHi:     0,
             leafTbsHashLo:     0,
             policyLeafHash:    0,
-            leafSpkiCommit:    0,
-            intSpkiCommit:     0
+            leafSpkiCommit:    baselineLeafSpkiCommit,
+            intSpkiCommit:     baselineIntSpkiCommit
         });
     }
 
-    function _emptyBytes16() internal pure returns (bytes32[16] memory out) {}
+    function _hashHiLo(bytes memory blob) internal pure returns (uint256 hi, uint256 lo) {
+        bytes32 h = sha256(blob);
+        hi = uint256(h) >> 128;
+        lo = uint256(h) & ((uint256(1) << 128) - 1);
+    }
 
     function _callRegister(
         QKBRegistryV5.Groth16Proof memory proof,
@@ -78,7 +120,7 @@ contract QKBRegistryV5RegisterTest is Test {
         bytes32[16] memory policyPath;
         registry.register(
             proof, sig,
-            "", "", "",            // leafSpki, intSpki, signedAttrs (not yet inspected)
+            leafSpki, intSpki, BASELINE_SIGNED_ATTRS,
             leafSig, intSig,        // P256 sigs (Gate 2b)
             trustPath, 0,           // trust Merkle (Gate 3)
             policyPath, 0           // policy Merkle (Gate 4)
@@ -156,11 +198,12 @@ contract QKBRegistryV5RegisterTest is Test {
     /// up as a calldata mismatch on the expectCall.
     function test_register_publicSignalLayout_matchesSpec_v5_section_0_1() public {
         QKBRegistryV5.Groth16Proof memory proof = _baselineProof();
-        // Use distinct sentinel values 1001..1013 in slots [1..13] so
-        // any index drift in the packing surfaces as a value mismatch
-        // in expectCall's ABI-equality check. Slot [0] (msgSender) must
-        // remain a real ≤2^160 value because the registry will (in §6.7)
-        // bind it against msg.sender.
+        // Sentinels 1001..1013 in slots [1..13] (slot [0] = uint160(holder))
+        // so any index drift in the packing surfaces as a value mismatch
+        // in expectCall's ABI-equality check. We expect register() to
+        // revert at Gate 2a (BadSignedAttrsHi) because the sentinels don't
+        // match the on-chain-derived values — but Gate 1 runs first, so
+        // vm.expectCall still records the verifier call before the revert.
         QKBRegistryV5.PublicSignals memory sig = QKBRegistryV5.PublicSignals({
             msgSender:         uint256(uint160(holder)),
             timestamp:         1001,
@@ -197,7 +240,68 @@ contract QKBRegistryV5RegisterTest is Test {
             (proof.a, proof.b, proof.c, expected)
         );
         vm.expectCall(address(verifier), expectedCall);
-
+        // Gate 2a will revert because signedAttrsHashHi=1007 won't match
+        // sha256(BASELINE_SIGNED_ATTRS) high half. We catch the revert so
+        // vm.expectCall's post-test verification can still observe the
+        // earlier Gate 1 call.
+        vm.expectRevert(QKBRegistryV5.BadSignedAttrsHi.selector);
         _callRegister(proof, sig);
+    }
+
+    /* ===== Gate 2a — bind proof commits to calldata ===== */
+
+    function test_register_revertsBadSignedAttrsHi_whenHiTampered() public {
+        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        sig.signedAttrsHashHi ^= 1; // flip lowest bit of Hi half
+        vm.expectRevert(QKBRegistryV5.BadSignedAttrsHi.selector);
+        _callRegister(_baselineProof(), sig);
+    }
+
+    function test_register_revertsBadSignedAttrsLo_whenLoTampered() public {
+        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        sig.signedAttrsHashLo ^= 1;
+        vm.expectRevert(QKBRegistryV5.BadSignedAttrsLo.selector);
+        _callRegister(_baselineProof(), sig);
+    }
+
+    function test_register_revertsBadLeafSpki_whenLeafCommitTampered() public {
+        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        sig.leafSpkiCommit ^= 1;
+        vm.expectRevert(QKBRegistryV5.BadLeafSpki.selector);
+        _callRegister(_baselineProof(), sig);
+    }
+
+    function test_register_revertsBadIntSpki_whenIntCommitTampered() public {
+        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        sig.intSpkiCommit ^= 1;
+        vm.expectRevert(QKBRegistryV5.BadIntSpki.selector);
+        _callRegister(_baselineProof(), sig);
+    }
+
+    /// Tampering the leaf SPKI bytes themselves (rather than the commit
+    /// value) should also fail Gate 2a — the on-chain SpkiCommit of the
+    /// tampered bytes won't match the (untampered) commit signal.
+    function test_register_revertsBadLeafSpki_whenLeafBytesTampered() public {
+        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        bytes memory tamperedLeaf = vm.readFileBinary(
+            "./packages/contracts/test/fixtures/v5/admin-ecdsa/leaf-spki.bin"
+        );
+        // Flip a byte in the X coordinate (offset 27..58) — this mutates
+        // a field that parseSpki accepts (the prefix is unchanged) but
+        // produces a different SpkiCommit.
+        tamperedLeaf[40] = bytes1(uint8(tamperedLeaf[40]) ^ 0x01);
+
+        bytes32[2] memory leafSig;
+        bytes32[2] memory intSig;
+        bytes32[16] memory trustPath;
+        bytes32[16] memory policyPath;
+        vm.expectRevert(QKBRegistryV5.BadLeafSpki.selector);
+        registry.register(
+            _baselineProof(), sig,
+            tamperedLeaf, intSpki, BASELINE_SIGNED_ATTRS,
+            leafSig, intSig,
+            trustPath, 0,
+            policyPath, 0
+        );
     }
 }

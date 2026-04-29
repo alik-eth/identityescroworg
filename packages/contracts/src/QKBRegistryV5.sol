@@ -4,6 +4,7 @@ pragma solidity 0.8.24;
 import {IQKBRegistry} from "./IdentityEscrowNFT.sol";
 import {Poseidon} from "./libs/Poseidon.sol";
 import {PoseidonBytecode} from "./libs/PoseidonBytecode.sol";
+import {P256Verify} from "./libs/P256Verify.sol";
 
 /// @notice The Groth16 verifier interface — exposed so the registry can
 ///         bind to either the §5 stub OR the real ceremony output without
@@ -175,7 +176,11 @@ contract QKBRegistryV5 is IQKBRegistry {
 
     /* ---------- register() errors (one per gate, named for diagnostics) ---------- */
 
-    error BadProof();        // Gate 1: Groth16 verifier returned false.
+    error BadProof();        // Gate 1:  Groth16 verifier returned false.
+    error BadSignedAttrsHi();// Gate 2a: sha256(signedAttrs) hi-half ≠ sig.signedAttrsHashHi.
+    error BadSignedAttrsLo();// Gate 2a: sha256(signedAttrs) lo-half ≠ sig.signedAttrsHashLo.
+    error BadLeafSpki();     // Gate 2a: SpkiCommit(leafSpki) ≠ sig.leafSpkiCommit.
+    error BadIntSpki();      // Gate 2a: SpkiCommit(intSpki) ≠ sig.intSpkiCommit.
 
     /// @notice 5-gate registration. Gates land incrementally:
     ///   Gate 1 (this commit, §6.2): Groth16 verify call.
@@ -202,8 +207,8 @@ contract QKBRegistryV5 is IQKBRegistry {
         uint256                 policyMerklePathBits
     ) external {
         // Suppress unused-parameter warnings for fields gated in subsequent
-        // commits (§6.3..§6.7). They become live as each gate lands.
-        leafSpki; intSpki; signedAttrs; leafSig; intSig;
+        // commits (§6.4..§6.7). They become live as each gate lands.
+        leafSig; intSig;
         trustMerklePath; trustMerklePathBits; policyMerklePath; policyMerklePathBits;
 
         /* ===== Gate 1 (§6.2): Groth16 verify ===== */
@@ -229,9 +234,35 @@ contract QKBRegistryV5 is IQKBRegistry {
             revert BadProof();
         }
 
-        // Gates 2a..5 land in §6.3..§6.7. Until then register() succeeds
-        // after Gate 1 — happy-path tests for downstream gates can submit
-        // fully-populated calldata that just doesn't trigger any later
-        // revert until the gate it tests is implemented.
+        /* ===== Gate 2a (§6.3): bind public-input commits to calldata ===== */
+        // Hi/Lo split convention: hi = top 16 bytes of the 32-byte hash,
+        // lo = bottom 16 bytes. Each half fits in a BN254 field element
+        // (each is 128 bits ≪ ~254-bit field size). This matches the
+        // circuit's witness-side packing — circuits-eng emits the same
+        // halves into signals [7..10].
+        {
+            bytes32 saHash = sha256(signedAttrs);
+            uint256 saHi = uint256(saHash) >> 128;
+            uint256 saLo = uint256(saHash) & ((uint256(1) << 128) - 1);
+            if (saHi != sig.signedAttrsHashHi) revert BadSignedAttrsHi();
+            if (saLo != sig.signedAttrsHashLo) revert BadSignedAttrsLo();
+        }
+
+        // SpkiCommit binding — both leaf and intermediate must match the
+        // commitments the prover used inside the circuit. spkiCommit also
+        // structurally validates the SPKI (parseSpki gates length=91 and
+        // the canonical 27-byte DER prefix), so any malformed SPKI
+        // bytes also fail here.
+        if (P256Verify.spkiCommit(leafSpki, poseidonT3, poseidonT7) != sig.leafSpkiCommit) {
+            revert BadLeafSpki();
+        }
+        if (P256Verify.spkiCommit(intSpki, poseidonT3, poseidonT7) != sig.intSpkiCommit) {
+            revert BadIntSpki();
+        }
+
+        // Gates 2b..5 land in §6.4..§6.7. Until then register() succeeds
+        // after Gate 2a — downstream-gate happy-path tests submit
+        // calldata that doesn't trip any later gate, which is fine because
+        // those gates aren't implemented yet.
     }
 }
