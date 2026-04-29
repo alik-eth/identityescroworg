@@ -181,6 +181,8 @@ contract QKBRegistryV5 is IQKBRegistry {
     error BadSignedAttrsLo();// Gate 2a: sha256(signedAttrs) lo-half ≠ sig.signedAttrsHashLo.
     error BadLeafSpki();     // Gate 2a: SpkiCommit(leafSpki) ≠ sig.leafSpkiCommit.
     error BadIntSpki();      // Gate 2a: SpkiCommit(intSpki) ≠ sig.intSpkiCommit.
+    error BadLeafSig();      // Gate 2b: leaf P-256 over sha256(signedAttrs) failed.
+    error BadIntSig();       // Gate 2b: intermediate P-256 over leafTbsHash failed.
 
     /// @notice 5-gate registration. Gates land incrementally:
     ///   Gate 1 (this commit, §6.2): Groth16 verify call.
@@ -207,8 +209,7 @@ contract QKBRegistryV5 is IQKBRegistry {
         uint256                 policyMerklePathBits
     ) external {
         // Suppress unused-parameter warnings for fields gated in subsequent
-        // commits (§6.4..§6.7). They become live as each gate lands.
-        leafSig; intSig;
+        // commits (§6.5..§6.7). They become live as each gate lands.
         trustMerklePath; trustMerklePathBits; policyMerklePath; policyMerklePathBits;
 
         /* ===== Gate 1 (§6.2): Groth16 verify ===== */
@@ -260,9 +261,30 @@ contract QKBRegistryV5 is IQKBRegistry {
             revert BadIntSpki();
         }
 
-        // Gates 2b..5 land in §6.4..§6.7. Until then register() succeeds
-        // after Gate 2a — downstream-gate happy-path tests submit
-        // calldata that doesn't trip any later gate, which is fine because
-        // those gates aren't implemented yet.
+        /* ===== Gate 2b (§6.4): 2× P256Verify (leaf + intermediate) ===== */
+        // Leaf signature is over the digest of signedAttrs (the canonical
+        // CMS / CAdES SignerInfo signature), signed by the leaf certificate's
+        // public key. Gate 2a already proved sha256(signedAttrs) matches
+        // sig.signedAttrsHashHi/Lo, so we hash signedAttrs again here for
+        // the precompile (cheaper than reconstructing the digest from the
+        // hi/lo halves; sha256 of a memory blob is one EVM op).
+        if (!P256Verify.verifyWithSpki(leafSpki, sha256(signedAttrs), leafSig)) {
+            revert BadLeafSig();
+        }
+
+        // Intermediate signature is over the leaf's TBS bytes (the issuer
+        // signed those when issuing the leaf cert). The proof commits to
+        // the digest in signals [9..10] as Hi/Lo halves; reassemble the
+        // 32-byte hash to feed the precompile.
+        bytes32 leafTbsHash = bytes32(
+            (sig.leafTbsHashHi << 128) | sig.leafTbsHashLo
+        );
+        if (!P256Verify.verifyWithSpki(intSpki, leafTbsHash, intSig)) {
+            revert BadIntSig();
+        }
+
+        // Gates 3..5 land in §6.5..§6.7. Until then register() succeeds
+        // after Gate 2b — downstream-gate tests submit calldata that
+        // doesn't trip any later gate.
     }
 }

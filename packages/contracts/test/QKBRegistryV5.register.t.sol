@@ -41,6 +41,24 @@ contract QKBRegistryV5RegisterTest is Test {
     /// and Lo (bottom 16) bytes packed into uint256.
     bytes internal constant BASELINE_SIGNED_ATTRS = "";
 
+    /// EIP-7212 / RIP-7212 P256VERIFY precompile address. Forge 1.5.1's
+    /// revm doesn't ship it (per V5 §2 escalation), so unit tests mock it
+    /// via vm.mockCall to simulate {accept, reject} responses.
+    address internal constant P256_PRECOMPILE = address(0x0000000000000000000000000000000000000100);
+
+    /// Default Gate 2b posture for register() tests: precompile accepts
+    /// EVERY input. Subsequent commits (§6.4 negative paths) override this
+    /// with rejection mocks for specific signatures.
+    function _mockP256AcceptAll() internal {
+        vm.mockCall(P256_PRECOMPILE, "", abi.encode(uint256(1)));
+    }
+
+    /// Reject all P-256 signatures (precompile returns empty bytes per
+    /// RIP-7212 spec for invalid sigs).
+    function _mockP256RejectAll() internal {
+        vm.mockCall(P256_PRECOMPILE, "", "");
+    }
+
     function setUp() public {
         verifier = new Groth16VerifierV5();
         registry = new QKBRegistryV5(
@@ -66,6 +84,11 @@ contract QKBRegistryV5RegisterTest is Test {
             leafSpki, registry.poseidonT3(), registry.poseidonT7()
         );
         baselineIntSpkiCommit = baselineLeafSpkiCommit; // intSpki = leafSpki
+
+        // By default, mock the precompile to accept any input — keeps Gate
+        // 2b tests passing through to subsequent gates unless a test
+        // explicitly overrides with _mockP256RejectAll().
+        _mockP256AcceptAll();
     }
 
     /// Build a baseline register() argument tuple. Gates 2-5 don't yet
@@ -275,6 +298,83 @@ contract QKBRegistryV5RegisterTest is Test {
         QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
         sig.intSpkiCommit ^= 1;
         vm.expectRevert(QKBRegistryV5.BadIntSpki.selector);
+        _callRegister(_baselineProof(), sig);
+    }
+
+    /* ===== Gate 2b — 2× P256Verify (leaf + intermediate) ===== */
+
+    /// vm.mockCall returning empty (`""`) simulates RIP-7212's "invalid
+    /// signature" response. Both leaf and intermediate verifications fail
+    /// — but Gate 2b checks them in order (leaf first), so we observe
+    /// BadLeafSig.
+    function test_register_revertsBadLeafSig_whenP256Rejects() public {
+        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        _mockP256RejectAll();
+        vm.expectRevert(QKBRegistryV5.BadLeafSig.selector);
+        _callRegister(_baselineProof(), sig);
+    }
+
+    /// To exercise BadIntSig specifically, we need the LEAF P-256 to pass
+    /// and the INTERMEDIATE P-256 to fail. Differentiate by mocking
+    /// per-input: the precompile call for the leaf signature uses one
+    /// 160-byte input (msgHash=sha256(signedAttrs)||r||s||leafX||leafY);
+    /// the intermediate uses a different 160-byte input (msgHash=leafTbs).
+    /// vm.mockCall keyed on calldata equality picks one mock per
+    /// distinguishable input.
+    ///
+    /// Since the test's leafSpki == intSpki and leafSig is set to all
+    /// zeros (default), the actual on-chain inputs to the precompile differ
+    /// only by msgHash (sha256(signedAttrs) vs leafTbsHash). We mock the
+    /// FULL leaf-call calldata to accept, and leave everything else at
+    /// the default reject (empty) — but the default mock from setUp is
+    /// accept-all, so we have to clear it first. Simplest approach: clear
+    /// the broad accept mock, then add a narrow accept mock keyed on the
+    /// leaf-call's input.
+    function test_register_revertsBadIntSig_whenIntP256Rejects_butLeafAccepts() public {
+        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+
+        // Override the broad accept-all mock with an accept-only-for-leaf
+        // mock, and a reject-everything-else fallback. We don't have a
+        // direct "clear" API in older Forge; the way to override a
+        // vm.mockCall is to register a more-specific mock — but the
+        // selector here is empty (`""`) which is the broadest. Approach:
+        // rebuild the leaf-precompile input bytes and register a narrow
+        // mock that accepts those bytes; combine with `_mockP256RejectAll`
+        // (broad reject) so the int-call falls through to reject.
+        _mockP256RejectAll();
+
+        // Compute leaf-call calldata: sha256(signedAttrs) || r || s || leafX || leafY.
+        // leafSig defaults to (0,0); leafSpki bytes 27..58 = X, 59..90 = Y.
+        bytes32 saHash = sha256(BASELINE_SIGNED_ATTRS);
+        bytes32 leafX;
+        bytes32 leafY;
+        bytes memory _spki = leafSpki;
+        assembly {
+            leafX := mload(add(_spki, 0x3B))  // 0x20 + 27
+            leafY := mload(add(_spki, 0x5B))  // 0x20 + 59
+        }
+        bytes memory leafInput = abi.encodePacked(saHash, bytes32(0), bytes32(0), leafX, leafY);
+        // Narrow mock — only the leaf-call's 160 bytes flip to accept.
+        vm.mockCall(P256_PRECOMPILE, leafInput, abi.encode(uint256(1)));
+
+        vm.expectRevert(QKBRegistryV5.BadIntSig.selector);
+        _callRegister(_baselineProof(), sig);
+    }
+
+    /// Sanity: verifyWithSpki is being called at all. expectCall shows
+    /// the staticcall reaches 0x100 with the right shape (160-byte input).
+    function test_register_callsP256Precompile_forLeafSignature() public {
+        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        bytes32 saHash = sha256(BASELINE_SIGNED_ATTRS);
+        bytes32 leafX;
+        bytes32 leafY;
+        bytes memory _spki = leafSpki;
+        assembly {
+            leafX := mload(add(_spki, 0x3B))
+            leafY := mload(add(_spki, 0x5B))
+        }
+        bytes memory expectedInput = abi.encodePacked(saHash, bytes32(0), bytes32(0), leafX, leafY);
+        vm.expectCall(P256_PRECOMPILE, expectedInput);
         _callRegister(_baselineProof(), sig);
     }
 

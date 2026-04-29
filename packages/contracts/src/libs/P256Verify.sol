@@ -31,8 +31,14 @@ library P256Verify {
 
     error SpkiLength();
     error SpkiPrefix();
+    error PrecompileCallFailed();
 
     uint256 internal constant SPKI_LEN = 91;
+    /// EIP-7212 / RIP-7212 P256VERIFY precompile address. Live on Base
+    /// mainnet/Sepolia + Optimism mainnet/Sepolia (confirmed empirically
+    /// per V5 §2 reachability investigation; see commit cd6aa28 for the
+    /// live-chain probe outputs and the revm tooling-gap caveat).
+    address internal constant P256_PRECOMPILE = address(0x0000000000000000000000000000000000000100);
 
     /// 27-byte canonical DER prefix as a single 256-bit word, left-justified
     /// (MSB-aligned) so the assembly compare can mload+shr in one step.
@@ -108,5 +114,37 @@ library P256Verify {
         uint256 hashX = Poseidon.hashT7(t7, decomposeTo643Limbs(x));
         uint256 hashY = Poseidon.hashT7(t7, decomposeTo643Limbs(y));
         return Poseidon.hashT3(t3, [hashX, hashY]);
+    }
+
+    /// @notice Verify a P-256 ECDSA signature using EIP-7212.
+    /// @param  spki        91-byte named-curve P-256 SPKI of the verifying key.
+    /// @param  messageHash 32-byte digest the signature was computed over.
+    /// @param  sig         (r, s) as two 32-byte big-endian words.
+    /// @return ok          True iff the precompile returns the canonical
+    ///                     32-byte one for (msgHash, r, s, X, Y).
+    /// @dev    Per RIP-7212: precompile takes 160 bytes
+    ///         msgHash || r || s || X || Y, returns 0x...01 on a valid
+    ///         signature, or empty bytes on an invalid one. We use
+    ///         staticcall — `call` is forbidden because some op-geth
+    ///         versions return empty even on success in state-changing
+    ///         contexts (per EIP-7212 spec note + OP discussion #791).
+    ///
+    ///         IMPORTANT TOOLING CAVEAT: Foundry 1.5.1's revm does not
+    ///         ship RIP-7212 (per V5 §2 escalation). Unit tests that
+    ///         exercise this function MUST use vm.mockCall on
+    ///         P256_PRECOMPILE to simulate the precompile's
+    ///         {0x...01, 0x} responses. Real-chain regression is
+    ///         covered by `script/probe-eip7212.ts`.
+    function verifyWithSpki(
+        bytes memory spki,
+        bytes32 messageHash,
+        bytes32[2] memory sig
+    ) internal view returns (bool ok) {
+        (bytes32 x, bytes32 y) = parseSpki(spki);
+        bytes memory input = abi.encodePacked(messageHash, sig[0], sig[1], x, y);
+        (bool success, bytes memory ret) = P256_PRECOMPILE.staticcall(input);
+        if (!success) revert PrecompileCallFailed();
+        // EIP-7212: invalid signature → empty bytes; valid → 32-byte one.
+        return ret.length == 32 && uint256(bytes32(ret)) == 1;
     }
 }
