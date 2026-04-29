@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity 0.8.24;
 
+import {Poseidon} from "./Poseidon.sol";
+
 /// @title  V5 P-256 verification + canonical SPKI commitment
-/// @notice Pure helpers (no state). The full library will eventually expose:
+/// @notice Mostly-pure helpers (only spkiCommit is `view`, because it
+///         staticcalls the deployed Poseidon contracts). The full library
+///         exposes:
 ///         - parseSpki     (this file, §3.1)  — DER walk + (X, Y) extraction.
 ///         - verifyWithSpki(this file, §3.2)  — EIP-7212 (or fallback) wrapper.
 ///         - spkiCommit    (this file, §3.3)  — Poseidon-over-limbs commitment.
@@ -70,5 +74,39 @@ library P256Verify {
             x := mload(add(spki, 0x3B)) // 0x20 + 27
             y := mload(add(spki, 0x5B)) // 0x20 + 59
         }
+    }
+
+    /// @notice Decompose a 32-byte big-endian value into 6 little-endian
+    ///         limbs of 43 bits each — the limb encoding the V5 circuit
+    ///         consumes (matches V4's Bytes32ToLimbs643 template + the TS
+    ///         reference at spki-commit-ref.ts `decomposeTo643Limbs`).
+    /// @dev    6 × 43 = 258 bits of capacity > 256 bits of input, so the top
+    ///         limb has at most 41 significant bits; all 6 limbs fit
+    ///         strictly under 2^43.
+    function decomposeTo643Limbs(bytes32 v) internal pure returns (uint256[6] memory limbs) {
+        uint256 vU = uint256(v);
+        uint256 mask = (uint256(1) << 43) - 1;
+        for (uint256 i = 0; i < 6; i++) {
+            limbs[i] = (vU >> (43 * i)) & mask;
+        }
+    }
+
+    /// @notice Canonical SpkiCommit per V5 spec §0.2 / orchestration §2.2:
+    ///   1. Parse 91-byte named-curve P-256 SPKI → (X, Y).
+    ///   2. Decompose each coord into 6 × 43-bit LE limbs.
+    ///   3. spkiCommit = Poseidon₂( Poseidon₆(X_limbs), Poseidon₆(Y_limbs) ).
+    /// @dev    Output MUST byte-match circuits-eng's TS reference impl on
+    ///         every case in fixtures/spki-commit/v5-parity.json. Call sites
+    ///         supply the deployed Poseidon T7 + T3 addresses (created via
+    ///         Poseidon.deploy in the registry's constructor).
+    function spkiCommit(
+        bytes memory spki,
+        address t3,
+        address t7
+    ) internal view returns (uint256) {
+        (bytes32 x, bytes32 y) = parseSpki(spki);
+        uint256 hashX = Poseidon.hashT7(t7, decomposeTo643Limbs(x));
+        uint256 hashY = Poseidon.hashT7(t7, decomposeTo643Limbs(y));
+        return Poseidon.hashT3(t3, [hashX, hashY]);
     }
 }
