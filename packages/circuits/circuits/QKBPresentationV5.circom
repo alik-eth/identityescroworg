@@ -1,6 +1,6 @@
 pragma circom 2.1.9;
 
-include "./binding/BindingParseV2CoreLegacy.circom";
+include "./binding/BindingParseV2CoreFast.circom";
 include "./primitives/Sha256Var.circom";
 include "./primitives/Sha256CanonPad.circom";
 include "./primitives/SignedAttrsParser.circom";
@@ -39,9 +39,11 @@ include "./secp/Secp256k1PkMatch.circom";
 ///   — a separate field-domain hash. The two hashes are computed independently
 ///   from the same witnessed ctxBytes; no cross-binding constraint needed.
 template QKBPresentationV5() {
-    // MAX bounds per V5 spec v5 §0.5 (1c14f0f — MAX_SA bumped to 1536 after
-    // measuring real Diia CAdES-X-L signedAttrs at 1388 B).
-    var MAX_BCANON   = 768;
+    // MAX bounds per V5 spec v5 §0.5. Two empirical bumps from the original
+    // estimates (commit b8e0f74 / 139c475 in this worktree):
+    //   MAX_SA     256 → 1536  (real Diia CAdES-X-L signedAttrs measured 1388 B)
+    //   MAX_BCANON 768 → 1024  (real Diia binding measured 849 B, ~21% headroom)
+    var MAX_BCANON   = 1024;
     var MAX_SA       = 1536;
     var MAX_LEAF_TBS = 1024;
     var MAX_CERT     = 2048;
@@ -128,7 +130,7 @@ template QKBPresentationV5() {
 
     // ===== Body wiring =====
     // Tasks 6.2-6.10 wire the constraints in order:
-    //   6.2 — BindingParseV2Core, expose timestamp + policyLeafHash
+    //   6.2 — BindingParseV2CoreFast: expose timestamp + policyLeafHash      ← THIS COMMIT
     //   6.3 — 3× Sha256Var (binding, signedAttrs, leafTBS) + Bytes32ToHiLo
     //   6.4 — SignedAttrsParser, messageDigest === bindingHash equality
     //   6.5 — 2× SpkiCommit (leaf + intermediate)
@@ -137,20 +139,55 @@ template QKBPresentationV5() {
     //   6.8 — Secp256k1PkMatch (msgSender ← pkX/pkY)
     //   6.9 — leafTBS bound to leaf-cert DER consistency
     //   6.10 — final E2E test on real Diia fixture
+
+    // §6.2 — BindingParseV2CoreFast
+    // Parses the JCS-canonicalized binding bytes, asserts every required
+    // field-key prefix at its witnessed offset, and produces 8 outputs.
+    // Two of those outputs are bound to public signals here (timestamp,
+    // policyLeafHash); the rest (pkBytes, nonceBytes, ctxBytes, ctxLen,
+    // policyIdBytes) are consumed by later wiring (Secp256k1PkMatch in §6.8,
+    // ctx-domain hashes in §6.6/6.7).
+    component parser = BindingParseV2CoreFast(MAX_BCANON, MAX_CTX, MAX_TS_DIGITS);
+    for (var i = 0; i < MAX_BCANON; i++) parser.bytes[i] <== bindingBytes[i];
+    parser.bcanonLen <== bindingLength;
+    parser.pkValueOffset <== pkValueOffset;
+    parser.schemeValueOffset <== schemeValueOffset;
+    parser.assertionsValueOffset <== assertionsValueOffset;
+    parser.statementSchemaValueOffset <== statementSchemaValueOffset;
+    parser.nonceValueOffset <== nonceValueOffset;
+    parser.ctxValueOffset <== ctxValueOffset;
+    parser.ctxHexLen <== ctxHexLen;
+    parser.policyIdValueOffset <== policyIdValueOffset;
+    parser.policyIdLen <== policyIdLen;
+    parser.policyLeafHashValueOffset <== policyLeafHashValueOffset;
+    parser.policyBindingSchemaValueOffset <== policyBindingSchemaValueOffset;
+    parser.policyVersionValueOffset <== policyVersionValueOffset;
+    parser.policyVersionDigitCount <== policyVersionDigitCount;
+    parser.tsValueOffset <== tsValueOffset;
+    parser.tsDigitCount <== tsDigitCount;
+    parser.versionValueOffset <== versionValueOffset;
+    for (var i = 0; i < 32; i++) parser.nonceBytesIn[i] <== nonceBytesIn[i];
+    for (var i = 0; i < MAX_POLICY_ID; i++) parser.policyIdBytesIn[i] <== policyIdBytesIn[i];
+    parser.policyVersionIn <== policyVersionIn;
+
+    // Public-signal binds:
+    parser.tsValue       === timestamp;
+    parser.policyLeafHash === policyLeafHash;
+
+    // Witness-anchor for the still-unwired public signals (§6.3-§6.10 will
+    // replace this with real constraints; for now the sum keeps each signal
+    // syntactically used so circom doesn't strip-prune the public-input
+    // declarations from `component main { public [...] }`).
     //
-    // This commit lands the skeleton: all signals declared, no constraints.
-    // The `_unused = X * 1` pattern below is the standard circom idiom for
-    // marking witness inputs as syntactically used so the compiler doesn't
-    // strip-prune them; subsequent §6.x commits replace these with real
-    // constraints. Each line generates 0 active constraints (multiply-by-
-    // constant is collapsed at constant-folding time).
+    // `timestamp` and `policyLeafHash` are removed from the sum because
+    // they're now constrained for real by the parser binds above.
     signal _unusedHash;
-    _unusedHash <== msgSender + timestamp + nullifier
+    _unusedHash <== msgSender + nullifier
                  + ctxHashHi + ctxHashLo
                  + bindingHashHi + bindingHashLo
                  + signedAttrsHashHi + signedAttrsHashLo
                  + leafTbsHashHi + leafTbsHashLo
-                 + policyLeafHash + leafSpkiCommit + intSpkiCommit;
+                 + leafSpkiCommit + intSpkiCommit;
 }
 
 component main { public [
