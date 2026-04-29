@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {QKBRegistryV5, IGroth16VerifierV5} from "../src/QKBRegistryV5.sol";
 import {Groth16VerifierV5} from "../src/Groth16VerifierV5.sol";
 import {P256Verify} from "../src/libs/P256Verify.sol";
+import {Poseidon} from "../src/libs/Poseidon.sol";
 
 /// @notice §6.2 Gate-1 (Groth16 verify) tests. Subsequent gate commits add
 /// negative tests for Gates 2a..5 to this file (bind, P256, trust Merkle,
@@ -40,6 +41,14 @@ contract QKBRegistryV5RegisterTest is Test {
     /// signedAttrs baseline = empty bytes. sha256("") split into Hi (top 16)
     /// and Lo (bottom 16) bytes packed into uint256.
     bytes internal constant BASELINE_SIGNED_ATTRS = "";
+
+    /// Per-level empty-subtree Poseidon roots Z[0..15], read from the
+    /// generated Merkle fixture in setUp. Z[0] = Poseidon₁(0); Z[i+1] =
+    /// Poseidon₂(Z[i], Z[i]). Used to build a trivial single-leaf trust
+    /// tree containing baselineIntSpkiCommit at index 0.
+    bytes32[16] internal emptyZ;
+    bytes32[16] internal baselineTrustPath;
+    bytes32     internal baselineTrustRoot;
 
     /// EIP-7212 / RIP-7212 P256VERIFY precompile address. Forge 1.5.1's
     /// revm doesn't ship it (per V5 §2 escalation), so unit tests mock it
@@ -85,10 +94,95 @@ contract QKBRegistryV5RegisterTest is Test {
         );
         baselineIntSpkiCommit = baselineLeafSpkiCommit; // intSpki = leafSpki
 
+        // Read empty-subtree roots Z[0..15] from the Merkle fixture.
+        emptyZ = _readEmptySubtreeRoots();
+
+        // baselineTrustPath = [Z[0], Z[1], ..., Z[15]] — the path for a
+        // single leaf at index 0 (left child at every level, sibling is
+        // the empty subtree at that level). pathBits = 0.
+        for (uint256 i = 0; i < 16; i++) baselineTrustPath[i] = emptyZ[i];
+
+        // Compute root: cur = intSpkiCommit; for level i, cur = T3(cur, Z[i]).
+        uint256 cur = baselineIntSpkiCommit;
+        for (uint256 i = 0; i < 16; i++) {
+            cur = Poseidon.hashT3(registry.poseidonT3(), [cur, uint256(emptyZ[i])]);
+        }
+        baselineTrustRoot = bytes32(cur);
+
+        // Admin-rotate the registry's trust root to the computed value so
+        // Gate 3 happy path verifies against a tree containing the
+        // baseline intSpkiCommit at index 0.
+        vm.prank(admin);
+        registry.setTrustedListRoot(baselineTrustRoot);
+
         // By default, mock the precompile to accept any input — keeps Gate
         // 2b tests passing through to subsequent gates unless a test
         // explicitly overrides with _mockP256RejectAll().
         _mockP256AcceptAll();
+    }
+
+    function _readEmptySubtreeRoots() internal view returns (bytes32[16] memory out) {
+        string memory json = vm.readFile("./packages/contracts/test/fixtures/v5/merkle.json");
+        bytes memory j = bytes(json);
+        bytes memory key = bytes('"emptySubtreeRoots"');
+        uint256 keyAt = _indexOf(j, key, 0);
+        require(keyAt != type(uint256).max, "emptySubtreeRoots key");
+        uint256 cursor = keyAt + key.length;
+        for (uint256 k = 0; k < 16; k++) {
+            uint256 q1 = _indexOfChar(j, 0x22, cursor);
+            require(q1 != type(uint256).max, "Z open quote");
+            uint256 q2 = _indexOfChar(j, 0x22, q1 + 1);
+            require(q2 != type(uint256).max, "Z close quote");
+            out[k] = bytes32(_decodeHexWord(_slice(j, q1 + 1, q2)));
+            cursor = q2 + 1;
+        }
+    }
+
+    /* fixture-search helpers (mirrors PoseidonMerkle.t.sol's posture) */
+
+    function _indexOf(bytes memory haystack, bytes memory needle, uint256 start)
+        internal pure returns (uint256)
+    {
+        if (needle.length == 0 || haystack.length < needle.length) return type(uint256).max;
+        for (uint256 i = start; i + needle.length <= haystack.length; i++) {
+            bool match_ = true;
+            for (uint256 k = 0; k < needle.length; k++) {
+                if (haystack[i + k] != needle[k]) { match_ = false; break; }
+            }
+            if (match_) return i;
+        }
+        return type(uint256).max;
+    }
+
+    function _indexOfChar(bytes memory haystack, bytes1 c, uint256 start)
+        internal pure returns (uint256)
+    {
+        for (uint256 i = start; i < haystack.length; i++) {
+            if (haystack[i] == c) return i;
+        }
+        return type(uint256).max;
+    }
+
+    function _slice(bytes memory s, uint256 from, uint256 to) internal pure returns (bytes memory) {
+        bytes memory out = new bytes(to - from);
+        for (uint256 i = 0; i < out.length; i++) out[i] = s[from + i];
+        return out;
+    }
+
+    function _decodeHexWord(bytes memory hexStr) internal pure returns (uint256 v) {
+        uint256 from = 0;
+        if (hexStr.length >= 2 && hexStr[0] == "0" && (hexStr[1] == "x" || hexStr[1] == "X")) {
+            from = 2;
+        }
+        for (uint256 i = from; i < hexStr.length; i++) {
+            uint8 b = uint8(hexStr[i]);
+            uint8 d;
+            if (b >= 0x30 && b <= 0x39) d = b - 0x30;
+            else if (b >= 0x61 && b <= 0x66) d = b - 0x61 + 10;
+            else if (b >= 0x41 && b <= 0x46) d = b - 0x41 + 10;
+            else revert("non-hex char");
+            v = (v << 4) | d;
+        }
     }
 
     /// Build a baseline register() argument tuple. Gates 2-5 don't yet
@@ -139,14 +233,13 @@ contract QKBRegistryV5RegisterTest is Test {
     ) internal {
         bytes32[2] memory leafSig;
         bytes32[2] memory intSig;
-        bytes32[16] memory trustPath;
         bytes32[16] memory policyPath;
         registry.register(
             proof, sig,
             leafSpki, intSpki, BASELINE_SIGNED_ATTRS,
-            leafSig, intSig,        // P256 sigs (Gate 2b)
-            trustPath, 0,           // trust Merkle (Gate 3)
-            policyPath, 0           // policy Merkle (Gate 4)
+            leafSig, intSig,                    // P256 sigs (Gate 2b)
+            baselineTrustPath, 0,               // trust Merkle (Gate 3)
+            policyPath, 0                       // policy Merkle (Gate 4)
         );
     }
 
@@ -375,6 +468,68 @@ contract QKBRegistryV5RegisterTest is Test {
         }
         bytes memory expectedInput = abi.encodePacked(saHash, bytes32(0), bytes32(0), leafX, leafY);
         vm.expectCall(P256_PRECOMPILE, expectedInput);
+        _callRegister(_baselineProof(), sig);
+    }
+
+    /* ===== Gate 3 — trust-list Merkle membership ===== */
+
+    /// Tampering the trustMerklePath causes the recomputed root to differ
+    /// from trustedListRoot → BadTrustList.
+    function test_register_revertsBadTrustList_whenPathTampered() public {
+        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        bytes32[2] memory leafSig;
+        bytes32[2] memory intSig;
+        bytes32[16] memory tamperedPath = baselineTrustPath;
+        tamperedPath[0] = bytes32(uint256(tamperedPath[0]) ^ 1);
+        bytes32[16] memory policyPath;
+
+        vm.expectRevert(QKBRegistryV5.BadTrustList.selector);
+        registry.register(
+            _baselineProof(), sig,
+            leafSpki, intSpki, BASELINE_SIGNED_ATTRS,
+            leafSig, intSig,
+            tamperedPath, 0,
+            policyPath, 0
+        );
+    }
+
+    /// pathBits = 1 (current node = right at level 0) instead of 0 (left)
+    /// reorders the first hash, root differs → BadTrustList.
+    function test_register_revertsBadTrustList_whenPathBitsFlipped() public {
+        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        bytes32[2] memory leafSig;
+        bytes32[2] memory intSig;
+        bytes32[16] memory policyPath;
+
+        vm.expectRevert(QKBRegistryV5.BadTrustList.selector);
+        registry.register(
+            _baselineProof(), sig,
+            leafSpki, intSpki, BASELINE_SIGNED_ATTRS,
+            leafSig, intSig,
+            baselineTrustPath, 1,           // bit 0 flipped
+            policyPath, 0
+        );
+    }
+
+    /// Admin rotates trustedListRoot to a different value while the proof
+    /// still claims membership in the old tree → BadTrustList. This is the
+    /// "registry was rotated mid-flight" scenario.
+    function test_register_revertsBadTrustList_whenRootRotated() public {
+        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        vm.prank(admin);
+        registry.setTrustedListRoot(bytes32(uint256(0xCAFE)));
+        vm.expectRevert(QKBRegistryV5.BadTrustList.selector);
+        _callRegister(_baselineProof(), sig);
+    }
+
+    /// Tampering the THIRD signal field — sig.intSpkiCommit — fails
+    /// Gate 2a first (BadIntSpki) because the commit no longer matches
+    /// SpkiCommit(intSpki). This confirms Gate 3 and Gate 2a both watch
+    /// intSpkiCommit, with Gate 2a (closer to the proof) catching first.
+    function test_intSpkiCommit_tamper_caught_by_gate2a_not_gate3() public {
+        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        sig.intSpkiCommit = uint256(0xFEED);
+        vm.expectRevert(QKBRegistryV5.BadIntSpki.selector); // not BadTrustList
         _callRegister(_baselineProof(), sig);
     }
 

@@ -5,6 +5,7 @@ import {IQKBRegistry} from "./IdentityEscrowNFT.sol";
 import {Poseidon} from "./libs/Poseidon.sol";
 import {PoseidonBytecode} from "./libs/PoseidonBytecode.sol";
 import {P256Verify} from "./libs/P256Verify.sol";
+import {PoseidonMerkle} from "./libs/PoseidonMerkle.sol";
 
 /// @notice The Groth16 verifier interface — exposed so the registry can
 ///         bind to either the §5 stub OR the real ceremony output without
@@ -183,6 +184,7 @@ contract QKBRegistryV5 is IQKBRegistry {
     error BadIntSpki();      // Gate 2a: SpkiCommit(intSpki) ≠ sig.intSpkiCommit.
     error BadLeafSig();      // Gate 2b: leaf P-256 over sha256(signedAttrs) failed.
     error BadIntSig();       // Gate 2b: intermediate P-256 over leafTbsHash failed.
+    error BadTrustList();    // Gate 3:  intSpkiCommit ∉ trustedListRoot Merkle tree.
 
     /// @notice 5-gate registration. Gates land incrementally:
     ///   Gate 1 (this commit, §6.2): Groth16 verify call.
@@ -209,8 +211,8 @@ contract QKBRegistryV5 is IQKBRegistry {
         uint256                 policyMerklePathBits
     ) external {
         // Suppress unused-parameter warnings for fields gated in subsequent
-        // commits (§6.5..§6.7). They become live as each gate lands.
-        trustMerklePath; trustMerklePathBits; policyMerklePath; policyMerklePathBits;
+        // commits (§6.6..§6.7). They become live as each gate lands.
+        policyMerklePath; policyMerklePathBits;
 
         /* ===== Gate 1 (§6.2): Groth16 verify ===== */
         // Pack the 14-signal public-input array. Order MUST match V5 spec
@@ -283,8 +285,22 @@ contract QKBRegistryV5 is IQKBRegistry {
             revert BadIntSig();
         }
 
-        // Gates 3..5 land in §6.5..§6.7. Until then register() succeeds
-        // after Gate 2b — downstream-gate tests submit calldata that
-        // doesn't trip any later gate.
+        /* ===== Gate 3 (§6.5): trust-list Merkle membership ===== */
+        // Leaf = SpkiCommit(intSpki) — the same commitment Gate 2a just
+        // verified against sig.intSpkiCommit. We re-cast it to bytes32 to
+        // match PoseidonMerkle.verify's leaf type. The leaf bit-pattern
+        // is identical: bytes32(uint256) preserves the field-element value.
+        if (!PoseidonMerkle.verify(
+            poseidonT3,
+            bytes32(sig.intSpkiCommit),
+            trustMerklePath,
+            trustMerklePathBits,
+            trustedListRoot
+        )) {
+            revert BadTrustList();
+        }
+
+        // Gates 4..5 land in §6.6..§6.7. Until then register() succeeds
+        // after Gate 3.
     }
 }
