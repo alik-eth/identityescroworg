@@ -41,6 +41,7 @@ const FIXTURE_DIR = resolve(__dirname, '..', '..', 'fixtures', 'integration', 'a
 const MAX_SA = 1536;
 const MAX_LEAF_TBS = 1024;
 const MAX_CERT = 2048;
+const MAX_CTX_PADDED = 320;
 
 /**
  * Find the subject.serialNumber RDN VALUE inside a leaf cert DER.
@@ -163,18 +164,19 @@ function buildSyntheticSignedAttrs(bindingDigest: Buffer): {
 }
 
 /**
- * Build a minimal V5-main witness exercising §6.2-§6.6:
+ * Build a minimal V5-main witness exercising §6.2-§6.7:
  *   §6.2 parser binds (timestamp + policyLeafHash)
  *   §6.3 three SHA-256 chains (binding, signedAttrs, leafTBS) + Bytes32ToHiLo
  *   §6.4 SignedAttrsParser + messageDigest === sha256(bindingBytes)
  *   §6.5 leafSpkiCommit + intSpkiCommit from real SPKI fixtures
  *   §6.6 X509SubjectSerial(leaf.der OID 2.5.4.5) + NullifierDerive
+ *   §6.7 Sha256Var(parser.ctxBytes) + Bytes32ToHiLo → ctxHashHi/Lo
  *
  * leafTBS is a synthetic 64-byte stand-in (any well-padded byte sequence
  * works for §6.3; §6.9 will bind it to leaf-cert DER consistency later).
  *
- * Public signals not yet wired (msgSender, ctxHashHi/Lo) stay anchored by
- * _unusedHash; the witness passes any self-consistent value.
+ * Public signals not yet wired (msgSender) stay anchored by _unusedHash;
+ * §6.8 wires Secp256k1PkMatch over msgSender.
  */
 async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
   const v2core = buildV2CoreWitnessFromFixture(FIXTURE_DIR);
@@ -241,13 +243,24 @@ async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
   ]);
   const expectedNullifier = await poseidonHash([expectedSecret, ctxHashField]);
 
+  // §6.7 — Byte-domain SHA over parser.ctxBytes / parser.ctxLen. The
+  // synthetic admin-ecdsa fixture pins ctxHexLen=0 → parser emits ctxLen=0
+  // and ctxBytes all zeros, so the digest is sha256("") = e3b0c4...b855.
+  // Canonical padding for an empty message is one 64-byte block:
+  //   [0x80, 0x00 × 55, 0x00 × 8 (length trailer = 0)].
+  const ctxPlain = Buffer.alloc(0);
+  const ctxDigest = createHash('sha256').update(ctxPlain).digest();
+  const ctxHashHi = BigInt('0x' + ctxDigest.subarray(0, 16).toString('hex'));
+  const ctxHashLo = BigInt('0x' + ctxDigest.subarray(16, 32).toString('hex'));
+  const ctxPaddedBuf = shaPad(ctxPlain);
+
   return {
     // 14 public inputs (canonical V5 spec §0.1 order).
     msgSender: 0,
     timestamp: fix.expected.timestamp,             // §6.2
     nullifier: expectedNullifier,                  // §6.6
-    ctxHashHi: 0,
-    ctxHashLo: 0,
+    ctxHashHi,                                     // §6.7
+    ctxHashLo,                                     // §6.7
     bindingHashHi,                                  // §6.3
     bindingHashLo,                                  // §6.3
     signedAttrsHashHi,                              // §6.3
@@ -306,13 +319,17 @@ async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
     subjectSerialValueOffset: subjectSerial.offset,
     subjectSerialValueLength: subjectSerial.length,
 
-    // Still-unwired inputs (§6.7-§6.10) — zero-padded.
+    // §6.7 — ctx canonical-padded SHA inputs.
+    ctxPaddedIn: rightPadZero(ctxPaddedBuf, MAX_CTX_PADDED),
+    ctxPaddedLen: ctxPaddedBuf.length,
+
+    // Still-unwired inputs (§6.8-§6.10) — zero-padded.
     pkX: zeros(4),
     pkY: zeros(4),
   };
 }
 
-describe('QKBPresentationV5 — §6.2-§6.6 (parser + 3× SHA + signedAttrs binding + 2× SpkiCommit + nullifier)', function () {
+describe('QKBPresentationV5 — §6.2-§6.7 (parser + 4× SHA + signedAttrs binding + 2× SpkiCommit + nullifier + ctxHash)', function () {
   this.timeout(1800000);
 
   let circuit: CompiledCircuit;
@@ -524,6 +541,48 @@ describe('QKBPresentationV5 — §6.2-§6.6 (parser + 3× SHA + signedAttrs bind
     const tamperedLimbs = [...(input.leafXLimbs as bigint[])];
     tamperedLimbs[0] = (tamperedLimbs[0] as bigint) + 1n;
     const tampered = { ...input, leafXLimbs: tamperedLimbs };
+    let threw = false;
+    try {
+      await circuit.calculateWitness(tampered, true);
+    } catch {
+      threw = true;
+    }
+    expect(threw).to.equal(true);
+  });
+
+  // §6.7 happy-path — for empty ctx (ctxLen=0), digest is sha256("") =
+  // e3b0c44298fc1c149afbf4c8996fb924 27ae41e4649b934ca495991b7852b855.
+  it('binds ctxHashHi/Lo to sha256(empty) for the ctxLen=0 fixture (§6.7)', async () => {
+    const input = await buildV5SmokeWitness();
+    expect((input.ctxHashHi as bigint).toString(16).padStart(32, '0'))
+      .to.equal('e3b0c44298fc1c149afbf4c8996fb924');
+    expect((input.ctxHashLo as bigint).toString(16).padStart(32, '0'))
+      .to.equal('27ae41e4649b934ca495991b7852b855');
+  });
+
+  // §6.7 tamper — flipping the public ctxHashHi while keeping the parser's
+  // ctxBytes / canonical-pad witness must fail (Bytes32ToHiLo equality
+  // constraint binds the SHA output to the public signal).
+  it('rejects a tampered ctxHashHi public signal (§6.7)', async () => {
+    const input = await buildV5SmokeWitness();
+    const tampered = { ...input, ctxHashHi: (input.ctxHashHi as bigint) ^ 1n };
+    let threw = false;
+    try {
+      await circuit.calculateWitness(tampered, true);
+    } catch {
+      threw = true;
+    }
+    expect(threw).to.equal(true);
+  });
+
+  // §6.7 tamper — non-canonical ctxPaddedIn (flip the FIPS 0x80 marker)
+  // must fail Sha256CanonPad's shape constraint.
+  it('rejects a non-canonical ctxPaddedIn (§6.7 Sha256CanonPad)', async () => {
+    const input = await buildV5SmokeWitness();
+    const dataLen = 0; // parser.ctxLen for the admin-ecdsa fixture
+    const tamperedPadded = [...(input.ctxPaddedIn as number[])];
+    tamperedPadded[dataLen] = 0x81; // FIPS-180-4 requires 0x80 here
+    const tampered = { ...input, ctxPaddedIn: tamperedPadded };
     let threw = false;
     try {
       await circuit.calculateWitness(tampered, true);

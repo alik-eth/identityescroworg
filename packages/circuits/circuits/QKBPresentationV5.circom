@@ -48,6 +48,12 @@ template QKBPresentationV5() {
     var MAX_LEAF_TBS = 1024;
     var MAX_CERT     = 2048;
     var MAX_CTX      = 256;
+    // Sha256CanonPad needs MAX_BYTES ≥ ⌈(MAX_CTX + 9) / 64⌉ × 64 = 320 to
+    // safely hold the canonical FIPS-180-4 padding for any honest ctxLen
+    // up to MAX_CTX. The parser only emits ctxBytes[MAX_CTX]; we extend by
+    // zero in the wiring below so the SHA chain operates on a 320-slot
+    // padded view. (parser.ctxLen ≤ MAX_CTX is enforced by the parser.)
+    var MAX_CTX_PADDED = 320;
     var MAX_TS_DIGITS = 20;
     var MAX_POLICY_ID = 128;
 
@@ -110,6 +116,13 @@ template QKBPresentationV5() {
     signal input leafTbsLength;
     signal input leafTbsPaddedIn[MAX_LEAF_TBS];
     signal input leafTbsPaddedLen;
+
+    // ctxBytes SHA chain (§6.7). The unpadded ctxBytes come from the parser
+    // (parser.ctxBytes / parser.ctxLen), so only the canonical-pad witness
+    // form is exposed here. MAX_CTX_PADDED = 320 covers MAX_CTX = 256 + 64
+    // padding overhead.
+    signal input ctxPaddedIn[MAX_CTX_PADDED];
+    signal input ctxPaddedLen;
 
     // Leaf X.509 cert DER for subject-serial extraction (NullifierDerive input).
     signal input leafCertBytes[MAX_CERT];
@@ -343,7 +356,52 @@ template QKBPresentationV5() {
 
     nullifierDer.nullifier === nullifier;
 
-    // Witness-anchor for the still-unwired public signals (§6.7-§6.10 will
+    // §6.7 — Byte-domain SHA chain over ctxBytes → ctxHashHi / ctxHashLo.
+    //
+    // Symmetric to the §6.3 pattern (bindingBytes / signedAttrs / leafTBS):
+    //   1. Sha256CanonPad asserts ctxPaddedIn is the FIPS-180-4 canonical
+    //      padding of (parser.ctxBytes[0..parser.ctxLen]). The parser-output
+    //      ctxBytes is extended by zero past index MAX_CTX up to
+    //      MAX_CTX_PADDED so a single Sha256CanonPad instance covers any
+    //      honest ctxLen ∈ [0, MAX_CTX].
+    //   2. Sha256Var(MAX_CTX_PADDED) consumes the validated paddedIn → 256
+    //      output bits.
+    //   3. Bytes32ToHiLo splits the 32-byte digest into two 128-bit halves
+    //      bound to public signals ctxHashHi (index [3]) and ctxHashLo
+    //      (index [4]) per V5 spec §0.1.
+    //
+    // INDEPENDENT of the field-domain ctxHash already wired in §6.6 (used
+    // for nullifier derivation): both hashes consume the same parser-output
+    // ctxBytes/ctxLen but live in different hash domains (SHA-256 here vs.
+    // PoseidonChunkHashVar there) and feed different downstream consumers
+    // (public hi/lo signal pair here vs. NullifierDerive's ctxHash input
+    // there). No cross-binding constraint is required because tampering
+    // with ctxBytes simultaneously breaks BOTH derivations against their
+    // respective public-signal commitments (ctxHashHi/Lo here, nullifier
+    // there).
+    component ctxPad = Sha256CanonPad(MAX_CTX_PADDED);
+    for (var i = 0; i < MAX_CTX; i++) ctxPad.data[i] <== parser.ctxBytes[i];
+    for (var i = MAX_CTX; i < MAX_CTX_PADDED; i++) ctxPad.data[i] <== 0;
+    for (var i = 0; i < MAX_CTX_PADDED; i++) ctxPad.paddedIn[i] <== ctxPaddedIn[i];
+    ctxPad.dataLen   <== parser.ctxLen;
+    ctxPad.paddedLen <== ctxPaddedLen;
+
+    component hashCtx = Sha256Var(MAX_CTX_PADDED);
+    for (var i = 0; i < MAX_CTX_PADDED; i++) hashCtx.paddedIn[i] <== ctxPaddedIn[i];
+    hashCtx.paddedLen <== ctxPaddedLen;
+
+    signal ctxDigestBytes[32];
+    for (var i = 0; i < 32; i++) {
+        var acc = 0;
+        for (var b = 0; b < 8; b++) acc = acc * 2 + hashCtx.out[i * 8 + b];
+        ctxDigestBytes[i] <== acc;
+    }
+    component ctxHiLo = Bytes32ToHiLo();
+    for (var i = 0; i < 32; i++) ctxHiLo.bytes[i] <== ctxDigestBytes[i];
+    ctxHiLo.hi === ctxHashHi;
+    ctxHiLo.lo === ctxHashLo;
+
+    // Witness-anchor for the still-unwired public signals (§6.8-§6.10 will
     // replace this with real constraints; for now the sum keeps each signal
     // syntactically used so circom doesn't strip-prune the public-input
     // declarations from `component main { public [...] }`).
@@ -353,9 +411,9 @@ template QKBPresentationV5() {
     //   bindingHashHi/Lo, signedAttrsHashHi/Lo, leafTbsHashHi/Lo (§6.3)
     //   leafSpkiCommit, intSpkiCommit (§6.5)
     //   nullifier (§6.6)
+    //   ctxHashHi, ctxHashLo (§6.7)
     signal _unusedHash;
-    _unusedHash <== msgSender
-                 + ctxHashHi + ctxHashLo;
+    _unusedHash <== msgSender;
 }
 
 component main { public [
