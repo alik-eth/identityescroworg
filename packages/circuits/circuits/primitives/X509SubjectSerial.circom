@@ -60,6 +60,14 @@ template X509SubjectSerial(MAX_CERT) {
     signal input subjectSerialValueOffset;
     signal input subjectSerialValueLength;
     signal output subjectSerialLimbs[4];
+    // rawBytes[i] = leafDER[subjectSerialValueOffset + i] for i ∈ [0, MAX_SERIAL).
+    // Exposed (post-2026-04-30) so the V5 main circuit's leafTbs ↔ leafCert
+    // byte-consistency gate (§6.9) can compare against leafTbs's bytes at
+    // the corresponding offset without re-running the Multiplexer extract.
+    // Existing witness layout for subjectSerialLimbs[0..3] (witness[1..4])
+    // is unchanged — outputs follow declaration order, so rawBytes[0..31]
+    // occupies witness[5..36].
+    signal output rawBytes[MAX_SERIAL];
 
     // Length sanity: 1 ≤ length ≤ MAX_SERIAL.
     component lenGeq1 = GreaterEqThan(8);
@@ -74,7 +82,6 @@ template X509SubjectSerial(MAX_CERT) {
 
     // 1. Pull MAX_SERIAL bytes from leafDER at offset+i.
     component pick[MAX_SERIAL];
-    signal rawBytes[MAX_SERIAL];
     for (var i = 0; i < MAX_SERIAL; i++) {
         pick[i] = Multiplexer(1, MAX_CERT);
         for (var j = 0; j < MAX_CERT; j++) pick[i].inp[j][0] <== leafDER[j];

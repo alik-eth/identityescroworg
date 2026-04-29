@@ -10,6 +10,8 @@ include "./primitives/PoseidonChunkHashVar.circom";
 include "./primitives/Bytes32ToHiLo.circom";
 include "./primitives/SpkiCommit.circom";
 include "./secp/Secp256k1PkMatch.circom";
+include "circomlib/circuits/comparators.circom";
+include "circomlib/circuits/multiplexer.circom";
 
 /// @title  QKBPresentationV5 — V5 single-circuit ZK presentation proof.
 /// @notice Public-signal layout per V5 spec §0.1 (frozen 14 elements):
@@ -45,7 +47,14 @@ template QKBPresentationV5() {
     //   MAX_BCANON 768 → 1024  (real Diia binding measured 849 B, ~21% headroom)
     var MAX_BCANON   = 1024;
     var MAX_SA       = 1536;
-    var MAX_LEAF_TBS = 1024;
+    // MAX_LEAF_TBS 1024→1408 (empirical bump 2026-04-30): real Diia
+    // admin-ecdsa leaf TBS measures 1203 bytes (paddedLen 1216), exceeding
+    // the spec's "~700-900 bytes" assumption. Bump to 1408 = 22 SHA blocks
+    // gives ~17% headroom over the 1216 padded-length floor — matches the
+    // spec convention of ~20% (MAX_BCANON 1024 over real 849, MAX_SA 1536
+    // over real 1388). Cost delta versus 1024 is +6 SHA blocks worth of
+    // Sha256Var + Sha256CanonPad, ~+330K constraints projected.
+    var MAX_LEAF_TBS = 1408;
     var MAX_CERT     = 2048;
     var MAX_CTX      = 256;
     // Sha256CanonPad needs MAX_BYTES ≥ ⌈(MAX_CTX + 9) / 64⌉ × 64 = 320 to
@@ -128,6 +137,13 @@ template QKBPresentationV5() {
     signal input leafCertBytes[MAX_CERT];
     signal input subjectSerialValueOffset;
     signal input subjectSerialValueLength;
+    // §6.9 — offset of the SAME subject-serial VALUE bytes inside leafTbs
+    // (= subjectSerialValueOffset minus the in-cert TBSCertificate offset).
+    // Witness-supplied; the byte-equality gate in §6.9 binds the leafCert
+    // bytes consumed by X509SubjectSerial to the leafTbs bytes hashed by
+    // Sha256Var(MAX_LEAF_TBS), closing the soundness loop that pins the
+    // subject-serial extraction to the intermediate-signed TBSCertificate.
+    signal input subjectSerialValueOffsetInTbs;
 
     // SPKI limbs for both leaf and intermediate (witness side; on-chain
     // P256Verify.spkiCommit recomputes the SAME value from calldata bytes).
@@ -401,10 +417,63 @@ template QKBPresentationV5() {
     ctxHiLo.hi === ctxHashHi;
     ctxHiLo.lo === ctxHashLo;
 
-    // Witness-anchor for the still-unwired public signals (§6.8-§6.10 will
-    // replace this with real constraints; for now the sum keeps each signal
-    // syntactically used so circom doesn't strip-prune the public-input
-    // declarations from `component main { public [...] }`).
+    // §6.9 — leafTbs ↔ leafCert byte-consistency.
+    //
+    // Soundness goal: pin the subject-serial bytes that NullifierDerive
+    // consumes to the intermediate-signed TBSCertificate. Without this
+    // gate, an attacker could pair a real Diia leafTbs (which hashes to
+    // a real-cert leafTbsHash and verifies against intSpki on chain)
+    // with a forged leafCertBytes that contains a DIFFERENT subject
+    // serial at subjectSerialValueOffset — deriving an attacker-chosen
+    // nullifier from a victim's ECDSA chain. That breaks per-person-per
+    // -ctx Sybil resistance.
+    //
+    // Bridge: assert that the MAX_SERIAL=32 bytes X509SubjectSerial reads
+    // from leafCertBytes at subjectSerialValueOffset are byte-identical
+    // to the leafTbs bytes at subjectSerialValueOffsetInTbs (witnessed
+    // independently). leafTbsBytes is pinned to a real cert via the §6.3
+    // SHA chain → leafTbsHash → on-chain intSig P256Verify, so any byte
+    // in leafTbsBytes is forced to match the genuine cert's TBS at that
+    // offset. Cross-checking the 32-byte serial window therefore forces
+    // leafCertBytes to carry the genuine subject serial — a forged
+    // leafCertBytes whose bytes elsewhere differ from the real cert is
+    // still acceptable, but the serial extraction is locked.
+    //
+    // Cost model: 32 × Multiplexer(1, MAX_LEAF_TBS) for the leafTbs side
+    // (~33K constraints); leafCert side reuses subjectSerial.rawBytes
+    // (X509SubjectSerial's pre-mask Multiplexer outputs, exposed 2026-04-30
+    // for this gate). Total ~33-50K — well inside the spec's 100-300K
+    // budget line item for "leafTbs ↔ leafCert byte-consistency".
+    var MAX_SERIAL = 32;
+
+    // Range pin: the cross-checked window must lie inside leafTbs.
+    component endLeqTbs = LessEqThan(16);
+    endLeqTbs.in[0] <== subjectSerialValueOffsetInTbs + subjectSerialValueLength;
+    endLeqTbs.in[1] <== leafTbsLength;
+    endLeqTbs.out === 1;
+
+    component leafTbsByte[MAX_SERIAL];
+    component activeMask69[MAX_SERIAL];
+    for (var i = 0; i < MAX_SERIAL; i++) {
+        leafTbsByte[i] = Multiplexer(1, MAX_LEAF_TBS);
+        for (var j = 0; j < MAX_LEAF_TBS; j++) {
+            leafTbsByte[i].inp[j][0] <== leafTbsBytes[j];
+        }
+        leafTbsByte[i].sel <== subjectSerialValueOffsetInTbs + i;
+
+        activeMask69[i] = LessThan(8);
+        activeMask69[i].in[0] <== i;
+        activeMask69[i].in[1] <== subjectSerialValueLength;
+
+        // Compare ONLY under active mask (positions ≥ length are
+        // unconstrained — the X509SubjectSerial template masks those to
+        // zero before packing into limbs anyway).
+        activeMask69[i].out * (leafTbsByte[i].out[0] - subjectSerial.rawBytes[i]) === 0;
+    }
+
+    // Witness-anchor for the still-unwired public signal (§6.8 wires
+    // Secp256k1PkMatch + keccak256 → msgSender; after that the anchor
+    // goes empty).
     //
     // Now constrained for real (removed from the sum):
     //   timestamp, policyLeafHash (§6.2)
@@ -412,6 +481,8 @@ template QKBPresentationV5() {
     //   leafSpkiCommit, intSpkiCommit (§6.5)
     //   nullifier (§6.6)
     //   ctxHashHi, ctxHashLo (§6.7)
+    //   (§6.9 closes the leafTbs ↔ leafCert byte-equality gate but
+    //    doesn't bind a public signal — its job is internal soundness.)
     signal _unusedHash;
     _unusedHash <== msgSender;
 }

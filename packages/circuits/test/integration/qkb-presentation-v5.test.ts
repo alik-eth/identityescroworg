@@ -39,7 +39,7 @@ async function poseidonHash(inputs: bigint[]): Promise<bigint> {
 
 const FIXTURE_DIR = resolve(__dirname, '..', '..', 'fixtures', 'integration', 'admin-ecdsa');
 const MAX_SA = 1536;
-const MAX_LEAF_TBS = 1024;
+const MAX_LEAF_TBS = 1408;
 const MAX_CERT = 2048;
 const MAX_CTX_PADDED = 320;
 
@@ -116,6 +116,44 @@ function subjectSerialBytesToLimbs(bytes: Buffer): bigint[] {
 }
 
 /**
+ * Read a single ASN.1 length encoding starting at `der[off]`. Returns
+ * `{ headerLen, contentLen }` where headerLen is the number of bytes
+ * consumed (1 for short form, or 1+n for long-form `0x8n + n`).
+ */
+function readDerLength(der: Buffer, off: number): { headerLen: number; contentLen: number } {
+  const b0 = der[off] as number;
+  if (b0 < 0x80) return { headerLen: 1, contentLen: b0 };
+  const n = b0 & 0x7f;
+  let len = 0;
+  for (let k = 1; k <= n; k++) len = (len << 8) | (der[off + k] as number);
+  return { headerLen: 1 + n, contentLen: len };
+}
+
+/**
+ * Locate the TBSCertificate sub-DER inside a leaf cert DER. The Certificate
+ * structure is `SEQUENCE { tbsCertificate TBSCertificate, signatureAlgorithm,
+ * signatureValue }`; tbsCertificate is the FIRST inner SEQUENCE, beginning
+ * with its own `0x30 <length>` tag.
+ *
+ * Returns the offset of the TBS tag byte (`0x30`) within `der`, plus the
+ * total TBS byte length (header + content). The TBS bytes therefore live
+ * at `der.subarray(offset, offset + length)`.
+ */
+function findTbsInCert(der: Buffer): { offset: number; length: number } {
+  if (der[0] !== 0x30) throw new Error('leaf cert is not a SEQUENCE');
+  const outerLen = readDerLength(der, 1);
+  const tbsTagOffset = 1 + outerLen.headerLen;
+  if (der[tbsTagOffset] !== 0x30) {
+    throw new Error('expected SEQUENCE tag for TBSCertificate');
+  }
+  const tbsLen = readDerLength(der, tbsTagOffset + 1);
+  return {
+    offset: tbsTagOffset,
+    length: 1 + tbsLen.headerLen + tbsLen.contentLen,
+  };
+}
+
+/**
  * Off-circuit reference for PoseidonChunkHashVar(MAX_CTX) when len === 0.
  * From the template: nChunks=0, nRounds=⌈(0+1)/15⌉=1, fe = [0×15] (slot 0
  * is `feLenProd[0] = (0==0)*0 = 0`; remaining slots are zero too because
@@ -164,19 +202,22 @@ function buildSyntheticSignedAttrs(bindingDigest: Buffer): {
 }
 
 /**
- * Build a minimal V5-main witness exercising §6.2-§6.7:
+ * Build a minimal V5-main witness exercising §6.2-§6.9:
  *   §6.2 parser binds (timestamp + policyLeafHash)
  *   §6.3 three SHA-256 chains (binding, signedAttrs, leafTBS) + Bytes32ToHiLo
  *   §6.4 SignedAttrsParser + messageDigest === sha256(bindingBytes)
  *   §6.5 leafSpkiCommit + intSpkiCommit from real SPKI fixtures
  *   §6.6 X509SubjectSerial(leaf.der OID 2.5.4.5) + NullifierDerive
  *   §6.7 Sha256Var(parser.ctxBytes) + Bytes32ToHiLo → ctxHashHi/Lo
+ *   §6.9 leafTbs ↔ leafCert byte-consistency over the subject-serial window
  *
- * leafTBS is a synthetic 64-byte stand-in (any well-padded byte sequence
- * works for §6.3; §6.9 will bind it to leaf-cert DER consistency later).
+ * leafTBS is now the REAL Diia leaf cert TBSCertificate (extracted from
+ * leaf.der via the ASN.1 SEQUENCE walker above) — §6.9 requires the bytes
+ * X509SubjectSerial reads from leafCertBytes to match leafTbsBytes at the
+ * corresponding offset, which only holds if leafTbs is the genuine TBS.
  *
  * Public signals not yet wired (msgSender) stay anchored by _unusedHash;
- * §6.8 wires Secp256k1PkMatch over msgSender.
+ * §6.8 wires Secp256k1PkMatch + keccak256 → msgSender.
  */
 async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
   const v2core = buildV2CoreWitnessFromFixture(FIXTURE_DIR);
@@ -196,11 +237,15 @@ async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
   const signedAttrsHashLo = BigInt('0x' + saDigest.subarray(16, 32).toString('hex'));
   const saPadded = shaPad(sa.bytes);
 
-  // Synthetic leafTBS — 64 bytes of arbitrary content. The leafTbsHash
-  // public signals are bound to its sha256 here; §6.9 adds a separate
-  // consistency check against leafCertBytes.
-  const leafTbsBuf = Buffer.alloc(64);
-  for (let i = 0; i < 64; i++) leafTbsBuf[i] = i;
+  // Real Diia leaf cert TBSCertificate — extracted from leaf.der via the
+  // ASN.1 SEQUENCE walker. §6.9 byte-consistency requires leafTbsBytes to
+  // be the GENUINE TBS so the bytes at subjectSerialValueOffsetInTbs match
+  // the bytes X509SubjectSerial reads from leafCertBytes at
+  // subjectSerialValueOffset. The SHA chain in §6.3 also moves to a real
+  // value (sha256 of real TBS instead of the prior 64-byte stand-in).
+  const leafDerForTbs = readFileSync(resolve(FIXTURE_DIR, 'leaf.der'));
+  const tbsLoc = findTbsInCert(leafDerForTbs);
+  const leafTbsBuf = leafDerForTbs.subarray(tbsLoc.offset, tbsLoc.offset + tbsLoc.length);
   const leafTbsDigest = createHash('sha256').update(leafTbsBuf).digest();
   const leafTbsHashHi = BigInt('0x' + leafTbsDigest.subarray(0, 16).toString('hex'));
   const leafTbsHashLo = BigInt('0x' + leafTbsDigest.subarray(16, 32).toString('hex'));
@@ -236,6 +281,10 @@ async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
     subjectSerial.offset + subjectSerial.length,
   );
   const subjectSerialLimbs = subjectSerialBytesToLimbs(Buffer.from(subjectSerialBytes));
+  // §6.9 — same subject-serial bytes within the TBS sub-DER. Offset is the
+  // in-cert offset minus the TBS-tag offset (TBS lives at [tbsLoc.offset,
+  // tbsLoc.offset + tbsLoc.length) inside leafDer).
+  const subjectSerialValueOffsetInTbs = subjectSerial.offset - tbsLoc.offset;
   const ctxHashField = await poseidonChunkHashVarEmpty();
   const expectedSecret = await poseidonHash([
     ...subjectSerialLimbs,
@@ -318,6 +367,8 @@ async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
     leafCertBytes: rightPadZero(leafDer, MAX_CERT),
     subjectSerialValueOffset: subjectSerial.offset,
     subjectSerialValueLength: subjectSerial.length,
+    // §6.9 — same serial offset measured from the start of TBSCertificate.
+    subjectSerialValueOffsetInTbs,
 
     // §6.7 — ctx canonical-padded SHA inputs.
     ctxPaddedIn: rightPadZero(ctxPaddedBuf, MAX_CTX_PADDED),
@@ -329,7 +380,7 @@ async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
   };
 }
 
-describe('QKBPresentationV5 — §6.2-§6.7 (parser + 4× SHA + signedAttrs binding + 2× SpkiCommit + nullifier + ctxHash)', function () {
+describe('QKBPresentationV5 — §6.2-§6.9 (parser + 4× SHA + signedAttrs binding + 2× SpkiCommit + nullifier + ctxHash + tbs↔cert consistency)', function () {
   this.timeout(1800000);
 
   let circuit: CompiledCircuit;
@@ -583,6 +634,59 @@ describe('QKBPresentationV5 — §6.2-§6.7 (parser + 4× SHA + signedAttrs bind
     const tamperedPadded = [...(input.ctxPaddedIn as number[])];
     tamperedPadded[dataLen] = 0x81; // FIPS-180-4 requires 0x80 here
     const tampered = { ...input, ctxPaddedIn: tamperedPadded };
+    let threw = false;
+    try {
+      await circuit.calculateWitness(tampered, true);
+    } catch {
+      threw = true;
+    }
+    expect(threw).to.equal(true);
+  });
+
+  // §6.9 tamper — flip a byte of leafTbsBytes inside the cross-checked
+  // serial-region window. The byte-equality gate should fire under the
+  // active mask (i < subjectSerialValueLength). Recompute the leafTbsHash
+  // off-circuit so §6.3 stays satisfied; the §6.9 byte-equality is the
+  // failing constraint. (Without re-pad, §6.3 Sha256CanonPad would fail
+  // first and we'd be testing the wrong gate.)
+  it('rejects a leafTbsBytes byte flip inside the subject-serial window (§6.9)', async () => {
+    const input = await buildV5SmokeWitness();
+    const offsetInTbs = input.subjectSerialValueOffsetInTbs as number;
+    const flipPos = offsetInTbs + 0; // first serial byte
+    const tamperedTbs = [...(input.leafTbsBytes as number[])];
+    tamperedTbs[flipPos] = ((tamperedTbs[flipPos] as number) ^ 0xff) & 0xff;
+    // Recompute SHA + canonical pad over the tampered TBS so §6.3 still
+    // passes; the only failing constraint should be the §6.9 byte-equality.
+    const tbsLen = input.leafTbsLength as number;
+    const tamperedTbsBuf = Buffer.from(tamperedTbs.slice(0, tbsLen));
+    const tamperedDigest = createHash('sha256').update(tamperedTbsBuf).digest();
+    const tamperedPadded = shaPad(tamperedTbsBuf);
+    const tampered = {
+      ...input,
+      leafTbsBytes: tamperedTbs,
+      leafTbsPaddedIn: rightPadZero(tamperedPadded, MAX_LEAF_TBS),
+      leafTbsPaddedLen: tamperedPadded.length,
+      leafTbsHashHi: BigInt('0x' + tamperedDigest.subarray(0, 16).toString('hex')),
+      leafTbsHashLo: BigInt('0x' + tamperedDigest.subarray(16, 32).toString('hex')),
+    };
+    let threw = false;
+    try {
+      await circuit.calculateWitness(tampered, true);
+    } catch {
+      threw = true;
+    }
+    expect(threw).to.equal(true);
+  });
+
+  // §6.9 — wrong subjectSerialValueOffsetInTbs must fail (the bytes at
+  // a different leafTbs offset won't match leafCert's serial bytes).
+  it('rejects a wrong subjectSerialValueOffsetInTbs (§6.9)', async () => {
+    const input = await buildV5SmokeWitness();
+    const tampered = {
+      ...input,
+      subjectSerialValueOffsetInTbs:
+        (input.subjectSerialValueOffsetInTbs as number) + 1,
+    };
     let threw = false;
     try {
       await circuit.calculateWitness(tampered, true);
