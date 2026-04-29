@@ -83,7 +83,7 @@ Reuse as-is. `ctxHash` here is the field-encoded ctx hash (single field element)
 ### §0.5 — MAX bounds
 
 ```
-MAX_BCANON   = 768   bytes (canonical binding)
+MAX_BCANON   = 1024  bytes (canonical binding — amended 2026-04-29 from 768 after measuring real Diia QKB/2.0 binding 849 B; see spec v5 amendment)
 MAX_SA       = 1536  bytes (signedAttrs DER — amended 2026-04-29 from 256 after measuring real Diia 1388 B; see spec v5)
 MAX_LEAF_TBS = 1024  bytes (leaf TBSCertificate DER)
 MAX_CERT     = 2048  bytes (full leaf cert DER, for X509SubjectSerial)
@@ -1064,7 +1064,7 @@ include "./primitives/SpkiCommit.circom";
 include "./secp/Secp256k1PkMatch.circom";
 
 template QKBPresentationV5() {
-    var MAX_BCANON   = 768;
+    var MAX_BCANON   = 1024;
     var MAX_SA       = 256;
     var MAX_LEAF_TBS = 1024;
     var MAX_CERT     = 2048;

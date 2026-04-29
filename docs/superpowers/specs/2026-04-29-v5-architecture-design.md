@@ -298,7 +298,7 @@ Estimated gas (Base mainnet):
 
 ### MAX bound retightening
 
-- `MAX_BCANON`: 768 (trim from real Diia 200-400 byte typical with safety margin).
+- `MAX_BCANON`: 1024 (real Diia QKB/2.0 admin-ecdsa binding measured 849 B post-impl; the pre-measurement estimate "200-400 byte typical" was wrong because it assumed a smaller QKB/1.0-style schema. 1024 leaves ~21% headroom).
 - `MAX_CERT`: 2048 (real Diia leaf cert ~1.2-1.6 KB).
 - `MAX_SA`: 1536 (real Diia admin-ecdsa signedAttrs measured 1388 B post-impl: ETSI EN 319 122 CAdES with `id-aa-ets-signerLocation` + `id-aa-signing-certificateV2` attributes mandates ~1300 B; the pre-measurement estimate "50-150 bytes" was wrong because it implicitly assumed CAdES-BES rather than the CAdES-X-L profile Diia actually emits. 1536 leaves ~10% headroom).
 - `MAX_LEAF_TBS`: 1024 (real Diia leaf TBS ~700-900 bytes).
