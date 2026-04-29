@@ -212,6 +212,12 @@ against the committed `root-pinned.json`. Lands once Task 10 is unblocked.
 - **`circomlibjs` has no types.** Ambient declaration is at
   `src/circomlibjs.d.ts`. Don't `pnpm add @types/circomlibjs` — the
   package doesn't exist on npm.
+- **`circomlibjs@0.1.7` web-worker shim emits `ERR_INVALID_ARG_TYPE` on
+  Node ≥ 22.** Stderr noise from the `web-worker` package's CJS shim;
+  dormant for our use case (we call `buildPoseidon()` synchronously from
+  the main thread and never invoke the worker pool). Tests pass cleanly
+  through it. Same noise appears in circuits-eng's `spki-commit-ref.ts`
+  runs. Not actionable here; ignore on CI logs.
 - **XML namespace prefixes are stripped.** `fast-xml-parser` is
   configured with `removeNSPrefix: true` so element paths stay flat
   (`tsl.SchemeInformation.PointersToOtherTSL.OtherTSLPointer`). ETSI
