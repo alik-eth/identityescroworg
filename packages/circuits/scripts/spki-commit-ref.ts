@@ -7,10 +7,8 @@
 //   1. Parse 91-byte named-curve P-256 DER SubjectPublicKeyInfo → X, Y (32B each).
 //   2. Decompose each coordinate into 6×43-bit little-endian limbs.
 //   3. SpkiCommit = Poseidon₂( Poseidon₆(X_limbs), Poseidon₆(Y_limbs) ).
-//
-// Built up across Tasks 2.1 → 2.4 of the per-worker plan; this file currently
-// implements length pre-check, DER walk (X/Y extraction), and 6×43-bit
-// little-endian limb decomposition. Full Poseidon hash lands in Task 2.4.
+
+import { buildPoseidon } from 'circomlibjs';
 
 export interface ParsedSpki {
     x: Buffer; // 32 bytes, big-endian P-256 X coordinate
@@ -72,6 +70,37 @@ export function decomposeTo643Limbs(value: Buffer): bigint[] {
     return limbs;
 }
 
-export function spkiCommit(_spki: Buffer): bigint {
-    throw new Error('not implemented');
+// circomlibjs ships no type defs at v0.1.7. The cast captures only the surface
+// the V4 witness builder also exercises (`packages/circuits/test/integration/
+// witness-builder.ts:286` defines the same shape), so the pattern matches the
+// existing in-repo Poseidon convention exactly.
+interface PoseidonHasher {
+    F: { e: (v: bigint) => unknown; toObject: (v: unknown) => bigint };
+    (inputs: unknown[]): unknown;
+}
+
+let poseidonInstance: PoseidonHasher | null = null;
+async function getPoseidon(): Promise<PoseidonHasher> {
+    if (poseidonInstance === null) {
+        poseidonInstance = (await buildPoseidon()) as unknown as PoseidonHasher;
+    }
+    return poseidonInstance;
+}
+
+async function poseidonHash(inputs: bigint[]): Promise<bigint> {
+    const p = await getPoseidon();
+    return p.F.toObject(p(inputs.map((v) => p.F.e(v))));
+}
+
+// SpkiCommit(spki) := Poseidon₂(Poseidon₆(X_limbs), Poseidon₆(Y_limbs)).
+// Matches V4 `computeLeafSpkiCommit` (test/integration/witness-builder.ts:303)
+// byte-for-byte; reused here so the V5 single-circuit path produces the same
+// commit a V4 leaf circuit would have, given identical SPKI bytes.
+export async function spkiCommit(spki: Buffer): Promise<bigint> {
+    const { x, y } = parseP256Spki(spki);
+    const xLimbs = decomposeTo643Limbs(x);
+    const yLimbs = decomposeTo643Limbs(y);
+    const xHash = await poseidonHash(xLimbs);
+    const yHash = await poseidonHash(yLimbs);
+    return poseidonHash([xHash, yHash]);
 }

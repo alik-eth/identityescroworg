@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { decomposeTo643Limbs, parseP256Spki } from '../scripts/spki-commit-ref';
+import { decomposeTo643Limbs, parseP256Spki, spkiCommit } from '../scripts/spki-commit-ref';
 
 const LEAF_SPKI_PATH = resolve(__dirname, '../fixtures/integration/admin-ecdsa/leaf-spki.bin');
 
@@ -88,5 +88,36 @@ describe('decomposeTo643Limbs', () => {
     it('rejects non-32-byte input', () => {
         expect(() => decomposeTo643Limbs(Buffer.alloc(31))).toThrow(/expected 32 bytes/i);
         expect(() => decomposeTo643Limbs(Buffer.alloc(33))).toThrow(/expected 32 bytes/i);
+    });
+});
+
+const INTERMEDIATE_SPKI_PATH = resolve(
+    __dirname,
+    '../fixtures/integration/admin-ecdsa/intermediate-spki.bin',
+);
+
+describe('spkiCommit — end-to-end', () => {
+    it('produces a deterministic field element for the real Diia leaf SPKI', async () => {
+        const spki = loadLeafSpki();
+        const commit = await spkiCommit(spki);
+        expect(typeof commit).toBe('bigint');
+        // Snapshot pins the commit value. Regenerate intentionally with `-u`
+        // only if the SpkiCommit construction changes (spec §0.2 amendment).
+        expect(commit.toString()).toMatchSnapshot();
+    });
+
+    it('is deterministic — same SPKI gives same commit', async () => {
+        const spki = loadLeafSpki();
+        const a = await spkiCommit(spki);
+        const b = await spkiCommit(spki);
+        expect(a).toEqual(b);
+    });
+
+    it('different SPKIs give different commits', async () => {
+        const leafSpki = loadLeafSpki();
+        const intSpki = readFileSync(INTERMEDIATE_SPKI_PATH);
+        const a = await spkiCommit(leafSpki);
+        const b = await spkiCommit(intSpki);
+        expect(a).not.toEqual(b);
     });
 });
