@@ -1,12 +1,13 @@
 # V5 Architecture Design
 
-**Status:** Brainstorming complete · Spec review pass 1 applied · Awaiting user spec review
+**Status:** Brainstorming complete · Spec review pass 2 applied · Awaiting user spec review
 **Date:** 2026-04-29
 **Predecessor:** [V4 Sepolia deployment](../../../fixtures/contracts/sepolia.json) — to be deprecated.
 **Sub-project of:** Path A (Pragmatic full ship of identity-escrow to production).
 **Revision history:**
 - v1 (2026-04-29): initial brainstorm output.
-- v2 (2026-04-29): incorporated external review (5 findings — trust-list binding, CAdES digest separation, nullifier-uniqueness, policy root enforcement, multi-limb public encoding for 256-bit hashes).
+- v2 (2026-04-29): incorporated external review pass 1 — five findings (trust-list binding, CAdES digest separation, nullifier-uniqueness, policy root enforcement, multi-limb public encoding for 256-bit hashes).
+- v3 (2026-04-29): incorporated external review pass 2 — three findings (policy leaf field-reduction undefined, `declHash` vs `policyLeafHash` regression to legacy binding model, mixed SPKI hash semantics between circuit limb-Poseidon and contract byte-Poseidon). All three fix wire-format ambiguity.
 
 ---
 
@@ -94,23 +95,26 @@ User signs Diia QES. Resulting artifacts: `.p7s` containing leaf cert, intermedi
 The prover builds:
 
 ```
-Public signals (committed by ZK proof, 15 field elements):
+Public signals (committed by ZK proof, 14 field elements):
 
   Identity / context (3 signals — each fits in a single BN254 field):
     - msgSender                          (≤160 bits, packed in 1 field)
     - timestamp                          (1 field, ≤64 bits)
     - nullifier                          (1 field — Poseidon output)
 
-  256-bit hashes split into hi/lo 128-bit limbs (5 hashes × 2 = 10 signals):
+  256-bit hashes split into hi/lo 128-bit limbs (4 hashes × 2 = 8 signals):
     - ctxHashHi, ctxHashLo               (2 — binding context)
-    - declHashHi, declHashLo             (2 — binding declaration)
     - bindingHashHi, bindingHashLo       (2 — SHA-256 of canonical binding bytes)
     - signedAttrsHashHi, signedAttrsHashLo (2 — SHA-256 of CAdES signedAttrs)
     - leafTbsHashHi, leafTbsHashLo       (2 — SHA-256 of leaf cert TBS)
 
-  Poseidon commitments (already field-sized, 2 signals):
-    - leafSpkiCommit                     (Poseidon over leaf SPKI X/Y limbs)
-    - intSpkiCommit                      (Poseidon over intermediate SPKI X/Y limbs)
+  Field-domain values (already in BN254, 1 signal):
+    - policyLeafHash                     (1 — uint256(sha256(declaration)) mod p,
+                                              per QKB/2.0 policy-root spec)
+
+  SPKI commitments (Poseidon over X/Y limbs, 2 signals):
+    - leafSpkiCommit                     (= SpkiCommit(leafSpki); see definition below)
+    - intSpkiCommit                      (= SpkiCommit(intSpki))
 
 Circuit-internal soundness constraints (not exposed):
   - signedAttrs.messageDigest_field == bindingHash
@@ -125,25 +129,44 @@ Calldata-only inputs (NOT in proof; contract verifies them directly):
   - intSig            (r, s — intermediate ECDSA signature over leafTbsHash)
   - merklePath        (16 sibling hashes from Poseidon(intSpki) to trustedListRoot)
   - merklePathBits    (which side at each level)
-  - policyPath        (16 sibling hashes from declHash leaf to policyRoot)
+  - policyPath        (16 sibling hashes from policyLeafHash leaf to policyRoot)
   - policyPathBits    (which side at each level)
 ```
 
 **`leafTbs` (raw bytes) is NOT in calldata.** It stays in the witness. The circuit computes `leafTbsHash = sha256(leafTbs)` and commits to it (as hi/lo limbs). Contract uses the committed hash directly with EIP-7212. This preserves V4's privacy property: nothing on-chain identifies the user beyond the nullifier.
 
-**`intCertHash` is NOT used.** Trust-list leaves are `Poseidon(intSpki)` directly — i.e., the trust assertion is "this signing key is from an authorized QTSP." This binds the Merkle gate to the same `intSpki` that EIP-7212 verifies, closing the soundness gap that would otherwise let an attacker pair a self-controlled signing key with an unrelated trusted-list entry.
+**`intCertHash` is NOT used.** Trust-list leaves are `SpkiCommit(intSpki)` (canonical SPKI commit, defined below) — i.e., the trust assertion is "this signing key is from an authorized QTSP." This binds the Merkle gate to the same `intSpki` that EIP-7212 verifies AND to the same value the circuit commits to in `intSpkiCommit`, closing the soundness gap that would otherwise let an attacker pair a self-controlled signing key with an unrelated trusted-list entry.
 
 **Two distinct SHA-256 digests, not one.** Per CAdES (RFC 5652 / EN 319 122):
 - The user's leaf cert signs `SHA-256(DER-encoded signedAttrs)` → `signedAttrsHash`.
 - Inside `signedAttrs`, the `messageDigest` SignedAttribute equals `SHA-256(binding)` → `bindingHash`.
 - Circuit constrains `messageDigest_field == bindingHash`. Contract verifies EIP-7212 with `signedAttrsHash` (NOT `bindingHash`).
 
+**Canonical SPKI commit function — `SpkiCommit(spki)`.** A single function used uniformly by circuit, contract, and flattener:
+
+```
+SpkiCommit(spki) := Poseidon₂(
+    Poseidon₆( spki.X_as_6×43bit_LE_limbs ),
+    Poseidon₆( spki.Y_as_6×43bit_LE_limbs )
+)
+```
+
+where `spki.X` and `spki.Y` are the 32-byte coordinates of the P-256 public key extracted from the DER-encoded SubjectPublicKeyInfo, decomposed as `Bytes32ToLimbs643` (the M11-hardened limb encoding with explicit `<p` constraints).
+
+- The **circuit** computes `leafSpkiCommit` and `intSpkiCommit` from the witness X/Y limbs as outputs.
+- The **contract** uses `P256Verify.spkiCommit(spki)` (parses DER, decomposes to limbs, runs Poseidon) and compares against the proof's commits.
+- The **flattener** (`packages/lotl-flattener`) populates the trust-list Merkle tree by computing `SpkiCommit(intSpki)` for each authorized intermediate's public key.
+
+This binds the trust-list Merkle gate, the proof-binding check (gate 2a), and EIP-7212 to the **same canonical commitment of the same key**. No "two flavors of `poseidon(spki)`."
+
+**Policy leaf is field-domain, not hi/lo.** Per the [QKB/2.0 policy-root spec](2026-04-23-qkb-binding-v2-policy-root.md), policy Merkle leaves are `uint256(sha256(declaration_text)) mod p` — already a single BN254 field element. The circuit exposes `policyLeafHash` as a 1-field-element public signal (matching the existing parser's output, which is `policyLeafHash`, not `declHash`). No hi/lo limb split for this value — it crosses the BN254 boundary cleanly because the field reduction was done at construction time.
+
 ### 2. On-chain — `QKBRegistryV5.register()`
 
 ```solidity
 function register(
     Groth16Proof calldata proof,
-    PublicSignals calldata sig,             // 15 public signals
+    PublicSignals calldata sig,             // 14 public signals
     bytes calldata leafSpki,
     bytes calldata intSpki,
     bytes calldata signedAttrs,
@@ -158,11 +181,16 @@ function register(
     require(groth16Verifier.verifyProof(proof, sig.toArray()), "BAD_PROOF");
 
     // Gate 2a: bind proof commits to provided calldata.
+    // SHA-256 of signedAttrs split into hi/lo, equality-checked against public signals.
     bytes32 saHash = sha256(signedAttrs);
-    require(uint256(saHash) >> 128            == sig.signedAttrsHashHi, "BAD_SA_HI");
+    require(uint256(saHash) >> 128              == sig.signedAttrsHashHi, "BAD_SA_HI");
     require(uint256(saHash) & type(uint128).max == sig.signedAttrsHashLo, "BAD_SA_LO");
-    require(poseidon(leafSpki) == sig.leafSpkiCommit, "BAD_LEAF_SPKI");
-    require(poseidon(intSpki)  == sig.intSpkiCommit,  "BAD_INT_SPKI");
+
+    // Canonical SpkiCommit — see §Data flow for definition. Reused for trust-list gate.
+    uint256 leafSpkiCommitVal = P256Verify.spkiCommit(leafSpki);
+    uint256 intSpkiCommitVal  = P256Verify.spkiCommit(intSpki);
+    require(leafSpkiCommitVal == sig.leafSpkiCommit, "BAD_LEAF_SPKI");
+    require(intSpkiCommitVal  == sig.intSpkiCommit,  "BAD_INT_SPKI");
 
     // Gate 2b: ECDSA via EIP-7212 P256VERIFY precompile.
     // Leaf signed signedAttrs (CAdES binding-sig); contract uses signedAttrsHash, NOT bindingHash.
@@ -178,16 +206,15 @@ function register(
         intSig
     ), "BAD_INT_SIG");
 
-    // Gate 3: trust list membership. Trust list leaves = Poseidon(intSpki).
+    // Gate 3: trust list membership. Merkle leaves = SpkiCommit(intSpki); reuse the value.
     require(PoseidonMerkle.verify(
-        poseidon(intSpki), merklePath, merklePathBits, trustedListRoot
+        bytes32(intSpkiCommitVal), merklePath, merklePathBits, trustedListRoot
     ), "BAD_TRUST_LIST");
 
-    // Gate 4: policy acceptance — declHash must be in current policyRoot.
-    bytes32 declHashFull = _packHash(sig.declHashHi, sig.declHashLo);
+    // Gate 4: policy acceptance — policyLeafHash already field-reduced (single signal).
     require(PoseidonMerkle.verify(
-        declHashFull, policyPath, policyPathBits, policyRoot
-    ), "BAD_DECL");
+        bytes32(sig.policyLeafHash), policyPath, policyPathBits, policyRoot
+    ), "BAD_POLICY");
 
     // Gate 5: timing + sender + replay (both directions).
     require(sig.timestamp >= block.timestamp - MAX_BINDING_AGE, "STALE_BINDING");
@@ -212,7 +239,7 @@ function _packHash(uint256 hi, uint256 lo) internal pure returns (bytes32) {
 | Component | Bytes |
 |-----------|-------|
 | Groth16 proof | 256 |
-| 15 public signals (32 bytes each) | 480 |
+| 14 public signals (32 bytes each) | 448 |
 | leafSpki + intSpki (~91 bytes each) | ~200 |
 | signedAttrs | ~100-200 |
 | 2× ECDSA sigs | 128 |
@@ -224,11 +251,12 @@ Estimated gas (Base mainnet):
 
 - Groth16 verify: ~250K
 - 2× p256Verify (EIP-7212): ~7K total
-- 1× sha256 + 2× poseidon (SPKIs) + 1× poseidon (intSpki for Merkle): ~30K
+- 1× sha256(signedAttrs): ~5K
+- 2× spkiCommit (Poseidon₆ ×2 + Poseidon₂ per call): ~60K total. Reused for trust-list Merkle leaf — no double cost.
 - 2× 16-deep Poseidon Merkle (trust + policy): ~60K
 - Storage writes (`nullifierOf` + `registrantOf`): ~44K
-- Misc ops: ~10K
-- **Total: ~400-450K gas** ≈ $0.15-0.40 USD on Base
+- Misc ops: ~15K
+- **Total: ~440-490K gas** ≈ $0.20-0.45 USD on Base. Higher than v2 estimate because `spkiCommit` is full Poseidon-on-EVM, not a cheap byte-hash. Acceptance budget bumps from 500K to 600K.
 
 ## Circuit — `QKBPresentationV5.circom`
 
@@ -244,7 +272,7 @@ Estimated gas (Base mainnet):
 | `X509SubjectSerial(MAX_CERT)` | ~100K | Locates OID 2.5.4.5; extracts `PNOUA-…` identifier |
 | `NullifierDerive` | ~5K | Poseidon₅ + Poseidon₂ |
 | Poseidon SPKI commits ×4 | ~8K | `Poseidon(6)` over X/Y limbs + `Poseidon(2)` to combine, for both certs |
-| `Bytes32ToHiLo` ×5 | ~5K | Decomposes each 256-bit hash output into 2 × 128-bit field elements (M11-hardened with `<p` checks) |
+| `Bytes32ToHiLo` ×4 | ~4K | Decomposes each 256-bit SHA-256 hash output (ctxHash, bindingHash, signedAttrsHash, leafTbsHash) into 2 × 128-bit field elements (M11-hardened with `<p` checks). `policyLeafHash` is already field-domain — no decomposition needed. |
 | `Secp256k1PkMatch` | ~2K | Binds proof to `msg.sender` |
 | Slack / glue | ~30K | |
 | **Total** | **~1.3M** | |
@@ -264,7 +292,7 @@ Estimated gas (Base mainnet):
 - `MAX_SA`: 256 (real signedAttrs ~50-150 bytes).
 - `MAX_LEAF_TBS`: 1024 (real Diia leaf TBS ~700-900 bytes).
 
-### Public signal layout (15 field elements)
+### Public signal layout (14 field elements)
 
 ```circom
 component main {public [
@@ -272,18 +300,21 @@ component main {public [
     timestamp,
     nullifier,
     ctxHashHi, ctxHashLo,
-    declHashHi, declHashLo,
     bindingHashHi, bindingHashLo,
     signedAttrsHashHi, signedAttrsHashLo,
     leafTbsHashHi, leafTbsHashLo,
+    policyLeafHash,
     leafSpkiCommit,
     intSpkiCommit
 ]}
 ```
 
-Each 256-bit SHA-256 digest is exposed as two 128-bit limbs (`hi` = bits[0..127], `lo` = bits[128..255]). The contract reconstructs the bytes32 hash by `(hi << 128) | lo` before passing to EIP-7212 / equality-checking against `sha256(calldata)`. This is the standard pattern for crossing the BN254 254-bit field boundary with full 256-bit values.
+Two encoding regimes coexist:
 
-(Final ordering may shift to match snarkjs ABI conventions; settled in implementation plan. The hi/lo pairing within each digest is fixed.)
+- **256-bit SHA-256 digests** (`ctxHash`, `bindingHash`, `signedAttrsHash`, `leafTbsHash`) are exposed as two 128-bit limbs (`hi` = bits[0..127], `lo` = bits[128..255]). The contract reconstructs `bytes32` via `(hi << 128) | lo` before passing to EIP-7212 / equality-checking against `sha256(calldata)`.
+- **Field-domain values** (`policyLeafHash`, `leafSpkiCommit`, `intSpkiCommit`, `nullifier`) are exposed as a single field element. They are constructed in the field domain at the source: `policyLeafHash = uint256(sha256(...)) mod p` per QKB/2.0; `leafSpkiCommit`/`intSpkiCommit` are `SpkiCommit(spki)` Poseidon outputs; `nullifier` is `Poseidon₂` output. No hi/lo split.
+
+(Final ordering may shift to match snarkjs ABI conventions; settled in implementation plan. The encoding regime per signal is fixed.)
 
 ### Estimated zkey size
 
@@ -298,7 +329,7 @@ contract QKBRegistryV5 {
     IGroth16Verifier public immutable groth16Verifier;
     address public admin;
     bytes32 public trustedListRoot;          // Merkle root over Poseidon(intSpki) leaves
-    bytes32 public policyRoot;               // Merkle root over accepted declHash leaves
+    bytes32 public policyRoot;               // Merkle root over accepted policyLeafHash leaves
     uint256 public constant MAX_BINDING_AGE = 1 hours;
 
     // Two-direction replay protection.
@@ -331,7 +362,13 @@ contract QKBRegistryV5 {
 
 Wraps EIP-7212 precompile (address `0x0000000000000000000000000000000000000100` on Base). Input layout per EIP-7212: 160 bytes = `hash(32) || r(32) || s(32) || x(32) || y(32)`. Returns true if signature valid.
 
-Includes DER-SPKI parser (`parseSpki`) for extracting `(x, y)` from raw 91-byte P-256 SubjectPublicKeyInfo bytes; fails loudly on unexpected DER variants.
+Three exported functions:
+
+- `parseSpki(bytes calldata spki) → (bytes32 x, bytes32 y)` — DER walker for 91-byte P-256 SPKI. Fails loudly on unexpected DER variants (e.g. non-named-curve, wrong AlgorithmIdentifier).
+- `spkiCommit(bytes calldata spki) → uint256` — computes the canonical SPKI commitment exactly the way the circuit and the flattener do. Internally: `parseSpki`, then decompose X and Y into 6×43-bit LE limbs, then `Poseidon₂(Poseidon₆(X_limbs), Poseidon₆(Y_limbs))`. Used for both gate 2a binding and gate 3 trust-list Merkle leaf.
+- `verifyWithSpki(bytes calldata spki, bytes32 messageHash, bytes32[2] calldata sig) → bool` — convenience: `parseSpki` then call EIP-7212.
+
+The `spkiCommit` function is the canonical bridge between calldata SPKI bytes and the field-domain commitment exposed by the proof. It must be byte-equivalent to the circuit's `Poseidon₂(Poseidon₆(leafXLimbs), Poseidon₆(leafYLimbs))` (per `packages/circuits/circuits/QKBPresentationEcdsaLeaf.circom:290-299`). Foundry tests must cover round-trip: a real Diia leaf SPKI fed through `spkiCommit` produces the same value the circuit produces from the same SPKI's witness limbs.
 
 ### `lib/PoseidonMerkle.sol`
 
@@ -501,15 +538,16 @@ A1 sub-project is complete when:
 - [ ] Browser-side prove of the V5 circuit succeeds on Chromium desktop in ≤3 min, on Pixel 9 in ≤15 min.
 - [ ] `QKBRegistryV5.register()` succeeds end-to-end on Base Sepolia for the founder address with a real Diia .p7s.
 - [ ] `IdentityEscrowNFT.mint()` succeeds for the founder address; `tokenURI(1)` decodes to a civic-monumental certificate SVG.
-- [ ] Total `register()` gas on Base Sepolia ≤ 500K (raised from 400K to accommodate added policy-Merkle gate + double Poseidon-Merkle).
+- [ ] Total `register()` gas on Base Sepolia ≤ 600K (raised from 500K → 600K because `spkiCommit` is full Poseidon-on-EVM, not byte-Poseidon).
 - [ ] Ceremony transparency artifacts committed to repo.
 - [ ] Browser-only end-to-end (no CLI used) validated for at least one full register + mint.
 - [ ] Soundness regression tests pass:
-  - [ ] Self-controlled `intSpki` paired with a trusted-list entry → BAD_TRUST_LIST.
+  - [ ] Self-controlled `intSpki` paired with a trusted-list entry → BAD_TRUST_LIST (the contract's `spkiCommit(intSpki)` won't match any leaf in the Merkle).
   - [ ] Same nullifier registered to two wallets → second tx reverts NULLIFIER_USED.
-  - [ ] Binding with `declHash` not in `policyRoot` → BAD_DECL.
+  - [ ] Binding with `policyLeafHash` not in `policyRoot` → BAD_POLICY.
   - [ ] Mismatched `signedAttrs.messageDigest` vs binding → circuit fails to satisfy.
   - [ ] Public-signal hash hi/lo limbs that don't match the calldata SHA → BAD_*_HI / BAD_*_LO.
+  - [ ] Mismatched `spkiCommit` semantics: a leaf SPKI fed through the contract's `spkiCommit` produces the same value as the circuit's witness-side computation for the same key (round-trip parity test, real Diia leaf cert as fixture).
 
 ## Out of scope (handled by other A-track sub-projects)
 
@@ -529,8 +567,16 @@ A1 sub-project is complete when:
 
 **v2 corrections from external review (incorporated):**
 
-- [x] Trust-list leaf bound to verifying intSpki — Merkle leaf format is `Poseidon(intSpki)` (not opaque cert hash); flattener change documented in §Migration.
+- [x] Trust-list leaf bound to verifying intSpki — Merkle leaf format is `SpkiCommit(intSpki)` (not opaque cert hash); flattener change documented in §Migration.
 - [x] CAdES digest separation — circuit exposes `signedAttrsHash` AND `bindingHash` as distinct public signals; circuit-internal constraint `signedAttrs.messageDigest_field == bindingHash` closes the binding; contract uses `signedAttrsHash` for EIP-7212 (NOT `bindingHash`).
 - [x] Nullifier-uniqueness preserved — `register()` checks both `nullifierOf[msg.sender] == 0` AND `registrantOf[nullifier] == address(0)`, writes both maps; matches V4 semantics.
-- [x] Policy gate restored — calldata carries `policyPath`+`policyPathBits`; contract verifies `MerkleVerify(declHash, …, policyRoot)`; `setPolicyRoot` admin function added.
-- [x] Multi-limb public encoding — every 256-bit hash crosses the BN254 boundary as a `(hi, lo)` 128-bit pair; 15 public signals total (was 9 — wire format was unspecified).
+- [x] Policy gate restored — calldata carries `policyPath`+`policyPathBits`; contract verifies `MerkleVerify(policyLeafHash, …, policyRoot)`; `setPolicyRoot` admin function added.
+- [x] Multi-limb public encoding — every 256-bit SHA-256 digest crosses the BN254 boundary as a `(hi, lo)` 128-bit pair.
+
+**v3 corrections from external review pass 2 (incorporated):**
+
+- [x] Policy leaf domain made explicit — `policyLeafHash` is a 1-field-element public signal already in BN254 domain (per QKB/2.0 policy-root spec: `uint256(sha256(declaration)) mod p`). No hi/lo split for this value. Wire format ambiguity closed.
+- [x] `declHash` → `policyLeafHash` — name realigned with QKB/2.0 binding model and existing parser output. No more "QKB/2.0 spec but legacy declaration-prose surface" drift.
+- [x] SPKI hash semantics unified — single canonical function `SpkiCommit(spki)` defined in §Data flow and exported by `P256Verify.sol`. Circuit, contract, and flattener all use the same Poseidon-over-X/Y-limbs construction. No more "two flavors of `poseidon(spki)`."
+- [x] Public signal count moved 15 → 14 (consolidated `declHashHi`+`declHashLo` into single `policyLeafHash` per fix above).
+- [x] Gas estimate revised upward (~440-490K, was ~400-450K) because `spkiCommit` is real Poseidon-on-EVM, not a cheap byte-hash. Acceptance budget bumped from 500K → 600K.
