@@ -84,7 +84,7 @@ Reuse as-is. `ctxHash` here is the field-encoded ctx hash (single field element)
 
 ```
 MAX_BCANON   = 768   bytes (canonical binding)
-MAX_SA       = 256   bytes (signedAttrs DER)
+MAX_SA       = 1536  bytes (signedAttrs DER — amended 2026-04-29 from 256 after measuring real Diia 1388 B; see spec v5)
 MAX_LEAF_TBS = 1024  bytes (leaf TBSCertificate DER)
 MAX_CERT     = 2048  bytes (full leaf cert DER, for X509SubjectSerial)
 ```
@@ -810,7 +810,7 @@ import { createHash } from 'node:crypto';
 
 const SA_PATH = '/data/Develop/identityescroworg/packages/circuits/fixtures/integration/admin-ecdsa/signedAttrs.bin';
 const BINDING_PATH = '/data/Develop/identityescroworg/packages/circuits/fixtures/integration/admin-ecdsa/binding.bin';
-const MAX_SA = 256;
+const MAX_SA = 1536;
 
 describe('SignedAttrsParser', () => {
   let calc: Awaited<ReturnType<typeof compileCircuit>>;
