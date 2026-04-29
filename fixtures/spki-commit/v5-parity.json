@@ -1,0 +1,20 @@
+{
+  "schema": "v5-spki-commit-parity-1",
+  "description": "Reference values for SpkiCommit() byte-equivalence parity tests.",
+  "generator": "packages/circuits/scripts/spki-commit-ref.ts",
+  "poseidonReference": "circomlibjs ^0.1.7 (BN254, iden3 params)",
+  "cases": [
+    {
+      "label": "admin-leaf-ecdsa",
+      "description": "Real Diia admin leaf SPKI extracted from leaf.der.",
+      "spki": "3059301306072a8648ce3d020106082a8648ce3d0301070342000483db162f9d339482c2d4f638ce909581bd972626583718d3c7e5231cce78c1a5251449d534548cc8c93d4294c28baea40d7889f1384d477fdb0c011c18766319",
+      "expectedCommitDecimal": "21571940304476356854922994092266075334973586284547564138969104758217451997906"
+    },
+    {
+      "label": "admin-intermediate-ecdsa",
+      "description": "Synthetic Diia QTSP intermediate SPKI extracted from synth-intermediate.der.",
+      "spki": "3059301306072a8648ce3d020106082a8648ce3d030107034200045597fad82b898d68bab4490762288fda65dc24702a9e41f6ace9c587ee5e2838b22c3f314b0d662bb0178dd9cecd2910a4c86564057df9d963ec8adb14fe169c",
+      "expectedCommitDecimal": "3062275996413807393972187453260313408742194132301219197208947046150619781839"
+    }
+  ]
+}
