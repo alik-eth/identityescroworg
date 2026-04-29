@@ -305,7 +305,45 @@ template QKBPresentationV5() {
     }
     intSpki.commit === intSpkiCommit;
 
-    // Witness-anchor for the still-unwired public signals (§6.6-§6.10 will
+    // §6.6 — X509SubjectSerial + NullifierDerive.
+    //
+    // X509SubjectSerial(MAX_CERT) reads the leaf-cert DER at the witnessed
+    // (subjectSerialValueOffset, subjectSerialValueLength) — pointing at the
+    // VALUE bytes of the OID 2.5.4.5 (subject serial) RDN attribute — and
+    // packs up to 32 content bytes into 4 × uint64 LE limbs. Length is
+    // constrained ∈ [1, 32]; positions ≥ length are masked to zero before
+    // packing, so DER-tail bytes can never leak into the limbs. The
+    // (offset, length) pair is bound to the cert's TBS via leafTbsBytes
+    // ↔ leafCertBytes byte-equality (deferred to §6.9).
+    //
+    // PoseidonChunkHashVar(MAX_CTX) computes the FIELD-DOMAIN ctxHash over
+    // parser.ctxBytes / parser.ctxLen. This is INDEPENDENT of the public
+    // ctxHashHi/Lo signal pair (which is the byte-domain SHA-256 of the
+    // same ctxBytes; that wiring lands in §6.7). Both hashes are computed
+    // from the same parser-output ctxBytes/ctxLen, so no cross-binding
+    // constraint is required — see header note "ctxHash domain" above.
+    //
+    // NullifierDerive: Poseidon-5(limbs[0..3], len) → secret;
+    //                  Poseidon-2(secret, ctxHash) → nullifier.
+    component subjectSerial = X509SubjectSerial(MAX_CERT);
+    for (var i = 0; i < MAX_CERT; i++) subjectSerial.leafDER[i] <== leafCertBytes[i];
+    subjectSerial.subjectSerialValueOffset <== subjectSerialValueOffset;
+    subjectSerial.subjectSerialValueLength <== subjectSerialValueLength;
+
+    component ctxFieldHash = PoseidonChunkHashVar(MAX_CTX);
+    for (var i = 0; i < MAX_CTX; i++) ctxFieldHash.bytes[i] <== parser.ctxBytes[i];
+    ctxFieldHash.len <== parser.ctxLen;
+
+    component nullifierDer = NullifierDerive();
+    for (var i = 0; i < 4; i++) {
+        nullifierDer.subjectSerialLimbs[i] <== subjectSerial.subjectSerialLimbs[i];
+    }
+    nullifierDer.subjectSerialLen <== subjectSerialValueLength;
+    nullifierDer.ctxHash          <== ctxFieldHash.out;
+
+    nullifierDer.nullifier === nullifier;
+
+    // Witness-anchor for the still-unwired public signals (§6.7-§6.10 will
     // replace this with real constraints; for now the sum keeps each signal
     // syntactically used so circom doesn't strip-prune the public-input
     // declarations from `component main { public [...] }`).
@@ -314,8 +352,9 @@ template QKBPresentationV5() {
     //   timestamp, policyLeafHash (§6.2)
     //   bindingHashHi/Lo, signedAttrsHashHi/Lo, leafTbsHashHi/Lo (§6.3)
     //   leafSpkiCommit, intSpkiCommit (§6.5)
+    //   nullifier (§6.6)
     signal _unusedHash;
-    _unusedHash <== msgSender + nullifier
+    _unusedHash <== msgSender
                  + ctxHashHi + ctxHashLo;
 }
 

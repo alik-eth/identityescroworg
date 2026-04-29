@@ -16,10 +16,117 @@ import {
   spkiCommit,
 } from '../../scripts/spki-commit-ref';
 
+// circomlibjs has no types; require-interop matches other tests in this package.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { buildPoseidon } = require('circomlibjs');
+
+interface PoseidonF {
+  F: { e: (v: bigint) => unknown; toObject: (v: unknown) => bigint };
+  (inputs: unknown[]): unknown;
+}
+
+let poseidonCache: PoseidonF | null = null;
+async function getPoseidon(): Promise<PoseidonF> {
+  if (poseidonCache !== null) return poseidonCache;
+  poseidonCache = (await buildPoseidon()) as unknown as PoseidonF;
+  return poseidonCache;
+}
+
+async function poseidonHash(inputs: bigint[]): Promise<bigint> {
+  const p = await getPoseidon();
+  return p.F.toObject(p(inputs.map((v) => p.F.e(v))));
+}
+
 const FIXTURE_DIR = resolve(__dirname, '..', '..', 'fixtures', 'integration', 'admin-ecdsa');
 const MAX_SA = 1536;
 const MAX_LEAF_TBS = 1024;
 const MAX_CERT = 2048;
+
+/**
+ * Find the subject.serialNumber RDN VALUE inside a leaf cert DER.
+ *
+ * OID 2.5.4.5 occurs in BOTH the issuer DN and the subject DN, in that
+ * order within TBSCertificate. Real Diia issuer carries an EDRPOU-style
+ * organizational serial (e.g. "UA-43395033-2311"); the subject carries the
+ * natural-person semanticsIdentifier (ETSI EN 319 412-1 — e.g.
+ * "TINUA-3627506575" for Ukrainian taxpayers).
+ *
+ * To pick the SUBJECT occurrence robustly we filter on the ETSI prefix —
+ * any of `TINUA-`, `PNOUA-`, `PNODE-`, `PNOPL-`, `TINPL-`, `TINDE-`,
+ * `IDC??-`, `PAS??-`, etc. (§5.1.3 of EN 319 412-1). Practically we accept
+ * the canonical `TIN`/`PNO`/`IDC`/`PAS` country-prefixed string-with-dash
+ * shape; if no such prefix is found we fall back to the SECOND occurrence
+ * (issuer comes first, subject comes second in TBSCertificate field order).
+ *
+ * § Witness builder note: the production §7 build-witness-v5.ts will
+ * replace this with a proper pkijs-based extractor; this is sufficient for
+ * the §6.6 integration test against the admin-ecdsa real-Diia fixture.
+ */
+function findSubjectSerial(der: Buffer): { offset: number; length: number } {
+  const OID = Buffer.from([0x06, 0x03, 0x55, 0x04, 0x05]);
+  const ETSI_PREFIXES = ['TIN', 'PNO', 'IDC', 'PAS', 'CPI'];
+  type Hit = { offset: number; length: number; value: string };
+  const hits: Hit[] = [];
+  for (let i = 0; i < der.length - OID.length - 2; i++) {
+    let match = true;
+    for (let k = 0; k < OID.length; k++) {
+      if (der[i + k] !== OID[k]) { match = false; break; }
+    }
+    if (!match) continue;
+    const tag = der[i + OID.length] as number;
+    const len = der[i + OID.length + 1] as number;
+    if (tag !== 0x13 && tag !== 0x0c) continue;
+    const offset = i + OID.length + 2;
+    const value = der.subarray(offset, offset + len).toString('utf8');
+    hits.push({ offset, length: len, value });
+  }
+  if (hits.length === 0) {
+    throw new Error('subject.serialNumber OID not found in leaf DER');
+  }
+  // Prefer ETSI EN 319 412-1 prefix matches (subject's natural-person ID).
+  for (const h of hits) {
+    if (ETSI_PREFIXES.some((p) => h.value.startsWith(p))) {
+      return { offset: h.offset, length: h.length };
+    }
+  }
+  // Fallback: subject occurs after issuer in TBSCertificate, so take #2.
+  if (hits.length >= 2) return { offset: hits[1]!.offset, length: hits[1]!.length };
+  return { offset: hits[0]!.offset, length: hits[0]!.length };
+}
+
+/**
+ * Pack up to 32 content bytes into 4 × uint64 LE limbs, byte-equivalent to
+ * the X509SubjectSerial circom template's packing (§14 spec, line 105–113
+ * of X509SubjectSerial.circom).
+ */
+function subjectSerialBytesToLimbs(bytes: Buffer): bigint[] {
+  if (bytes.length > 32) throw new Error('subject serial > 32 bytes');
+  const limbs: bigint[] = [0n, 0n, 0n, 0n];
+  for (let l = 0; l < 4; l++) {
+    let acc = 0n;
+    for (let b = 7; b >= 0; b--) {
+      const idx = l * 8 + b;
+      const byte = idx < bytes.length ? BigInt(bytes[idx] as number) : 0n;
+      acc = acc * 256n + byte;
+    }
+    limbs[l] = acc;
+  }
+  return limbs;
+}
+
+/**
+ * Off-circuit reference for PoseidonChunkHashVar(MAX_CTX) when len === 0.
+ * From the template: nChunks=0, nRounds=⌈(0+1)/15⌉=1, fe = [0×15] (slot 0
+ * is `feLenProd[0] = (0==0)*0 = 0`; remaining slots are zero too because
+ * no chunks exist). state_0 = 0; state_1 = Poseidon(16, [0×16]). The
+ * synthetic admin-ecdsa fixture pins ctxHexLen=0 so this is the canonical
+ * "empty ctx" hash that lands in nullifier derivation.
+ */
+async function poseidonChunkHashVarEmpty(): Promise<bigint> {
+  // Poseidon(16) — circomlibjs's buildPoseidon supports arity up to 16
+  // (the full set the circuit uses).
+  return poseidonHash(new Array<bigint>(16).fill(0n));
+}
 
 // Synthetic CAdES messageDigest Attribute prefix (17 bytes). Same constant
 // SignedAttrsParser.circom EXPECTED_PREFIX uses.
@@ -56,17 +163,18 @@ function buildSyntheticSignedAttrs(bindingDigest: Buffer): {
 }
 
 /**
- * Build a minimal V5-main witness exercising §6.2-§6.5:
+ * Build a minimal V5-main witness exercising §6.2-§6.6:
  *   §6.2 parser binds (timestamp + policyLeafHash)
  *   §6.3 three SHA-256 chains (binding, signedAttrs, leafTBS) + Bytes32ToHiLo
  *   §6.4 SignedAttrsParser + messageDigest === sha256(bindingBytes)
  *   §6.5 leafSpkiCommit + intSpkiCommit from real SPKI fixtures
+ *   §6.6 X509SubjectSerial(leaf.der OID 2.5.4.5) + NullifierDerive
  *
  * leafTBS is a synthetic 64-byte stand-in (any well-padded byte sequence
  * works for §6.3; §6.9 will bind it to leaf-cert DER consistency later).
  *
- * Public signals not yet wired (msgSender, nullifier, ctxHashHi/Lo) stay
- * anchored by _unusedHash; the witness passes any self-consistent value.
+ * Public signals not yet wired (msgSender, ctxHashHi/Lo) stay anchored by
+ * _unusedHash; the witness passes any self-consistent value.
  */
 async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
   const v2core = buildV2CoreWitnessFromFixture(FIXTURE_DIR);
@@ -113,11 +221,31 @@ async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
   const leafSpkiCommit = await spkiCommit(leafSpki);
   const intSpkiCommit = await spkiCommit(intSpki);
 
+  // §6.6 — Real Diia leaf cert (subject serialNumber = "TINUA-3627506575",
+  // 16 bytes per ETSI EN 319 412-1). Walk the DER for OID 2.5.4.5, pack the
+  // VALUE bytes into 4 × uint64 LE limbs, then derive the nullifier as
+  // Poseidon₂(Poseidon₅(limbs+len), ctxHash) where ctxHash is the
+  // field-domain PoseidonChunkHashVar over the parser's ctxBytes/ctxLen.
+  // Fixture pins ctxHexLen=0, so ctxHash = Poseidon(16, [0×16]).
+  const leafDer = readFileSync(resolve(FIXTURE_DIR, 'leaf.der'));
+  const subjectSerial = findSubjectSerial(leafDer);
+  const subjectSerialBytes = leafDer.subarray(
+    subjectSerial.offset,
+    subjectSerial.offset + subjectSerial.length,
+  );
+  const subjectSerialLimbs = subjectSerialBytesToLimbs(Buffer.from(subjectSerialBytes));
+  const ctxHashField = await poseidonChunkHashVarEmpty();
+  const expectedSecret = await poseidonHash([
+    ...subjectSerialLimbs,
+    BigInt(subjectSerial.length),
+  ]);
+  const expectedNullifier = await poseidonHash([expectedSecret, ctxHashField]);
+
   return {
     // 14 public inputs (canonical V5 spec §0.1 order).
     msgSender: 0,
     timestamp: fix.expected.timestamp,             // §6.2
-    nullifier: 0,
+    nullifier: expectedNullifier,                  // §6.6
     ctxHashHi: 0,
     ctxHashLo: 0,
     bindingHashHi,                                  // §6.3
@@ -173,16 +301,18 @@ async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
     intXLimbs,
     intYLimbs,
 
-    // Still-unwired inputs (§6.6-§6.10) — zero-padded.
-    leafCertBytes: zeros(MAX_CERT),
-    subjectSerialValueOffset: 0,
-    subjectSerialValueLength: 0,
+    // §6.6 — Real Diia leaf cert + subject-serial walker output.
+    leafCertBytes: rightPadZero(leafDer, MAX_CERT),
+    subjectSerialValueOffset: subjectSerial.offset,
+    subjectSerialValueLength: subjectSerial.length,
+
+    // Still-unwired inputs (§6.7-§6.10) — zero-padded.
     pkX: zeros(4),
     pkY: zeros(4),
   };
 }
 
-describe('QKBPresentationV5 — §6.2-§6.5 (parser + 3× SHA + signedAttrs binding + 2× SpkiCommit)', function () {
+describe('QKBPresentationV5 — §6.2-§6.6 (parser + 3× SHA + signedAttrs binding + 2× SpkiCommit + nullifier)', function () {
   this.timeout(1800000);
 
   let circuit: CompiledCircuit;
@@ -201,6 +331,76 @@ describe('QKBPresentationV5 — §6.2-§6.5 (parser + 3× SHA + signedAttrs bind
     expect((input.policyLeafHash as bigint).toString(16)).to.equal(
       '2d00e73da8dd4dc99f04371d3ce01ecbcf4ad8e476c9017a304c57873494f812',
     );
+  });
+
+  // §6.6 happy-path — assert subject-serial extraction yields the correct
+  // limbs against the real Diia leaf cert ("TINUA-3627506575") and the
+  // public nullifier matches the off-circuit Poseidon derivation.
+  it('extracts the real Diia subject serial into expected LE limbs (§6.6)', async () => {
+    const leafDer = readFileSync(resolve(FIXTURE_DIR, 'leaf.der'));
+    const ss = findSubjectSerial(leafDer);
+    const bytes = Buffer.from(leafDer.subarray(ss.offset, ss.offset + ss.length));
+    expect(bytes.toString('utf8')).to.equal('TINUA-3627506575');
+    expect(ss.length).to.equal(16);
+
+    // 16 bytes pack into limbs[0]+limbs[1] (8 bytes each LE), limbs[2..3] = 0.
+    const limbs = subjectSerialBytesToLimbs(bytes);
+    // "TINUA-36" → bytes 0x54 0x49 0x4E 0x55 0x41 0x2D 0x33 0x36, LE-packed:
+    //   limb[0] = 0x36332D41554E4954
+    expect(limbs[0]).to.equal(0x36332D41554E4954n);
+    // "27506575" → 0x32 0x37 0x35 0x30 0x36 0x35 0x37 0x35
+    //   limb[1] = 0x3537353630353732
+    expect(limbs[1]).to.equal(0x3537353630353732n);
+    expect(limbs[2]).to.equal(0n);
+    expect(limbs[3]).to.equal(0n);
+  });
+
+  it('derives the expected nullifier from real Diia subject serial + empty ctx (§6.6)', async () => {
+    const input = await buildV5SmokeWitness();
+    const w = await circuit.calculateWitness(input, true);
+    await circuit.checkConstraints(w);
+
+    // Off-circuit recomputation must equal the witnessed public signal.
+    const limbs = [
+      0x36332D41554E4954n,
+      0x3537353630353732n,
+      0n,
+      0n,
+    ];
+    const ctxHash = await poseidonChunkHashVarEmpty();
+    const secret = await poseidonHash([...limbs, 16n]);
+    const expectedNullifier = await poseidonHash([secret, ctxHash]);
+    expect(input.nullifier).to.equal(expectedNullifier);
+  });
+
+  it('rejects a tampered nullifier public signal (§6.6)', async () => {
+    const input = await buildV5SmokeWitness();
+    const tampered = { ...input, nullifier: (input.nullifier as bigint) + 1n };
+    let threw = false;
+    try {
+      await circuit.calculateWitness(tampered, true);
+    } catch {
+      threw = true;
+    }
+    expect(threw).to.equal(true);
+  });
+
+  it('rejects a tampered subjectSerialValueLength while keeping the public nullifier (§6.6)', async () => {
+    // Length mismatch breaks: (a) the limb packing (different masked bytes)
+    // AND (b) the Poseidon-5 input (`subjectSerialLen` field changes), so
+    // the derived nullifier no longer matches the witnessed public signal.
+    const input = await buildV5SmokeWitness();
+    const tampered = {
+      ...input,
+      subjectSerialValueLength: (input.subjectSerialValueLength as number) - 1,
+    };
+    let threw = false;
+    try {
+      await circuit.calculateWitness(tampered, true);
+    } catch {
+      threw = true;
+    }
+    expect(threw).to.equal(true);
   });
 
   // §6.2 tamper rejections
