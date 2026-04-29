@@ -1,6 +1,6 @@
 # V5 Architecture Design
 
-**Status:** Brainstorming complete · Spec review pass 2 applied · Awaiting user spec review
+**Status:** Brainstorming complete · Spec review pass 3 applied · Awaiting user spec review
 **Date:** 2026-04-29
 **Predecessor:** [V4 Sepolia deployment](../../../fixtures/contracts/sepolia.json) — to be deprecated.
 **Sub-project of:** Path A (Pragmatic full ship of identity-escrow to production).
@@ -8,6 +8,7 @@
 - v1 (2026-04-29): initial brainstorm output.
 - v2 (2026-04-29): incorporated external review pass 1 — five findings (trust-list binding, CAdES digest separation, nullifier-uniqueness, policy root enforcement, multi-limb public encoding for 256-bit hashes).
 - v3 (2026-04-29): incorporated external review pass 2 — three findings (policy leaf field-reduction undefined, `declHash` vs `policyLeafHash` regression to legacy binding model, mixed SPKI hash semantics between circuit limb-Poseidon and contract byte-Poseidon). All three fix wire-format ambiguity.
+- v4 (2026-04-29): incorporated external review pass 3 — two findings (policyLeafHash construction was specified over raw declaration text, not the QKB/2.0 structured `JCS(policyLeafObject)`; stale `Poseidon(intSpki)` references in calldata description, contract field comment, and migration prose conflicted with the canonical `SpkiCommit(intSpki)` defined elsewhere in the same spec). Both fixes close consistency drift; the on-the-wire data-model now matches the QKB/2.0 policy-root spec exactly.
 
 ---
 
@@ -109,8 +110,11 @@ Public signals (committed by ZK proof, 14 field elements):
     - leafTbsHashHi, leafTbsHashLo       (2 — SHA-256 of leaf cert TBS)
 
   Field-domain values (already in BN254, 1 signal):
-    - policyLeafHash                     (1 — uint256(sha256(declaration)) mod p,
-                                              per QKB/2.0 policy-root spec)
+    - policyLeafHash                     (1 — uint256(sha256(JCS(policyLeafObject))) mod p,
+                                              per QKB/2.0 policy-root spec; commits to the
+                                              structured object {policyId, policyVersion,
+                                              bindingSchema, contentHash, metadataHash}, NOT
+                                              raw declaration text)
 
   SPKI commitments (Poseidon over X/Y limbs, 2 signals):
     - leafSpkiCommit                     (= SpkiCommit(leafSpki); see definition below)
@@ -127,7 +131,7 @@ Calldata-only inputs (NOT in proof; contract verifies them directly):
   - signedAttrs       (DER-encoded bytes leaf cert signed)
   - leafSig           (r, s — leaf ECDSA signature over SHA-256(signedAttrs))
   - intSig            (r, s — intermediate ECDSA signature over leafTbsHash)
-  - merklePath        (16 sibling hashes from Poseidon(intSpki) to trustedListRoot)
+  - merklePath        (16 sibling hashes from SpkiCommit(intSpki) to trustedListRoot)
   - merklePathBits    (which side at each level)
   - policyPath        (16 sibling hashes from policyLeafHash leaf to policyRoot)
   - policyPathBits    (which side at each level)
@@ -159,7 +163,9 @@ where `spki.X` and `spki.Y` are the 32-byte coordinates of the P-256 public key 
 
 This binds the trust-list Merkle gate, the proof-binding check (gate 2a), and EIP-7212 to the **same canonical commitment of the same key**. No "two flavors of `poseidon(spki)`."
 
-**Policy leaf is field-domain, not hi/lo.** Per the [QKB/2.0 policy-root spec](2026-04-23-qkb-binding-v2-policy-root.md), policy Merkle leaves are `uint256(sha256(declaration_text)) mod p` — already a single BN254 field element. The circuit exposes `policyLeafHash` as a 1-field-element public signal (matching the existing parser's output, which is `policyLeafHash`, not `declHash`). No hi/lo limb split for this value — it crosses the BN254 boundary cleanly because the field reduction was done at construction time.
+**Policy leaf is field-domain, not hi/lo.** Per the [QKB/2.0 policy-root spec](2026-04-23-qkb-binding-v2-policy-root.md), policy Merkle leaves are `uint256(sha256(JCS(policyLeafObject))) mod p` — already a single BN254 field element. The `policyLeafObject` is a structured JSON object with `{policyId, policyVersion, bindingSchema, contentHash, metadataHash}` (per §3 of the QKB/2.0 spec), JCS-canonicalized before hashing. The circuit exposes `policyLeafHash` as a 1-field-element public signal (matching the existing parser's output, which is `policyLeafHash`, not `declHash`). No hi/lo limb split for this value — it crosses the BN254 boundary cleanly because the field reduction was done at construction time.
+
+**The flattener / policy-list builder must compute leaves identically.** Bytes-equivalent JCS canonicalization of the structured object, then SHA-256, then `mod p` reduction. A divergence at any of these three steps produces a different leaf value and the proof's `policyLeafHash` won't match any leaf in `policyRoot`. Foundry / E2E tests must verify round-trip parity between the off-chain policy-list builder and the circuit's parser output.
 
 ### 2. On-chain — `QKBRegistryV5.register()`
 
@@ -328,7 +334,7 @@ Two encoding regimes coexist:
 contract QKBRegistryV5 {
     IGroth16Verifier public immutable groth16Verifier;
     address public admin;
-    bytes32 public trustedListRoot;          // Merkle root over Poseidon(intSpki) leaves
+    bytes32 public trustedListRoot;          // Merkle root over SpkiCommit(intSpki) leaves
     bytes32 public policyRoot;               // Merkle root over accepted policyLeafHash leaves
     uint256 public constant MAX_BINDING_AGE = 1 hours;
 
@@ -480,7 +486,7 @@ Alternatives: Vercel, Netlify, IPFS, self-hosted VPS. Not blocking the design.
 
 EU LOTL signers rotate every 1-3 months. Flattener (`packages/lotl-flattener`) produces fresh `trustedListRoot` on demand. Today: manual `setTrustedListRoot` by admin.
 
-**Flattener leaf format change.** V4 emitted Merkle leaves over a hash of the full intermediate certificate DER. V5 changes the leaf format to `Poseidon(intSpki)` — the trust assertion is now "this signing public key is from an authorized QTSP." This binds the on-chain Merkle gate to the same `intSpki` that EIP-7212 verifies, closing the soundness gap that would otherwise let an attacker pair a self-controlled signing key with an unrelated trusted-list entry.
+**Flattener leaf format change.** V4 emitted Merkle leaves over a hash of the full intermediate certificate DER. V5 changes the leaf format to `SpkiCommit(intSpki)` (canonical SPKI commit, defined in §Data flow) — the trust assertion is now "this signing public key is from an authorized QTSP." This binds the on-chain Merkle gate to the same value that the circuit commits to as `intSpkiCommit` and that the contract recomputes via `P256Verify.spkiCommit(intSpki)`, closing the soundness gap that would otherwise let an attacker pair a self-controlled signing key with an unrelated trusted-list entry.
 
 The flattener change is technically out of A1's package scope (`packages/lotl-flattener`) but A1 freezes the leaf-format contract; flattener's plan must align before V5 deploys.
 
@@ -575,8 +581,13 @@ A1 sub-project is complete when:
 
 **v3 corrections from external review pass 2 (incorporated):**
 
-- [x] Policy leaf domain made explicit — `policyLeafHash` is a 1-field-element public signal already in BN254 domain (per QKB/2.0 policy-root spec: `uint256(sha256(declaration)) mod p`). No hi/lo split for this value. Wire format ambiguity closed.
+- [x] Policy leaf domain made explicit — `policyLeafHash` is a 1-field-element public signal already in BN254 domain. (Construction further refined in v4 to match QKB/2.0 structured object exactly.)
 - [x] `declHash` → `policyLeafHash` — name realigned with QKB/2.0 binding model and existing parser output. No more "QKB/2.0 spec but legacy declaration-prose surface" drift.
 - [x] SPKI hash semantics unified — single canonical function `SpkiCommit(spki)` defined in §Data flow and exported by `P256Verify.sol`. Circuit, contract, and flattener all use the same Poseidon-over-X/Y-limbs construction. No more "two flavors of `poseidon(spki)`."
 - [x] Public signal count moved 15 → 14 (consolidated `declHashHi`+`declHashLo` into single `policyLeafHash` per fix above).
 - [x] Gas estimate revised upward (~440-490K, was ~400-450K) because `spkiCommit` is real Poseidon-on-EVM, not a cheap byte-hash. Acceptance budget bumped from 500K → 600K.
+
+**v4 corrections from external review pass 3 (incorporated):**
+
+- [x] `policyLeafHash` construction refined to match QKB/2.0 §3 exactly: `uint256(sha256(JCS(policyLeafObject))) mod p`, where `policyLeafObject = {policyId, policyVersion, bindingSchema, contentHash, metadataHash}`. Earlier prose said "raw declaration text" which would have dropped the four structured fields beyond the declaration body. Flattener / policy-list builder responsibility for byte-equivalent JCS canonicalization is now flagged explicitly.
+- [x] All three stale `Poseidon(intSpki)` references swept (calldata description, registry contract field comment, migration-section flattener-format-change paragraph). Canonical leaf format is everywhere `SpkiCommit(intSpki)`. Same value the circuit commits as `intSpkiCommit` and the contract recomputes via `P256Verify.spkiCommit(intSpki)`.
