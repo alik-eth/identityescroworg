@@ -37,24 +37,31 @@ struct PublicSignals {
 
 Hi/Lo split convention: top-16 / bottom-16 bytes of the 32-byte SHA-256 (NOT little-endian). The TS SDK's `Bytes32ToHiLo` helper must match this convention byte-for-byte.
 
-### §0.2 V5 register() ABI (locked by contracts-eng at `5e65c1e` + `0abc783`)
+### §0.2 V5 register() ABI (canonical: `packages/contracts/src/QKBRegistryV5.sol` lines 206-218)
 
 ```solidity
 function register(
-  PublicSignals calldata publicSignals,
-  Groth16Proof calldata proof,
-  bytes calldata leafSpki,           // 91 bytes canonical ECDSA-P256 SPKI
-  bytes calldata intSpki,            // 91 bytes canonical ECDSA-P256 SPKI
-  bytes calldata leafSig,            // 64 bytes (r || s) for CAdES P-256 sig
-  bytes calldata leafTbsCertSig,     // 64 bytes (r || s) for leaf TBSCertificate sig
-  uint256 trustListMerkleIdx,        // index of intSpkiCommit in trust-list tree
-  bytes32[16] calldata trustListPath,
-  uint256 policyListMerkleIdx,       // index of policyLeafHash in policy tree
-  bytes32[16] calldata policyListPath
+  Groth16Proof  calldata proof,                  // [0] proof first
+  PublicSignals calldata sig,                    // [1] then public signals
+  bytes         calldata leafSpki,               // [2] 91 bytes canonical ECDSA-P256 SPKI
+  bytes         calldata intSpki,                // [3] 91 bytes canonical ECDSA-P256 SPKI
+  bytes         calldata signedAttrs,            // [4] raw CAdES signedAttrs DER bytes (re-hashed on-chain by Gate 2a/2b)
+  bytes32[2]    calldata leafSig,                // [5] (r, s) over sha256(signedAttrs)
+  bytes32[2]    calldata intSig,                 // [6] (r, s) over leafTbsHash (was "leafTbsCertSig" in earlier drafts)
+  bytes32[16]   calldata trustMerklePath,        // [7] sibling path bottom-up
+  uint256                trustMerklePathBits,    // [8] direction bitmap: bit k = "sibling on left" at depth k (NOT a leaf index)
+  bytes32[16]   calldata policyMerklePath,       // [9]
+  uint256                policyMerklePathBits    // [10]
 ) external;
 ```
 
-The `leafSig` is the signature over `signedAttrs` (CAdES). `leafTbsCertSig` is the signature on the leaf cert's TBS (= cert chain integrity). Both are 64 bytes raw `r || s` IEEE-P1363 form (not DER-encoded).
+Encoding notes the SDK must respect:
+
+- **Argument order**: `proof` first, `sig` second. An earlier orchestration draft had the reverse — the contract source is authoritative.
+- **`signedAttrs` raw bytes**: this is a fresh calldata arg (not a hash). Gate 2a re-hashes it on-chain to bind it to `sig.signedAttrsHashHi/Lo`; Gate 2b feeds the same hash to P256Verify. The web client must transmit the actual signedAttrs DER, not a digest.
+- **Signatures shape**: `bytes32[2]` (r as word 0, s as word 1) — *not* a flat 64-byte `bytes`. Different ABI encoding entirely.
+- **Merkle direction encoding**: `trustMerklePathBits` and `policyMerklePathBits` are `uint256` *direction bitmaps*, not leaf indices. Bit `k` of the word is the direction at tree depth `k` per `PoseidonMerkle.verify`: 0 = current is left (sibling on right), 1 = current is right (sibling on left). The SDK builds these by walking sibling positions bottom-up; circuits-eng's §7 witness builder uses the same convention so the same `(path, pathBits)` pair feeds both the on-chain Merkle gate and the in-circuit Merkle witness.
+- **`intSig`**: same semantic as the legacy "leafTbsCertSig" (intermediate's signature over leaf TBS), just renamed.
 
 ### §0.3 SpkiCommit byte-equivalence (§9.1 parity gate, all 4 impls agree)
 
