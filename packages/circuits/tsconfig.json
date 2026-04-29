@@ -18,5 +18,5 @@
       "moduleResolution": "Node"
     }
   },
-  "include": ["test/**/*.ts", "inputs/**/*.ts"]
+  "include": ["test/**/*.ts", "inputs/**/*.ts", "types/**/*.d.ts"]
 }

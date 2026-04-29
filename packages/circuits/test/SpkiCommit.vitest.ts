@@ -72,7 +72,9 @@ describe('decomposeTo643Limbs', () => {
         );
         const limbs = decomposeTo643Limbs(buf);
         let reconstructed = 0n;
-        for (let i = 0; i < 6; i++) reconstructed += limbs[i] << BigInt(43 * i);
+        for (const [i, limb] of limbs.entries()) {
+            reconstructed += limb << BigInt(43 * i);
+        }
         const valueAsBigInt = BigInt(`0x${buf.toString('hex')}`);
         expect(reconstructed).toBe(valueAsBigInt);
     });
