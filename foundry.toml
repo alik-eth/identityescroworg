@@ -23,6 +23,18 @@ fs_permissions = [
 verbosity = 3
 fuzz = { runs = 256 }
 
+[profile.base-sepolia]
+# Inherits everything from [profile.default]; identical compiler + fs_permissions.
+# Used by V5 Forge tests + DeployV5.s.sol when running against Base Sepolia
+# (chainId 84532), which is the V5 architecture's locked target chain
+# because EIP-7212 (the P-256 precompile at 0x100) is live there.
+
+[rpc_endpoints]
+base-sepolia = "${BASE_SEPOLIA_RPC_URL}"
+
+[etherscan]
+base-sepolia = { key = "${BASESCAN_API_KEY}", url = "https://api-sepolia.basescan.org/api" }
+
 [fmt]
 line_length = 120
 tab_width = 4
