@@ -174,19 +174,127 @@ template QKBPresentationV5() {
     parser.tsValue       === timestamp;
     parser.policyLeafHash === policyLeafHash;
 
-    // Witness-anchor for the still-unwired public signals (§6.3-§6.10 will
+    // §6.3 — Three SHA-256 chains (binding, signedAttrs, leafTBS).
+    // Each chain is identical in shape:
+    //   1. Sha256CanonPad asserts that paddedIn is the FIPS-180-4 canonical
+    //      padding of (data, dataLen). Without this the prover could supply
+    //      a paddedIn whose unpadded prefix differs from `data` and the
+    //      circuit would happily hash a different message.
+    //   2. Sha256Var consumes the validated paddedIn → 256 output bits.
+    //   3. We pack the 256 bits into 32 big-endian bytes (bit 0 = MSB of
+    //      byte 0), then split into two 128-bit halves via Bytes32ToHiLo.
+    //   4. The two halves bind to public signals at indices [5,6] (binding),
+    //      [7,8] (signedAttrs), [9,10] (leafTBS) per V5 spec §0.1.
+    //
+    // The bindingDigestBytes signal is reused by §6.4 as the LHS of the
+    // CAdES messageDigest equality (parser.tsValue and parser.policyLeafHash
+    // were the only outputs needed off the parser; the binding-hash itself
+    // is what closes the soundness loop with the cert chain).
+
+    // --- binding ---
+    component bcPad = Sha256CanonPad(MAX_BCANON);
+    for (var i = 0; i < MAX_BCANON; i++) {
+        bcPad.data[i]      <== bindingBytes[i];
+        bcPad.paddedIn[i]  <== bindingPaddedIn[i];
+    }
+    bcPad.dataLen   <== bindingLength;
+    bcPad.paddedLen <== bindingPaddedLen;
+
+    component hashBinding = Sha256Var(MAX_BCANON);
+    for (var i = 0; i < MAX_BCANON; i++) hashBinding.paddedIn[i] <== bindingPaddedIn[i];
+    hashBinding.paddedLen <== bindingPaddedLen;
+
+    signal bindingDigestBytes[32];
+    for (var i = 0; i < 32; i++) {
+        var acc = 0;
+        for (var b = 0; b < 8; b++) acc = acc * 2 + hashBinding.out[i * 8 + b];
+        bindingDigestBytes[i] <== acc;
+    }
+    component bindingHiLo = Bytes32ToHiLo();
+    for (var i = 0; i < 32; i++) bindingHiLo.bytes[i] <== bindingDigestBytes[i];
+    bindingHiLo.hi === bindingHashHi;
+    bindingHiLo.lo === bindingHashLo;
+
+    // --- signedAttrs ---
+    component saPad = Sha256CanonPad(MAX_SA);
+    for (var i = 0; i < MAX_SA; i++) {
+        saPad.data[i]     <== signedAttrsBytes[i];
+        saPad.paddedIn[i] <== signedAttrsPaddedIn[i];
+    }
+    saPad.dataLen   <== signedAttrsLength;
+    saPad.paddedLen <== signedAttrsPaddedLen;
+
+    component hashSignedAttrs = Sha256Var(MAX_SA);
+    for (var i = 0; i < MAX_SA; i++) hashSignedAttrs.paddedIn[i] <== signedAttrsPaddedIn[i];
+    hashSignedAttrs.paddedLen <== signedAttrsPaddedLen;
+
+    signal signedAttrsDigestBytes[32];
+    for (var i = 0; i < 32; i++) {
+        var acc = 0;
+        for (var b = 0; b < 8; b++) acc = acc * 2 + hashSignedAttrs.out[i * 8 + b];
+        signedAttrsDigestBytes[i] <== acc;
+    }
+    component signedAttrsHiLo = Bytes32ToHiLo();
+    for (var i = 0; i < 32; i++) signedAttrsHiLo.bytes[i] <== signedAttrsDigestBytes[i];
+    signedAttrsHiLo.hi === signedAttrsHashHi;
+    signedAttrsHiLo.lo === signedAttrsHashLo;
+
+    // --- leafTBS ---
+    component leafTbsPad = Sha256CanonPad(MAX_LEAF_TBS);
+    for (var i = 0; i < MAX_LEAF_TBS; i++) {
+        leafTbsPad.data[i]     <== leafTbsBytes[i];
+        leafTbsPad.paddedIn[i] <== leafTbsPaddedIn[i];
+    }
+    leafTbsPad.dataLen   <== leafTbsLength;
+    leafTbsPad.paddedLen <== leafTbsPaddedLen;
+
+    component hashLeafTbs = Sha256Var(MAX_LEAF_TBS);
+    for (var i = 0; i < MAX_LEAF_TBS; i++) hashLeafTbs.paddedIn[i] <== leafTbsPaddedIn[i];
+    hashLeafTbs.paddedLen <== leafTbsPaddedLen;
+
+    signal leafTbsDigestBytes[32];
+    for (var i = 0; i < 32; i++) {
+        var acc = 0;
+        for (var b = 0; b < 8; b++) acc = acc * 2 + hashLeafTbs.out[i * 8 + b];
+        leafTbsDigestBytes[i] <== acc;
+    }
+    component leafTbsHiLo = Bytes32ToHiLo();
+    for (var i = 0; i < 32; i++) leafTbsHiLo.bytes[i] <== leafTbsDigestBytes[i];
+    leafTbsHiLo.hi === leafTbsHashHi;
+    leafTbsHiLo.lo === leafTbsHashLo;
+
+    // §6.4 — SignedAttrsParser + CAdES messageDigest equality.
+    //
+    // Soundness chain (the load-bearing invariant for the whole V5 design):
+    //   sha256(bindingBytes)   = bindingDigestBytes      (§6.3 above)
+    //   bindingDigestBytes     = signedAttrsParser.messageDigestBytes  (here)
+    //   signedAttrsParser only verifies a fixed-shape 17-byte CAdES prefix
+    //     at mdAttrOffset, but that's sound BECAUSE signedAttrsBytes is
+    //     elsewhere bound to the leaf cert via ECDSA (§6.9 leafTBS bind +
+    //     EIP-7212 on-chain verification). If §6.9 ever weakens the
+    //     leafCert ↔ signedAttrs binding, the §4 fixed-shape walker
+    //     becomes insufficient and must be replaced by a position-agnostic
+    //     SET OF walker. Auditors will look for this; do NOT relax.
+    component saParser = SignedAttrsParser(MAX_SA);
+    for (var i = 0; i < MAX_SA; i++) saParser.bytes[i] <== signedAttrsBytes[i];
+    saParser.length       <== signedAttrsLength;
+    saParser.mdAttrOffset <== mdAttrOffset;
+
+    for (var i = 0; i < 32; i++) {
+        bindingDigestBytes[i] === saParser.messageDigestBytes[i];
+    }
+
+    // Witness-anchor for the still-unwired public signals (§6.5-§6.10 will
     // replace this with real constraints; for now the sum keeps each signal
     // syntactically used so circom doesn't strip-prune the public-input
     // declarations from `component main { public [...] }`).
     //
-    // `timestamp` and `policyLeafHash` are removed from the sum because
-    // they're now constrained for real by the parser binds above.
+    // Now constrained for real (removed from the sum):
+    //   timestamp, policyLeafHash (§6.2)
+    //   bindingHashHi/Lo, signedAttrsHashHi/Lo, leafTbsHashHi/Lo (§6.3)
     signal _unusedHash;
     _unusedHash <== msgSender + nullifier
                  + ctxHashHi + ctxHashLo
-                 + bindingHashHi + bindingHashLo
-                 + signedAttrsHashHi + signedAttrsHashLo
-                 + leafTbsHashHi + leafTbsHashLo
                  + leafSpkiCommit + intSpkiCommit;
 }
 
