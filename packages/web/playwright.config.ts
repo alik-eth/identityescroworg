@@ -19,6 +19,10 @@ export default defineConfig({
     env: {
       VITE_CHAIN: 'sepolia',
       VITE_WALLETCONNECT_PROJECT_ID: 'e2e-mock-walletconnect-project-id',
+      // V5 prover artifacts ship post-§9.6 ceremony; until then the e2e
+      // drives Step 4 through the mock-prover path. Real-prover E2E
+      // becomes the §9.7 acceptance gate post-deploy.
+      VITE_USE_MOCK_PROVER: '1',
     },
   },
   projects: [
@@ -41,7 +45,7 @@ export default defineConfig({
     {
       name: 'v5',
       use: { browserName: 'chromium' },
-      testMatch: /v5-(register-route|mint|flow)\.spec\.ts/,
+      testMatch: /v5-(register-route|mint|flow|device-gating)\.spec\.ts/,
     },
     {
       name: 'chromium',

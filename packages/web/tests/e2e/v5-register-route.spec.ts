@@ -10,9 +10,31 @@
 // `history.pushState` and let TanStack Router pick it up. The full
 // happy path (with mock wallet + mock prover) lives in v5-flow.spec.ts
 // (Task 11).
+//
+// As of spec amendment 9c866ad the route is gated by
+// assessDeviceCapability(); headless Chromium would otherwise be
+// rerouted to /ua/use-desktop. We stub the storage manager up-front in
+// each test so the gate clears and Step 1 renders.
 import { expect, test } from '@playwright/test';
 
+async function stubDeviceGate(page: import('@playwright/test').Page) {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'storage', {
+      configurable: true,
+      value: {
+        persist: () => Promise.resolve(true),
+        estimate: () => Promise.resolve({ quota: 8_000_000_000, usage: 0 }),
+      },
+    });
+    Object.defineProperty(navigator, 'deviceMemory', {
+      configurable: true,
+      value: 8,
+    });
+  });
+}
+
 async function gotoV5Route(page: import('@playwright/test').Page) {
+  await stubDeviceGate(page);
   await page.goto('/');
   await page.evaluate(() => {
     window.history.pushState({}, '', '/ua/registerV5');
