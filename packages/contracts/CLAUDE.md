@@ -814,6 +814,39 @@ packages/contracts/
   asserts `src/libs/PoseidonBytecode.sol` matches the generator's
   output byte-for-byte.
 
+  - **Reproducibility-check enforcement (audit anchor for Path B').**
+    Because `PoseidonBytecode.sol` is opaque hex, the generator script +
+    the reproducibility check together ARE the audit surface for
+    Poseidon. Concrete enforcement model:
+
+    ```bash
+    # From repo root:
+    pnpm exec tsx packages/contracts/script/check-poseidon-reproducibility.ts
+    ```
+
+    Exit 0 = on-disk file matches the generator's stdout byte-for-byte;
+    exit 1 = drift. Run before any commit that touches
+    `src/libs/PoseidonBytecode.sol` or `script/generate-poseidon-bytecode.ts`.
+
+    No GitHub Actions CI workflow runs this today — by design. Per the
+    repo-root `CLAUDE.md` §"CI / verification", the worker review loop
+    substitutes for general-purpose CI (lead runs `forge test` +
+    inspects diff per worker commit). Two layers enforce the repro
+    check today:
+
+    1. **Worker discipline.** Whoever edits `PoseidonBytecode.sol` or
+       the generator must run the script locally and confirm exit 0
+       before committing.
+    2. **Lead pre-merge gate.** Lead runs the script before any
+       `feat/v5arch-contracts` → `main` merge. Non-zero exit blocks
+       the merge.
+
+    When the repo eventually adopts a general-purpose CI workflow
+    (`.github/workflows/ci.yml` covering all four packages — likely
+    post-A1, possibly during A3 audit prep), this check should be
+    wired in as a pre-`forge test` step in the contracts-package job.
+    Until then, this paragraph IS the merge-gate documentation.
+
 - **node:crypto.sign(null, X) gotcha.** It signs over sha256(X), NOT X.
   See `gen-eip7212-sentinel.ts` top docblock for the full root-cause +
   the belt-and-suspenders self-verify pair that catches re-introduction.
