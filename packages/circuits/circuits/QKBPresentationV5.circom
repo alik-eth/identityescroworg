@@ -284,7 +284,28 @@ template QKBPresentationV5() {
         bindingDigestBytes[i] === saParser.messageDigestBytes[i];
     }
 
-    // Witness-anchor for the still-unwired public signals (§6.5-§6.10 will
+    // §6.5 — Two SpkiCommit instances (leaf + intermediate).
+    //
+    // Each commits Poseidon₂(Poseidon₆(xLimbs), Poseidon₆(yLimbs)) over the
+    // 6×43-bit LE limb decomposition of the P-256 affine point. The same
+    // construction is computed contract-side from the calldata-supplied DER
+    // SPKI bytes (P256Verify.spkiCommit, parity-fixture-gated at §9.1).
+    // Public signals at indices [12] and [13] per V5 spec §0.1.
+    component leafSpki = SpkiCommit();
+    for (var i = 0; i < 6; i++) {
+        leafSpki.xLimbs[i] <== leafXLimbs[i];
+        leafSpki.yLimbs[i] <== leafYLimbs[i];
+    }
+    leafSpki.commit === leafSpkiCommit;
+
+    component intSpki = SpkiCommit();
+    for (var i = 0; i < 6; i++) {
+        intSpki.xLimbs[i] <== intXLimbs[i];
+        intSpki.yLimbs[i] <== intYLimbs[i];
+    }
+    intSpki.commit === intSpkiCommit;
+
+    // Witness-anchor for the still-unwired public signals (§6.6-§6.10 will
     // replace this with real constraints; for now the sum keeps each signal
     // syntactically used so circom doesn't strip-prune the public-input
     // declarations from `component main { public [...] }`).
@@ -292,10 +313,10 @@ template QKBPresentationV5() {
     // Now constrained for real (removed from the sum):
     //   timestamp, policyLeafHash (§6.2)
     //   bindingHashHi/Lo, signedAttrsHashHi/Lo, leafTbsHashHi/Lo (§6.3)
+    //   leafSpkiCommit, intSpkiCommit (§6.5)
     signal _unusedHash;
     _unusedHash <== msgSender + nullifier
-                 + ctxHashHi + ctxHashLo
-                 + leafSpkiCommit + intSpkiCommit;
+                 + ctxHashHi + ctxHashLo;
 }
 
 component main { public [

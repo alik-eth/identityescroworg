@@ -10,6 +10,11 @@ import {
   V2CORE_MAX_BCANON,
   V2CORE_MAX_POLICY_ID,
 } from '../binding/v2core-witness';
+import {
+  decomposeTo643Limbs,
+  parseP256Spki,
+  spkiCommit,
+} from '../../scripts/spki-commit-ref';
 
 const FIXTURE_DIR = resolve(__dirname, '..', '..', 'fixtures', 'integration', 'admin-ecdsa');
 const MAX_SA = 1536;
@@ -51,19 +56,19 @@ function buildSyntheticSignedAttrs(bindingDigest: Buffer): {
 }
 
 /**
- * Build a minimal V5-main witness exercising §6.2-§6.4:
+ * Build a minimal V5-main witness exercising §6.2-§6.5:
  *   §6.2 parser binds (timestamp + policyLeafHash)
  *   §6.3 three SHA-256 chains (binding, signedAttrs, leafTBS) + Bytes32ToHiLo
  *   §6.4 SignedAttrsParser + messageDigest === sha256(bindingBytes)
+ *   §6.5 leafSpkiCommit + intSpkiCommit from real SPKI fixtures
  *
  * leafTBS is a synthetic 64-byte stand-in (any well-padded byte sequence
  * works for §6.3; §6.9 will bind it to leaf-cert DER consistency later).
  *
- * Public signals not yet wired (msgSender, nullifier, ctxHashHi/Lo,
- * leafSpkiCommit, intSpkiCommit) stay anchored by _unusedHash; the witness
- * passes any self-consistent value.
+ * Public signals not yet wired (msgSender, nullifier, ctxHashHi/Lo) stay
+ * anchored by _unusedHash; the witness passes any self-consistent value.
  */
-function buildV5SmokeWitness(): Record<string, unknown> {
+async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
   const v2core = buildV2CoreWitnessFromFixture(FIXTURE_DIR);
   const fix = loadFixture(FIXTURE_DIR);
   const bindingBuf = readFileSync(resolve(FIXTURE_DIR, 'binding.qkb2.json'));
@@ -93,6 +98,21 @@ function buildV5SmokeWitness(): Record<string, unknown> {
 
   const policyLeafHash = BigInt('0x' + fix.expected.policyLeafHashHex);
 
+  // §6.5 — real SPKI fixtures (leaf + intermediate from admin-ecdsa).
+  // SpkiCommit() inside the circuit consumes the 6×43-bit LE limb
+  // decomposition; the public-signal binding asserts equality with the
+  // off-circuit `spkiCommit(spki)` reference value.
+  const leafSpki = readFileSync(resolve(FIXTURE_DIR, 'leaf-spki.bin'));
+  const intSpki = readFileSync(resolve(FIXTURE_DIR, 'intermediate-spki.bin'));
+  const { x: leafX, y: leafY } = parseP256Spki(leafSpki);
+  const { x: intX, y: intY } = parseP256Spki(intSpki);
+  const leafXLimbs = decomposeTo643Limbs(leafX);
+  const leafYLimbs = decomposeTo643Limbs(leafY);
+  const intXLimbs = decomposeTo643Limbs(intX);
+  const intYLimbs = decomposeTo643Limbs(intY);
+  const leafSpkiCommit = await spkiCommit(leafSpki);
+  const intSpkiCommit = await spkiCommit(intSpki);
+
   return {
     // 14 public inputs (canonical V5 spec §0.1 order).
     msgSender: 0,
@@ -107,8 +127,8 @@ function buildV5SmokeWitness(): Record<string, unknown> {
     leafTbsHashHi,                                  // §6.3
     leafTbsHashLo,                                  // §6.3
     policyLeafHash,                                 // §6.2
-    leafSpkiCommit: 0,
-    intSpkiCommit: 0,
+    leafSpkiCommit,                                 // §6.5
+    intSpkiCommit,                                  // §6.5
 
     // Parser inputs (§6.2).
     bindingBytes: v2core.bytes,
@@ -147,20 +167,22 @@ function buildV5SmokeWitness(): Record<string, unknown> {
     leafTbsPaddedIn: rightPadZero(leafTbsPadded, MAX_LEAF_TBS),
     leafTbsPaddedLen: leafTbsPadded.length,
 
-    // Still-unwired inputs (§6.5-§6.10) — zero-padded.
+    // §6.5 limb inputs — real fixtures (consumed by SpkiCommit instances).
+    leafXLimbs,
+    leafYLimbs,
+    intXLimbs,
+    intYLimbs,
+
+    // Still-unwired inputs (§6.6-§6.10) — zero-padded.
     leafCertBytes: zeros(MAX_CERT),
     subjectSerialValueOffset: 0,
     subjectSerialValueLength: 0,
-    leafXLimbs: zeros(6),
-    leafYLimbs: zeros(6),
-    intXLimbs: zeros(6),
-    intYLimbs: zeros(6),
     pkX: zeros(4),
     pkY: zeros(4),
   };
 }
 
-describe('QKBPresentationV5 — §6.2-§6.4 (parser + 3× SHA + signedAttrs binding)', function () {
+describe('QKBPresentationV5 — §6.2-§6.5 (parser + 3× SHA + signedAttrs binding + 2× SpkiCommit)', function () {
   this.timeout(1800000);
 
   let circuit: CompiledCircuit;
@@ -170,7 +192,7 @@ describe('QKBPresentationV5 — §6.2-§6.4 (parser + 3× SHA + signedAttrs bind
   });
 
   it('compiles + accepts the QKB/2.0 fixture witness with all wired binds satisfied', async () => {
-    const input = buildV5SmokeWitness();
+    const input = await buildV5SmokeWitness();
     const w = await circuit.calculateWitness(input, true);
     await circuit.checkConstraints(w);
 
@@ -183,7 +205,7 @@ describe('QKBPresentationV5 — §6.2-§6.4 (parser + 3× SHA + signedAttrs bind
 
   // §6.2 tamper rejections
   it('rejects a tampered timestamp public signal (§6.2)', async () => {
-    const input = buildV5SmokeWitness();
+    const input = await buildV5SmokeWitness();
     const tampered = { ...input, timestamp: 1777478401 };
     let threw = false;
     try {
@@ -195,7 +217,7 @@ describe('QKBPresentationV5 — §6.2-§6.4 (parser + 3× SHA + signedAttrs bind
   });
 
   it('rejects a tampered policyLeafHash public signal (§6.2)', async () => {
-    const input = buildV5SmokeWitness();
+    const input = await buildV5SmokeWitness();
     const tampered = {
       ...input,
       policyLeafHash: (input.policyLeafHash as bigint) + 1n,
@@ -212,7 +234,7 @@ describe('QKBPresentationV5 — §6.2-§6.4 (parser + 3× SHA + signedAttrs bind
   // §6.3 tamper rejections — the SHA-chain binding is enforced via
   // bindingHashHi/Lo public-signal equality with Bytes32ToHiLo(sha256(bindingBytes)).
   it('rejects a tampered bindingHashHi public signal (§6.3)', async () => {
-    const input = buildV5SmokeWitness();
+    const input = await buildV5SmokeWitness();
     const tampered = { ...input, bindingHashHi: (input.bindingHashHi as bigint) ^ 1n };
     let threw = false;
     try {
@@ -224,7 +246,7 @@ describe('QKBPresentationV5 — §6.2-§6.4 (parser + 3× SHA + signedAttrs bind
   });
 
   it('rejects a tampered signedAttrsHashLo public signal (§6.3)', async () => {
-    const input = buildV5SmokeWitness();
+    const input = await buildV5SmokeWitness();
     const tampered = {
       ...input,
       signedAttrsHashLo: (input.signedAttrsHashLo as bigint) ^ 1n,
@@ -239,7 +261,7 @@ describe('QKBPresentationV5 — §6.2-§6.4 (parser + 3× SHA + signedAttrs bind
   });
 
   it('rejects a non-canonical bindingPaddedIn (§6.3 Sha256CanonPad)', async () => {
-    const input = buildV5SmokeWitness();
+    const input = await buildV5SmokeWitness();
     // Flip the FIPS-required 0x80 marker byte at index dataLen (the byte
     // immediately after the message). Sha256CanonPad asserts paddedIn[dataLen] === 0x80;
     // changing it to anything else fails canonical-padding verification. Bytes
@@ -261,7 +283,7 @@ describe('QKBPresentationV5 — §6.2-§6.4 (parser + 3× SHA + signedAttrs bind
   // ≠ sha256(bindingBytes), the equality bindingDigestBytes[i] === saParser.messageDigestBytes[i]
   // must fail. This is THE load-bearing invariant for the §4 fixed-shape walker.
   it('rejects a signedAttrs whose messageDigest does not equal sha256(bindingBytes) (§6.4 — soundness chain)', async () => {
-    const input = buildV5SmokeWitness();
+    const input = await buildV5SmokeWitness();
     // Flip one byte of the messageDigest content inside signedAttrsBytes.
     // The 32-byte content sits at SYNTH_MD_OFFSET + 17. Re-pad the SHA input
     // so the *bindingHash* public signal still matches (else we'd be testing
@@ -283,6 +305,25 @@ describe('QKBPresentationV5 — §6.2-§6.4 (parser + 3× SHA + signedAttrs bind
       signedAttrsHashHi: BigInt('0x' + tamperedSaDigest.subarray(0, 16).toString('hex')),
       signedAttrsHashLo: BigInt('0x' + tamperedSaDigest.subarray(16, 32).toString('hex')),
     };
+    let threw = false;
+    try {
+      await circuit.calculateWitness(tampered, true);
+    } catch {
+      threw = true;
+    }
+    expect(threw).to.equal(true);
+  });
+
+  // §6.5 tamper rejection — flipping any single limb of leafXLimbs while
+  // keeping leafSpkiCommit at the original Poseidon₂(Poseidon₆(X), Poseidon₆(Y))
+  // breaks the public-signal binding. This catches silent SPKI substitution
+  // (the contract-side spkiCommit-from-DER and the circuit-side
+  // spkiCommit-from-limbs MUST agree on identical inputs).
+  it('rejects a tampered leafXLimbs[0] while keeping leafSpkiCommit (§6.5)', async () => {
+    const input = await buildV5SmokeWitness();
+    const tamperedLimbs = [...(input.leafXLimbs as bigint[])];
+    tamperedLimbs[0] = (tamperedLimbs[0] as bigint) + 1n;
+    const tampered = { ...input, leafXLimbs: tamperedLimbs };
     let threw = false;
     try {
       await circuit.calculateWitness(tampered, true);
