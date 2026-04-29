@@ -76,6 +76,9 @@ contract QKBRegistryV5RegisterTest is Test {
     }
 
     function setUp() public {
+        // Warp to a realistic timestamp so Gate 5's freshness window is
+        // exercised against meaningful arithmetic (block.timestamp - 1 ≫ 0).
+        vm.warp(2_000_000_000); // ~2033-05-18, well past current
         verifier = new Groth16VerifierV5();
         registry = new QKBRegistryV5(
             IGroth16VerifierV5(address(verifier)),
@@ -223,7 +226,9 @@ contract QKBRegistryV5RegisterTest is Test {
         (uint256 saHi, uint256 saLo) = _hashHiLo(BASELINE_SIGNED_ATTRS);
         return QKBRegistryV5.PublicSignals({
             msgSender:         uint256(uint160(sender)),
-            timestamp:         100,
+            // block.timestamp - 1 second so the binding is recent (well
+            // within MAX_BINDING_AGE = 1 hour) but not future-dated.
+            timestamp:         block.timestamp - 1,
             nullifier:         uint256(0xDEADBEEF),
             ctxHashHi:         0,
             ctxHashLo:         0,
@@ -251,12 +256,32 @@ contract QKBRegistryV5RegisterTest is Test {
     ) internal {
         bytes32[2] memory leafSig;
         bytes32[2] memory intSig;
+        // Default sender = `holder` to match _baselineSignals's msgSender.
+        // Tests that need a different sender call `_callRegisterAs` below.
+        vm.prank(holder);
         registry.register(
             proof, sig,
             leafSpki, intSpki, BASELINE_SIGNED_ATTRS,
             leafSig, intSig,                    // P256 sigs (Gate 2b)
             baselineTrustPath, 0,               // trust Merkle (Gate 3)
             baselinePolicyPath, 0               // policy Merkle (Gate 4)
+        );
+    }
+
+    function _callRegisterAs(
+        address sender,
+        QKBRegistryV5.Groth16Proof memory proof,
+        QKBRegistryV5.PublicSignals memory sig
+    ) internal {
+        bytes32[2] memory leafSig;
+        bytes32[2] memory intSig;
+        vm.prank(sender);
+        registry.register(
+            proof, sig,
+            leafSpki, intSpki, BASELINE_SIGNED_ATTRS,
+            leafSig, intSig,
+            baselineTrustPath, 0,
+            baselinePolicyPath, 0
         );
     }
 
@@ -603,6 +628,107 @@ contract QKBRegistryV5RegisterTest is Test {
             baselineTrustPath, 0,           // trust path is valid
             tamperedPolicy, 0
         );
+    }
+
+    /* ===== Gate 5 — timing + sender + replay + state write ===== */
+
+    function test_register_revertsFutureBinding_whenTimestampInFuture() public {
+        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        sig.timestamp = block.timestamp + 1;
+        vm.expectRevert(QKBRegistryV5.FutureBinding.selector);
+        _callRegister(_baselineProof(), sig);
+    }
+
+    function test_register_revertsStaleBinding_whenAgeExceedsMax() public {
+        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        // MAX_BINDING_AGE = 1 hour. Age = MAX + 1 → stale.
+        sig.timestamp = block.timestamp - registry.MAX_BINDING_AGE() - 1;
+        vm.expectRevert(QKBRegistryV5.StaleBinding.selector);
+        _callRegister(_baselineProof(), sig);
+    }
+
+    function test_register_acceptsTimestamp_atMaxAgeBoundary() public {
+        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        // Age = exactly MAX_BINDING_AGE → allowed (boundary inclusive).
+        sig.timestamp = block.timestamp - registry.MAX_BINDING_AGE();
+        _callRegister(_baselineProof(), sig); // does not revert
+    }
+
+    function test_register_revertsBadSender_whenMsgSenderMismatch() public {
+        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        // msgSender in sig is uint160(holder); call from a different address.
+        address attacker = address(0xBAD);
+        vm.expectRevert(QKBRegistryV5.BadSender.selector);
+        _callRegisterAs(attacker, _baselineProof(), sig);
+    }
+
+    /* ===== Gate 5 — replay (per-holder + per-nullifier) ===== */
+
+    function test_register_revertsAlreadyRegistered_whenSameWallet() public {
+        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        _callRegister(_baselineProof(), sig); // first registration succeeds
+
+        // Second attempt with the same wallet — even with a different
+        // nullifier — must revert AlreadyRegistered. nullifierOf[holder]
+        // is now non-zero.
+        sig.nullifier = uint256(0xFEED);
+        vm.expectRevert(QKBRegistryV5.AlreadyRegistered.selector);
+        _callRegister(_baselineProof(), sig);
+    }
+
+    function test_register_revertsNullifierUsed_whenDifferentWallet() public {
+        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        _callRegister(_baselineProof(), sig); // first wallet registers
+
+        // Same nullifier from a different wallet → NullifierUsed.
+        address other = address(0xB0B2);
+        QKBRegistryV5.PublicSignals memory sig2 = _baselineSignals(other);
+        sig2.nullifier = sig.nullifier;
+        vm.expectRevert(QKBRegistryV5.NullifierUsed.selector);
+        _callRegisterAs(other, _baselineProof(), sig2);
+    }
+
+    /* ===== Gate 5 — success path: state writes + event ===== */
+
+    function test_register_writesStateAndEmitsRegistered() public {
+        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+
+        // Pre-conditions: zero state.
+        assertEq(registry.nullifierOf(holder), bytes32(0));
+        assertEq(registry.registrantOf(bytes32(sig.nullifier)), address(0));
+        assertFalse(registry.isVerified(holder));
+
+        // Expect Registered(holder, nullifier, timestamp).
+        vm.expectEmit(true, true, false, true);
+        emit QKBRegistryV5.Registered(holder, bytes32(sig.nullifier), sig.timestamp);
+
+        _callRegister(_baselineProof(), sig);
+
+        // Post-conditions.
+        assertEq(registry.nullifierOf(holder), bytes32(sig.nullifier));
+        assertEq(registry.registrantOf(bytes32(sig.nullifier)), holder);
+        assertTrue(registry.isVerified(holder));
+    }
+
+    /* ===== End-to-end happy path with all 5 gates green + gas budget ===== */
+
+    function test_register_endToEnd_allGatesGreen_within_gasBudget() public {
+        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+
+        uint256 gasBefore = gasleft();
+        _callRegister(_baselineProof(), sig);
+        uint256 gasUsed = gasBefore - gasleft();
+
+        emit log_named_uint("register() gas (all 5 gates green, stub verifier)", gasUsed);
+
+        assertEq(registry.nullifierOf(holder), bytes32(sig.nullifier));
+        assertTrue(registry.isVerified(holder));
+
+        // Gas ceiling: 2.5M is generous (projection ~1.8M; Foundry adds
+        // overhead via the prank machinery and outer-test bookkeeping).
+        // The real-call gas measured in the actual `register` invocation
+        // is logged above for visibility.
+        assertLt(gasUsed, 2_500_000, "register() exceeded gas ceiling");
     }
 
     /// Tampering the leaf SPKI bytes themselves (rather than the commit

@@ -186,6 +186,11 @@ contract QKBRegistryV5 is IQKBRegistry {
     error BadIntSig();       // Gate 2b: intermediate P-256 over leafTbsHash failed.
     error BadTrustList();    // Gate 3:  intSpkiCommit ∉ trustedListRoot Merkle tree.
     error BadPolicy();       // Gate 4:  policyLeafHash ∉ policyRoot Merkle tree.
+    error StaleBinding();    // Gate 5:  block.timestamp - sig.timestamp > MAX_BINDING_AGE.
+    error FutureBinding();   // Gate 5:  sig.timestamp > block.timestamp (clock-skew defensive).
+    error BadSender();       // Gate 5:  sig.msgSender ≠ uint160(msg.sender).
+    error AlreadyRegistered();// Gate 5: this wallet already has a nullifier on file.
+    error NullifierUsed();   // Gate 5:  some other wallet already registered this nullifier.
 
     /// @notice 5-gate registration. Gates land incrementally:
     ///   Gate 1 (this commit, §6.2): Groth16 verify call.
@@ -211,8 +216,7 @@ contract QKBRegistryV5 is IQKBRegistry {
         bytes32[16]    calldata policyMerklePath,
         uint256                 policyMerklePathBits
     ) external {
-        // No more deferred params — Gates 4 and 5 (replay/timing/sender)
-        // are the remaining unimplemented gates after this commit.
+        // No deferred params remaining; all 11 calldata fields are live.
 
         /* ===== Gate 1 (§6.2): Groth16 verify ===== */
         // Pack the 14-signal public-input array. Order MUST match V5 spec
@@ -315,6 +319,36 @@ contract QKBRegistryV5 is IQKBRegistry {
             revert BadPolicy();
         }
 
-        // Gate 5 lands in §6.7 — timing + sender + replay (write-out path).
+        /* ===== Gate 5 (§6.7): timing + sender + replay + write-out ===== */
+        // Timing: the proof's sig.timestamp must be within the
+        // [block.timestamp - MAX_BINDING_AGE, block.timestamp] window.
+        // Future-dated timestamps fail FutureBinding (defensive — should
+        // never happen in practice but cheap to gate). Stale timestamps
+        // fail StaleBinding (the proof was generated too long ago).
+        if (sig.timestamp > block.timestamp) revert FutureBinding();
+        if (block.timestamp - sig.timestamp > MAX_BINDING_AGE) revert StaleBinding();
+
+        // Sender: the proof commits to msgSender = uint160(holder); the
+        // contract caller MUST be that holder. This binds the proof to a
+        // specific wallet; a stolen proof can't be replayed by a different
+        // wallet because the proof's msgSender wouldn't match.
+        if (sig.msgSender != uint256(uint160(msg.sender))) revert BadSender();
+
+        // Replay (per-holder): one binding per wallet. Re-registration
+        // requires a fresh proof anyway, but this guards against the
+        // "submit the same proof twice" scenario explicitly.
+        if (nullifierOf[msg.sender] != bytes32(0)) revert AlreadyRegistered();
+
+        // Replay (per-nullifier): one wallet per nullifier (one-person-per
+        // -ctx Sybil resistance per V4 §13.4). If the same nullifier was
+        // ever registered from a different wallet, this binding is
+        // rejected as a duplicate identity claim.
+        bytes32 nullifierBytes = bytes32(sig.nullifier);
+        if (registrantOf[nullifierBytes] != address(0)) revert NullifierUsed();
+
+        // Write-out: persist the binding and emit the event.
+        nullifierOf[msg.sender] = nullifierBytes;
+        registrantOf[nullifierBytes] = msg.sender;
+        emit Registered(msg.sender, nullifierBytes, sig.timestamp);
     }
 }
