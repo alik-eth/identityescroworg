@@ -210,6 +210,7 @@ export {
 export {
   MockProver,
   proveSplit,
+  proveV5,
   type AlgorithmArtifactUrls,
   type CircuitArtifactUrls,
   type IProver,
@@ -219,6 +220,8 @@ export {
   type ProofStage,
   type ProveOptions,
   type ProveResult,
+  type ProveV5Options,
+  type ProveV5Result,
   type SplitProgress,
   type SplitProveOptions,
   type SplitProveResult,
