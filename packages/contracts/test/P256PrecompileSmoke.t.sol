@@ -6,15 +6,54 @@ import {Test, console2} from "forge-std/Test.sol";
 /// @notice EIP-7212 P-256 precompile reachability gate.
 ///
 /// V5 architecture is load-bearing on the precompile at `0x100`
-/// being live on Base Sepolia (chainId 84532). If this test
-/// regresses, every other V5 component is unsound — escalate
-/// before continuing.
+/// being live on Base Sepolia (chainId 84532). The off-chain
+/// `script/probe-eip7212.ts` is the canonical reachability check;
+/// this Forge test is a Solidity-side mirror that goes RED when
+/// the EVM the test runs in does NOT have RIP-7212 (currently:
+/// Foundry 1.5.1 + revm).
 ///
 /// EIP-7212 ABI:
 ///   input:  160 bytes = msgHash(32) || r(32) || s(32) || qx(32) || qy(32)
-///   output: 32 bytes  = 0x...01 if signature valid for (msgHash, qx, qy)
-///                       0x...00 otherwise (or empty if precompile is absent
-///                       on the active chain — staticcall succeeds with len 0).
+///   output: 32 bytes  = 0x...01 iff (msgHash, r, s, qx, qy) is a valid
+///                       P-256 signature for that public key over msgHash.
+///                       Per RIP-7212 spec, an INVALID signature returns
+///                       empty bytes (no output) — wire-indistinguishable
+///                       from "no precompile installed at this address".
+///
+/// REACHABILITY EVIDENCE — direct RPC, NOT Forge fork:
+///
+///   $ pnpm tsx packages/contracts/script/probe-eip7212.ts
+///   ...
+///     === Base Sepolia ===     0x100 (valid sig): 0x…01  ← LIVE
+///     === Base mainnet ===     0x100 (valid sig): 0x…01  ← LIVE
+///     === Optimism Sepolia === 0x100 (valid sig): 0x…01  ← LIVE
+///     === Optimism mainnet === 0x100 (valid sig): 0x…01  ← LIVE
+///
+///   And — load-bearing — the real Diia admin-leaf P-256 signature
+///   from leaf-spki.bin + leaf-sig.bin verifies natively on Base Sepolia:
+///
+///   $ curl -sX POST https://sepolia.base.org -H 'content-type: application/json' \
+///       -d '{"jsonrpc":"2.0","method":"eth_call","id":1,"params":[{
+///             "to":"0x0000000000000000000000000000000000000100",
+///             "data":"0x<msgHash || r || s || X || Y from leaf-sig.bin + leaf-spki.bin>"
+///           },"latest"]}'
+///   {"jsonrpc":"2.0","result":"0x000…001","id":1}
+///
+/// Forge 1.5.1's revm does NOT ship RIP-7212 — fork mode runs
+/// precompiles in-process rather than proxying to the upstream chain,
+/// so this test stays RED under `forge test --fork-url $BASE_SEPOLIA_RPC_URL`
+/// until either (a) revm catches up, or (b) we wire `vm.mockCall` for
+/// the unit-test path. §6 register() will land vm.mockCall mocks for
+/// 0x100 in its own commits; until then, the off-chain probe script
+/// IS the canonical regression check (run against $BASE_SEPOLIA_RPC_URL
+/// in CI).
+///
+/// History — the v1 of the sentinel that produced spurious "RIP-7212
+/// not deployed" empirical signal across 5 chains × 9 RPCs (commit
+/// 9e45848) had a node:crypto bug: `crypto.sign(null, msgHash, …)`
+/// signs over sha256(msgHash) rather than msgHash itself. See
+/// gen-eip7212-sentinel.ts top docblock for the full root-cause writeup;
+/// fix shipped in b176fdc.
 contract P256PrecompileSmokeTest is Test {
     address internal constant P256_VERIFY = address(0x0000000000000000000000000000000000000100);
     uint256 internal constant BASE_SEPOLIA_CHAIN_ID = 84532;
