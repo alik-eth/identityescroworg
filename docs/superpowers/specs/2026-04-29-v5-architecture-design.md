@@ -275,7 +275,7 @@ Estimated gas (Base mainnet):
 
 | Component | Constraints | Job |
 |-----------|-------------|-----|
-| `BindingParseV2Core` | ~350K | Walks canonical QKB/2.0 binding bytes; locates `@context`, `timestamp`, `ctx`, and the `policy.leafHash` field (the field-domain `policyLeafHash` per QKB/2.0 §3); exposes them as constrained signals |
+| `BindingParseV2CoreFast` | ~1.05M | Walks canonical QKB/2.0 binding bytes (single-pass Decoder amortization, MAX_BCANON=1024); locates `@context`, `timestamp`, `ctx`, and the `policy.leafHash` field (the field-domain `policyLeafHash` per QKB/2.0 §3); exposes them as constrained signals |
 | `Sha256Var(MAX_BCANON)` + `Sha256CanonPad` | ~250K | Produces `bindingHash` (= SHA-256 of canonical binding bytes) |
 | `Sha256Var(MAX_SA)` + `Sha256CanonPad` | ~600K | Produces `signedAttrsHash` (= SHA-256 of CAdES signedAttrs DER); MAX_SA=1536 to fit real Diia 1388 B |
 | `Sha256Var(MAX_LEAF_TBS)` + `Sha256CanonPad` | ~350K | Produces `leafTbsHash` (= SHA-256 of leaf cert TBSCertificate) |
@@ -285,10 +285,10 @@ Estimated gas (Base mainnet):
 | Poseidon SPKI commits ×4 | ~8K | `Poseidon(6)` over X/Y limbs + `Poseidon(2)` to combine, for both certs |
 | `Bytes32ToHiLo` ×4 | ~4K | Decomposes each 256-bit SHA-256 hash output (ctxHash, bindingHash, signedAttrsHash, leafTbsHash) into 2 × 128-bit field elements (M11-hardened with `<p` checks). `policyLeafHash` is already field-domain — no decomposition needed. |
 | `Secp256k1PkMatch` | ~2K | Binds proof to `msg.sender` |
-| Slack / glue | ~30K | |
-| **Total** | **~1.85M** | |
+| Slack / glue | ~50K | |
+| **Total** | **~2.6M** (cap **3M**) | |
 
-**Constraint count delta vs. v1 spec:** +200K from signedAttrs hashing + parser + extra hi/lo decompositions, then +550K from the v5 amendment raising `MAX_SA` 256→1536 once real Diia signedAttrs was measured at 1388 B (the pre-measurement assumption "50-150 bytes" treated CAdES-BES as canonical; the CAdES-X-L profile Diia actually emits is ~10× larger). Final zkey ~430-570 MB. Browser proving remains feasible (V4 chain proof was already ~600 MB and demonstrably ran in-browser); ceremony download is meaningfully larger than initial estimate but still inside the "downloadable in a single session" envelope.
+**Constraint count delta vs. v1 spec:** +200K from signedAttrs hashing + parser + extra hi/lo decompositions, then +550K from raising `MAX_SA` 256→1536 once real Diia signedAttrs was measured at 1388 B (the pre-measurement assumption "50-150 bytes" treated CAdES-BES as canonical; the CAdES-X-L profile Diia actually emits is ~10× larger), then +700K from raising `MAX_BCANON` 768→1024 and the V2Core implementation reality (V2CoreLegacy measured 2.62M; V2CoreFast single-pass Decoder amortization brought it back to ~1.05M, a 2.49× shrink — see circuits-eng §6.0a). The circuit budget envelope is set at **3M constraints** with the empirical projection at **~2.6M** for ~14% headroom. Final zkey targets ~1.2-1.4 GB. Browser proving remains feasible (V4 chain proof was already ~600 MB and demonstrably ran in-browser); ceremony download is meaningfully larger than initial estimate but still inside the "downloadable in a single session" envelope.
 
 ### Components removed
 
@@ -298,7 +298,7 @@ Estimated gas (Base mainnet):
 
 ### MAX bound retightening
 
-- `MAX_BCANON`: 768 (trim from real Diia 200-400 byte typical with safety margin).
+- `MAX_BCANON`: 1024 (real Diia QKB/2.0 admin-ecdsa binding measured 849 B post-impl; the pre-measurement estimate "200-400 byte typical" was wrong because it assumed a smaller QKB/1.0-style schema. 1024 leaves ~21% headroom).
 - `MAX_CERT`: 2048 (real Diia leaf cert ~1.2-1.6 KB).
 - `MAX_SA`: 1536 (real Diia admin-ecdsa signedAttrs measured 1388 B post-impl: ETSI EN 319 122 CAdES with `id-aa-ets-signerLocation` + `id-aa-signing-certificateV2` attributes mandates ~1300 B; the pre-measurement estimate "50-150 bytes" was wrong because it implicitly assumed CAdES-BES rather than the CAdES-X-L profile Diia actually emits. 1536 leaves ~10% headroom).
 - `MAX_LEAF_TBS`: 1024 (real Diia leaf TBS ~700-900 bytes).
@@ -397,7 +397,7 @@ Vendored or rolled Poseidon₂ Solidity implementation. Verifies a 16-deep Merkl
 
 ### Phase 1 (universal)
 
-**Reuse the existing 9.1 GB Hermez ptau** (Powers of Tau Phase 1). Good for circuits up to ~33M constraints; ~1M-constraint V5 circuit fits comfortably. Already public + audited. No new Phase 1 needed.
+**Reuse the existing 9.1 GB Hermez ptau** (Powers of Tau Phase 1). Good for circuits up to ~33M constraints; ~2.6M-constraint V5 circuit fits comfortably. Already public + audited. No new Phase 1 needed.
 
 ### Phase 2 (circuit-specific)
 
