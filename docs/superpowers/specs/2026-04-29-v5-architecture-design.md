@@ -397,7 +397,9 @@ Vendored or rolled Poseidon₂ Solidity implementation. Verifies a 16-deep Merkl
 
 ### Phase 1 (universal)
 
-**Reuse the existing 9.1 GB Hermez ptau** (Powers of Tau Phase 1). Good for circuits up to ~33M constraints; ~2.6M-constraint V5 circuit fits comfortably. Already public + audited. No new Phase 1 needed.
+**Reuse `powersOfTau28_hez_final_22.ptau`** (Powers of Tau Phase 1, ~600 MB). Supports circuits up to 2^22 = 4,194,304 constraints; our ~2.6M-constraint V5 circuit fits comfortably with ~60% headroom against the 3M envelope cap. Already public + audited (Hermez ceremony). No new Phase 1 needed.
+
+**Why pot22 instead of the larger pot28 (9.1 GB)**: pot28 supports 33M constraints — 12× more than we need and 7× more than the 3M envelope cap. The smaller file cuts the coordinator's one-time Phase 1 download from 9.1 GB to ~600 MB and meaningfully shortens local Phase 2 setup time. (Phase 2 zkey size — what 20-30 contributors download/upload — is determined by the circuit, not by ptau capacity, so the smaller ptau is purely an upside for the coordinator with no contributor-side regression.) If §6.10's measured constraint count drifts above ~3.5M, switch to pot23 (~1.2 GB, supports 8.4M); we have room to escalate without bumping ceremony complexity.
 
 ### Phase 2 (circuit-specific)
 
