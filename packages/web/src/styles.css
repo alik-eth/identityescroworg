@@ -59,7 +59,15 @@
   .text-fine { font-family: var(--font-fine); }
   .doc-grid {
     display: grid;
-    grid-template-columns: var(--margin-asymmetric) 1fr;
-    column-gap: 2rem;
+    grid-template-columns: 1.25rem 1fr;
+    column-gap: 1rem;
+    padding-right: 1.25rem;
+  }
+  @media (min-width: 768px) {
+    .doc-grid {
+      grid-template-columns: var(--margin-asymmetric) 1fr;
+      column-gap: 2rem;
+      padding-right: 0;
+    }
   }
 }

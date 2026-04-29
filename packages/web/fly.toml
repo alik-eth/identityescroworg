@@ -1,0 +1,30 @@
+# Fly.io config for the QKB Identity Escrow static SPA.
+# Production domain: identityescrow.org (attached out-of-band via `flyctl certs add`
+# once Cloudflare DNS records are pointed at this app's dedicated IPs).
+
+app = "identityescrow"
+primary_region = "ams"
+
+[build]
+  [build.args]
+    VITE_CHAIN = "sepolia"
+    # Vite inlines VITE_* at build time. WalletConnect projectIds are public
+    # (every WC-enabled dapp ships theirs in the JS bundle), so committing
+    # this string is fine.
+    VITE_WALLETCONNECT_PROJECT_ID = "c46544572774f96e20db476d5cc565be"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 1
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 200
+    soft_limit = 100
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512
