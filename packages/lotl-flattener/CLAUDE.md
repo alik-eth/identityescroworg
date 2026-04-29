@@ -7,8 +7,9 @@ inputs the QKB protocol needs on-chain and in-circuit:
 
 - Walk the LOTL → each Member State Trusted List → every QES-issuing CA
   certificate (`Svctype/CA/QC` + `Svcstatus/granted`).
-- Canonicalize each CA's DER, hash it with Poseidon over BN254, place
-  every hash as a leaf in a fixed-depth-16 binary Merkle tree.
+- Extract the 91-byte ECDSA-P256 SPKI from each CA's DER, commit it via
+  `Poseidon₂(Poseidon₆(X_limbs), Poseidon₆(Y_limbs))` (V5 `spkiCommit`),
+  place every commit as a leaf in a fixed-depth-16 binary Merkle tree.
 - Emit `trusted-cas.json`, `root.json`, `layers.json`. The Merkle root
   `rTL` is the public input the circuit and registry both bind to.
 
@@ -57,9 +58,11 @@ LOTL XML ── parseLotl ──▶ pointers ─┐
                                                           │
                               filterQes (CA/QC + granted) │
                                                           ▼
-                              extractCAs (pkijs DER parse) │
+                              extractCAs (X509Certificate)│
                                                           ▼
-                              canonicalizeCertHash (Poseidon)
+                              extractIntSpki (91-byte SPKI)
+                                                          ▼
+                              spkiCommit (Poseidon₆+₂)
                                                           │
                               buildTree (depth 16)        │
                                                           ▼
@@ -71,8 +74,9 @@ LOTL XML ── parseLotl ──▶ pointers ─┐
 | `src/fetch/lotl.ts`               | LOTL XML → `LotlPointer[]`         |
 | `src/fetch/msTl.ts`               | MS TL XML → `RawService[]`         |
 | `src/filter/qesServices.ts`       | Keep `CA/QC` + `granted` services  |
-| `src/ca/extract.ts`               | DER → `{certDer, issuerDN, validFrom, validTo}` via pkijs |
-| `src/ca/canonicalize.ts`          | DER → `bigint` Poseidon hash       |
+| `src/ca/extract.ts`               | DER → `{certDer, issuerDN, validFrom, validTo}` via node:crypto X509Certificate |
+| `src/ca/extractIntSpki.ts`        | DER → 91-byte canonical ECDSA-P256 SPKI |
+| `src/ca/spkiCommit.ts`            | 91-byte SPKI → `bigint` Poseidon₂(Poseidon₆(X), Poseidon₆(Y)) |
 | `src/tree/merkle.ts`              | Hashes → `{root, layers}` + inclusion proofs |
 | `src/output/writer.ts`            | Writes the three artifact files    |
 | `src/index.ts`                    | `run()` + commander CLI            |
@@ -83,31 +87,48 @@ These behaviours are pinned in lockstep with `@qkb/circuits`. **Do not
 change without coordinated edits to the circom mirror in
 `packages/circuits/circuits/`.**
 
-### `canonicalizeCertHash` (`src/ca/canonicalize.ts`)
+### `spkiCommit` (`src/ca/spkiCommit.ts`)
 
-1. Pack the DER into field elements, **31 bytes per chunk, big-endian**
-   within each chunk (first byte = highest-order byte of the field).
-   Last chunk may be shorter; do **not** zero-pad inside the integer.
-2. Append exactly one extra field element whose value is
-   `BigInt(der.length)` — the length-domain separator.
-3. Sponge: Poseidon **width 16, rate 15, capacity 1** on BN254. Initial
-   state element = 0. Each round consumes the previous state[0] in
-   slot 0 plus up to 15 input chunks; pad the trailing window with 0.
-4. Output = `state[0]` after the final round, returned as `bigint` in
-   `[0, p)` where p is the BN254 scalar field modulus.
-5. Library: `circomlibjs.buildPoseidon()`, instance cached at module
-   scope.
+V5 trust-list Merkle leaf primitive. Mirrored byte-for-byte in three
+impls (must stay in sync — coordinate with circuits-eng + contracts-eng
+before any change):
 
-Snapshot test (`tests/ca/canonicalize.test.ts`) pins the hash for
-`fixtures/certs/test-ca.der`:
+- TS: `packages/circuits/scripts/spki-commit-ref.ts` (circuits-eng's reference)
+- TS: `packages/lotl-flattener/src/ca/spkiCommit.ts` (this file)
+- Solidity: `packages/contracts/src/libs/P256Verify.sol` (`spkiCommit`)
+
+Construction (input is a 91-byte canonical ECDSA-P256 SubjectPublicKeyInfo):
+
+  1. X = spki[27..58], Y = spki[59..90]   (32 bytes BE each)
+  2. X_limbs = decomposeTo643Limbs(X)     (6 × 43-bit LE limbs, limb 0 = LSB)
+  3. Y_limbs = decomposeTo643Limbs(Y)
+  4. X_hash  = Poseidon₆(X_limbs)         (BN254, iden3 params)
+  5. Y_hash  = Poseidon₆(Y_limbs)
+  6. commit  = Poseidon₂(X_hash, Y_hash)
+
+Library: `circomlibjs.buildPoseidon()`, instance cached at module scope.
+
+Parity gate (`§9.1` in V5 spec):
 
 ```
-3343320682401079542006381927947751400566902976482490538395564021405243591237
+admin-leaf-ecdsa:         21571940304476356854922994092266075334973586284547564138969104758217451997906
+admin-intermediate-ecdsa:  3062275996413807393972187453260313408742194132301219197208947046150619781839
 ```
 
-If you ever intentionally change the chunking, you MUST also bump the
-circuit's mirror, regenerate this snapshot, and notify circuits-eng
-before merging.
+Pinned in `fixtures/spki-commit/v5-parity.json` (sha256 dad431eba6a435decb83c6ef60b2f24288dceac6aae5463966ce0b8851018e24). Test at `tests/ca/spkiCommit.test.ts` asserts byte-equivalence on every CI run.
+
+If you ever intentionally change the construction, you MUST coordinate
+across circuits + contracts + flattener simultaneously, regenerate the
+parity fixture in arch-circuits and re-pump it, and bump the V5 ceremony
+artifacts (this is a circuit-shape change requiring a new trusted setup).
+
+### `extractIntSpki` (`src/ca/extractIntSpki.ts`)
+
+Extracts the 91-byte canonical ECDSA-P256 SPKI from a full X.509
+certificate DER via Node's built-in `X509Certificate` (same toolkit as
+`src/ca/extract.ts` — keeps the dep surface minimal). Length + 27-byte
+canonical-prefix gate reject anything that isn't a named-curve P-256
+SPKI (RSA, secp384r1, compressed points, etc.) — V5 only supports P-256.
 
 ### Merkle tree (`src/tree/merkle.ts`)
 
