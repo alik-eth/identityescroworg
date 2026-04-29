@@ -1,6 +1,6 @@
 # V5 Architecture Design
 
-**Status:** Brainstorming complete · Spec review pass 4 applied (doc-only consistency cleanup) · Awaiting user spec review
+**Status:** Brainstorming complete · Spec review pass 5 applied (envelope reconcile + mobile-feasibility update + frontend hosting lean) · Awaiting user spec review
 **Date:** 2026-04-29
 **Predecessor:** [V4 Sepolia deployment](../../../fixtures/contracts/sepolia.json) — to be deprecated.
 **Sub-project of:** Path A (Pragmatic full ship of identity-escrow to production).
@@ -10,6 +10,7 @@
 - v3 (2026-04-29): incorporated external review pass 2 — three findings (policy leaf field-reduction undefined, `declHash` vs `policyLeafHash` regression to legacy binding model, mixed SPKI hash semantics between circuit limb-Poseidon and contract byte-Poseidon). All three fix wire-format ambiguity.
 - v4 (2026-04-29): incorporated external review pass 3 — two findings (policyLeafHash construction was specified over raw declaration text, not the QKB/2.0 structured `JCS(policyLeafObject)`; stale `Poseidon(intSpki)` references in calldata description, contract field comment, and migration prose conflicted with the canonical `SpkiCommit(intSpki)` defined elsewhere in the same spec). Both fixes close consistency drift; the on-the-wire data-model now matches the QKB/2.0 policy-root spec exactly.
 - v4.1 (2026-04-29): doc-only cleanup from external review pass 4. The summary diagram + "Key shift" prose still showed a 3-gate model with "intermediateCert in trustedListRoot" wording; updated to the 5-gate model already implemented in §Data flow with explicit `SpkiCommit(intSpki)` and `policyLeafHash` Merkle gates. `BindingParseV2Core` component description updated to reference the QKB/2.0 `policy.leafHash` field instead of legacy `decl`. No semantic changes; closes summary-vs-detail drift.
+- v5 (2026-04-29): post-implementation reconciliation. Three sub-sections (`§Estimated zkey size`, `§Acceptance criteria`, `§Risks`) carried stale numbers from the original ~1.1M-constraint projection; §Circuit body had already been amended to the empirical ~4.0M / 4.5M-cap envelope across `b8e0f74` (1.85M→3M) and `77ed00d` (3M→4.5M), but the consequent zkey/prove-time/acceptance numbers were never propagated to the dependent sections. Pass 5 reconciles: zkey size 250-350 MB → 2.0-2.4 GB; acceptance ≤1.5M / ≤500 MB → ≤4.5M / ≤2.5 GB; "Constraint estimate overshoot" risk marked **MATERIALIZED + closed** with empirical analysis. **Mobile-browser is now a hard acceptance gate**, narrowed to flagship 2024+ phones (Pixel 9, iPhone 15) with `navigator.storage.persist()` granted; below-the-bar devices (mid-range Android, iOS WebView, <8 GB RAM, older browsers) must be detected by the frontend and rerouted to a "use desktop" page BEFORE zkey download. Path B (TEE-delegated) remains the post-A1 expansion for out-of-gate devices. Frontend hosting decided: **GitHub Pages**, with a documented Cross-Origin-Isolation caveat for multithreaded snarkjs proving (service-worker COOP/COEP shim available; single-threaded fallback acceptable). Phase 2 ceremony hardware updated for ~4M-constraint footprint. No semantic changes to the design — number-truth reconciliation + one explicit gate-tightening (mobile gated, not just validated).
 
 ---
 
@@ -331,7 +332,13 @@ Two encoding regimes coexist:
 
 ### Estimated zkey size
 
-~250-350 MB, down from 4.2 GB. Browser-loadable (well under WASM-32 4 GB cap, OPFS-cacheable, fits IndexedDB on mid-range Android).
+**~2.0-2.4 GB**, down from 4.2 GB (V4). Drives a different mobile/desktop split than the original 250-350 MB projection assumed:
+
+- **Desktop browser (Chromium / Firefox / Safari):** loadable in a Web Worker. Linear memory stays under the WASM-32 4 GB cap. Tab-level cache via OPFS or IndexedDB available with `navigator.storage.persist()`. V4's ~600 MB chain proof already ran in-browser; the V5 zkey is ~3-4× larger but still within desktop budget. **Primary V1 user flow.**
+- **Mobile browser — flagship-phones only, gated.** Pixel 9 / Galaxy S24 / iPhone 15 with iOS 17+ and `navigator.storage.persist()` granted have the disk quota (Chrome Android: ~60% of free disk when persisted; Safari iOS 17+: ~20% of disk per origin) and the WASM Web Worker memory budget (16+ GB RAM phones) to host a 2.4 GB zkey. **Below the bar — mid-range Android (50-200 MB quotas) and iOS in-app WebViews (1 GB cap) — fail by design.** Frontend MUST detect the device class up-front, prompt for `persist()`, and route below-the-bar users to a "use desktop" message rather than letting them start a download that will OOM their browser.
+- **Out-of-bar fallback:** WalletConnect from a desktop-proven session is the V1 path for non-flagship phones. Path B (TEE-delegated rapidsnark prover) is the post-A1 expansion — adds a trust delta, but unlocks every phone.
+
+Compared to V4 (4.2 GB), the V5 zkey is 40-50% smaller, browser-feasible on desktop without OPFS streaming workarounds, and downloadable on a normal home connection in 1-3 minutes. Future optimization (V5.1) — moving any of the three large in-circuit SHA chains off-circuit — is flagged in §Circuit but explicitly out of A1 scope.
 
 ## Contracts
 
@@ -405,7 +412,9 @@ Vendored or rolled Poseidon₂ Solidity implementation. Verifies a 16-deep Merkl
 
 ### Phase 2 (circuit-specific)
 
-**Hardware: local execution.** Shrunken circuit needs 4-8 GB peak RAM, ~5-10 min for setup. Trivially handled on a dev box. No remote compute infrastructure required.
+**Hardware: local execution feasible; remote optional.** At the empirical ~4.0M-constraint envelope, Phase 2 setup needs ~16-24 GB peak RAM and ~30-45 min wallclock. Manageable on a 32 GB dev box; comfortable on a Fly.io perf-10x (40 GB) one-shot machine. No multi-node infrastructure required — every contributor's `snarkjs zkey contribute` step is single-machine and bounded by their own RAM.
+
+zkey download/upload between contributors is ~2.0-2.4 GB per round trip. R2 bucket recommended over GitHub Releases (size limit) or per-contributor S3 spinups.
 
 **Contributor count: 20-30.** Mix of admin + ZK community contacts (PSE, 0xPARC, Mopro, ETH Kyiv) + ~5 public contributions. Sequential workflow: each contributor downloads previous zkey, runs `snarkjs zkey contribute` with their own entropy, uploads. Coordinator (admin) verifies each contribution via `snarkjs zkey verify`.
 
@@ -485,11 +494,18 @@ Deploy:
 
 ### Frontend hosting
 
-**Open decision** — to be picked between Phase 1 and Phase 2.
+**GitHub Pages.** Rationale: source-of-truth already lives on GitHub, deploy is `actions/deploy-pages` integrated with CI, custom domain (`identityescrow.org`) supported with auto-issued Let's Encrypt cert, no separate hosting account / dashboard / billing. Pure static SPA — fits the Pages model exactly. 100 GB/month soft bandwidth cap covers expected V1 traffic with significant headroom.
 
-Recommendation: **Cloudflare Pages** (DNS already on Cloudflare; free tier covers SPA traffic; edge-fast; good DX).
+**One technical caveat — Cross-Origin Isolation for multithreaded proving.** snarkjs's WASM prover uses `SharedArrayBuffer` for parallel MSM, which requires the page to be cross-origin-isolated via `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: require-corp` HTTP headers. GitHub Pages does **not** let users configure custom response headers. Two paths forward:
 
-Alternatives: Vercel, Netlify, IPFS, self-hosted VPS. Not blocking the design.
+- **Single-threaded prove (default).** Works without COOP/COEP. Spec-projected ~8-12 s on a 2024 desktop scales to ~30-90 s single-threaded; acceptable for V1 desktop-browser flow per acceptance criteria.
+- **Service-worker COOP/COEP shim** (e.g., `coi-serviceworker` by gzuidhof — small, MIT-licensed, well-known pattern). Service worker intercepts subsequent fetches and synthesizes the headers, enabling `SharedArrayBuffer`. First page load is single-origin; second load onwards is cross-origin-isolated. Adds ~5 KB to the bundle and a small first-load reload pattern. Use only if single-threaded prove time turns out painful.
+
+Validate single-threaded prove time on the real V5 zkey before committing to either path.
+
+**Alternatives if GitHub Pages turns out to have a hard limit (e.g., bandwidth caps hit, COI shim too brittle):** Cloudflare Pages (DNS already on CF, fully header-configurable), Vercel, Netlify, IPFS via gateway, self-hosted VPS. None are blockers.
+
+**Migration path from current Fly setup:** the existing Fly app (currently scaled-to-0) can stay as a fallback during transition. DNS swap is two A/AAAA records on Cloudflare (which still owns the DNS zone, even with Pages serving content); rollback in seconds if needed.
 
 ### Trust list rotation
 
@@ -503,9 +519,16 @@ Keep manual rotation for V1. Document runbook at `docs/operations/trust-list-rot
 
 ## Risks
 
-### Constraint estimate overshoot
+### Constraint estimate overshoot — **MATERIALIZED. Risk closed.**
 
-Estimated 1.1M, but `Sha256Var(MAX_LEAF_TBS=1024)` could come in higher. Mitigation: build a minimal prototype circuit early in implementation, run `circom --r1cs --inspect` to validate; if overshoots, revisit MAX bounds.
+Original estimate was 1.1M; empirical projection (per circuits-eng §6.4 measurements) is **~4.0M with a 4.5M envelope cap** (~12% headroom). Drivers:
+
+- Per-`Sha256Var` cost is ~880K at MAX≈1024 B, not the originally-assumed ~250K. Variable-length wrapper plus per-byte block-index mux scales near-linearly in MAX.
+- `MAX_SA` raised 256 → 1536 once real Diia signedAttrs measured at 1388 B (CAdES-X-L profile, not CAdES-BES). +550K constraints.
+- `MAX_BCANON` raised 768 → 1024 (real Diia binding 849 B; original 200-400 B estimate assumed QKB/1.0 schema). +700K combined with V2Core implementation reality.
+- V2Core implementation: V2CoreLegacy measured 2.62M alone; V2CoreFast (single-pass Decoder amortization) brought it back to ~1.05M, a 2.49× shrink. Without this saving the circuit would not fit any reasonable envelope.
+
+Result documented across spec amendments `b8e0f74` (1.85M→3M) and `77ed00d` (3M→4.5M). ptau switched from pot22 (~600 MB, 4.19M cap) to **pot23** (~1.2 GB, 8.4M cap) for safer headroom. zkey impact: ~2.0-2.4 GB (vs original 250-350 MB target). Browser-on-desktop remains feasible; browser-on-mobile reframed (see next risk). Risk closed; no further mitigation required for A1.
 
 ### SPKI parsing in Solidity
 
@@ -519,9 +542,36 @@ Address `0x100` on Base. Spec says ~3,500 gas/call, returns 32-byte true/false. 
 
 20-30 contributor ceremony spans 1-2 weeks. Drop-outs mid-chain require resuming from last verified contribution. Mitigation: trusted core contributors first, community extensions after.
 
-### Browser proving on mobile actually working
+### Browser proving on mobile — narrow-gated to flagships
 
-Even at ~1M constraints, mobile Chromium may take 5-15 min. Mitigation: validate by building V5 prototype zkey early, benchmark on Pixel 9 + iPhone 15 before committing to "browser-only" being the V1 user flow. Fallback if phone proving unworkable: "browser on desktop" + CLI + Path B (TEE-delegated) becomes mobile story.
+At the empirical ~2.0-2.4 GB zkey size, mobile-browser is gated to flagship 2024+ phones with persisted storage. Below that bar is known-broken and explicitly out-of-gate.
+
+**Hardware bar:**
+- Pixel 9 / Galaxy S24-class Android with Android 14+, Chrome 120+, ≥8 GB RAM, `navigator.storage.persist()` granted (Chrome Android allots ~60% of free disk to persisted origins; comfortably fits 2.4 GB).
+- iPhone 15 / 15 Pro / 16-series with iOS 17+, Safari (NOT in-app WebView). iOS 17+ allots ~20% of disk per origin (~25 GB on a 128 GB phone).
+- Modern iPad with Safari (effectively desktop-class).
+
+**Below-the-bar (out-of-gate, must reroute via UX):**
+- Mid-range Android (50-200 MB quotas without persist; quota approval heuristic varies by manufacturer)
+- iOS in-app WebViews (Telegram, Instagram, Twitter, etc. — historically capped at 1 GB regardless of OS)
+- Phones with <8 GB RAM (Web Worker memory pressure during prove)
+- Older browser versions (Chrome <120, Safari <17)
+
+**UX requirement (gate-enforcing):**
+
+The frontend MUST detect device class before triggering zkey download. Concretely:
+
+1. On `/ua/cli` (or wherever the V5 prove flow starts), feature-detect: `'storage' in navigator && 'persist' in navigator.storage && 'estimate' in navigator.storage`. If missing → out-of-gate.
+2. Call `navigator.storage.estimate()` and check `quota >= 3 GB`. Below → out-of-gate.
+3. Call `navigator.storage.persist()` and check the return value. Denied → out-of-gate.
+4. If all three pass → proceed with download + prove.
+5. If any fail → render a clear "Use desktop or wait for the mobile-app version" page, with a `qkb.org/desktop` deeplink and an opt-in to the post-A1 mailing list.
+
+**Validation gate (acceptance criterion):** full prove + register + mint on Pixel 9 (real device or BrowserStack) AND iPhone 15 (real device or BrowserStack) with `persist()` granted. Both must pass. Out-of-gate devices need only confirm the rerouting UX kicks in correctly.
+
+**Prove time on flagships:** projected 30-90 s single-threaded WASM (vs ~30 s on desktop). With the `coi-serviceworker` shim enabling `SharedArrayBuffer`-backed multithreading, projected 15-30 s on a 6-8 core mobile SoC. Acceptable. Tablets behave like desktop.
+
+**Path B (TEE-delegated) is the post-A1 expansion** for users below the gate. Adds a trust delta, requires explicit UX disclosure. Not blocking A1.
 
 ### signedAttrs reproducibility
 
@@ -548,14 +598,19 @@ These resolve in the implementation plan, not here:
 
 A1 sub-project is complete when:
 
-- [ ] `QKBPresentationV5.circom` compiles to ≤1.5M constraints.
-- [ ] V5 zkey is ≤500 MB after Phase 2 ceremony.
-- [ ] Browser-side prove of the V5 circuit succeeds on Chromium desktop in ≤3 min, on Pixel 9 in ≤15 min.
-- [ ] `QKBRegistryV5.register()` succeeds end-to-end on Base Sepolia for the founder address with a real Diia .p7s.
+- [ ] `QKBPresentationV5.circom` compiles to ≤4.5M constraints (envelope cap; empirical projection ~4.0M).
+- [ ] V5 zkey is ≤2.5 GB after Phase 2 ceremony (empirical projection ~2.0-2.4 GB).
+- [ ] **Desktop-browser** prove of the V5 circuit succeeds on Chromium / Firefox / Safari in ≤3 min on a 2024-era laptop (Web Worker, OPFS-cached zkey).
+- [ ] **Mobile-browser end-to-end gated on flagship phones with persisted storage:**
+  - [ ] Full prove + register + mint succeeds on Pixel 9 (Android 14+, Chrome 120+) with `navigator.storage.persist()` granted.
+  - [ ] Full prove + register + mint succeeds on iPhone 15 (iOS 17+, Safari, NOT in-app WebView) with persisted storage.
+  - [ ] Frontend correctly detects out-of-gate devices (mid-range Android, iOS WebView, <8 GB RAM phones, older browsers) BEFORE triggering zkey download, and reroutes them to a "use desktop" page.
+  - [ ] iOS in-app WebView (Telegram / Instagram / X) explicitly returns the rerouting UX, never the prove flow.
+- [ ] `QKBRegistryV5.register()` succeeds end-to-end on Base Sepolia for the founder address with a real Diia .p7s, executed from a desktop browser.
 - [ ] `IdentityEscrowNFT.mint()` succeeds for the founder address; `tokenURI(1)` decodes to a civic-monumental certificate SVG.
 - [ ] Total `register()` gas on Base Sepolia ≤ 600K (raised from 500K → 600K because `spkiCommit` is full Poseidon-on-EVM, not byte-Poseidon).
 - [ ] Ceremony transparency artifacts committed to repo.
-- [ ] Browser-only end-to-end (no CLI used) validated for at least one full register + mint.
+- [ ] Desktop-browser end-to-end (no CLI used) validated for at least one full register + mint.
 - [ ] Soundness regression tests pass:
   - [ ] Self-controlled `intSpki` paired with a trusted-list entry → BAD_TRUST_LIST (the contract's `spkiCommit(intSpki)` won't match any leaf in the Merkle).
   - [ ] Same nullifier registered to two wallets → second tx reverts NULLIFIER_USED.
@@ -600,3 +655,12 @@ A1 sub-project is complete when:
 
 - [x] `policyLeafHash` construction refined to match QKB/2.0 §3 exactly: `uint256(sha256(JCS(policyLeafObject))) mod p`, where `policyLeafObject = {policyId, policyVersion, bindingSchema, contentHash, metadataHash}`. Earlier prose said "raw declaration text" which would have dropped the four structured fields beyond the declaration body. Flattener / policy-list builder responsibility for byte-equivalent JCS canonicalization is now flagged explicitly.
 - [x] All three stale `Poseidon(intSpki)` references swept (calldata description, registry contract field comment, migration-section flattener-format-change paragraph). Canonical leaf format is everywhere `SpkiCommit(intSpki)`. Same value the circuit commits as `intSpkiCommit` and the contract recomputes via `P256Verify.spkiCommit(intSpki)`.
+
+**v5 corrections from review pass 5 (incorporated, post-implementation reconciliation):**
+
+- [x] §Estimated zkey size: 250-350 MB → 2.0-2.4 GB. Sub-section now articulates the desktop-feasible-/-mobile-questionable split explicitly, instead of the original "fits IndexedDB on mid-range Android" claim that the empirical envelope no longer supports.
+- [x] §Acceptance criteria: ≤1.5M constraints / ≤500 MB zkey → ≤4.5M / ≤2.5 GB. **Mobile-browser is now a hard gate, narrowed to flagship 2024+ phones with persisted storage:** Pixel 9 + iPhone 15 (Safari) must both pass full prove + register + mint; below-the-bar devices (mid-range Android, iOS WebView, <8 GB RAM phones, older browsers) must be detected and rerouted by the frontend BEFORE zkey download.
+- [x] §Risks "Constraint estimate overshoot" — marked **MATERIALIZED + closed** with the empirical drivers (per-`Sha256Var` cost, MAX_SA/MAX_BCANON raises, V2Core implementation reality, ptau switch from pot22 to pot23). No further mitigation needed for A1.
+- [x] §Risks "Browser proving on mobile" — reframed from "likely failure" to **"narrow-gated to flagships."** Hardware bar, out-of-gate device list, frontend rerouting UX requirement (`storage.estimate` quota check + `storage.persist` grant check before download), and validation gate all spelled out. Path B remains the post-A1 expansion for below-the-bar devices.
+- [x] §Trusted setup ceremony Phase 2 hardware: 4-8 GB / 5-10 min → 16-24 GB / 30-45 min for the larger envelope. R2 bucket recommended for ~2.4 GB zkey rounds vs. GitHub Releases.
+- [x] §Frontend hosting: open decision → **GitHub Pages**. Rationale tied to source-of-truth co-location with the repo + CI integration + auto-cert. One real technical caveat called out: GitHub Pages can't set custom HTTP response headers, so multithreaded snarkjs proving via `SharedArrayBuffer` requires either a service-worker COOP/COEP shim or accepting single-threaded prove time. Validation gate before committing to single- vs multi-threaded path.
