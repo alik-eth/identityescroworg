@@ -68,5 +68,12 @@
   "mintV5": {
     "awaitingDeploy": "Awaiting V5 registry deployment. Mint becomes available once orchestration §9.4 (Base Sepolia E2E) closes.",
     "awaitingRegistration": "Awaiting registration"
+  },
+  "deviceGate": {
+    "useDesktop": {
+      "heading": "This device can't host the zero-knowledge prover.",
+      "body": "The prover needs about 2.5 GB of cached storage on your device — most phone browsers cap web pages well below that, so the proof would fail mid-flight. Open this page on a desktop or laptop browser instead and pick up where you left off.",
+      "qrCaption": "Scan with another phone, or type the URL into a desktop browser."
+    }
   }
 }

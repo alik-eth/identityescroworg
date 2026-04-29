@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { DocumentFooter } from '../../components/DocumentFooter';
 import { PaperGrain } from '../../components/PaperGrain';
@@ -7,13 +8,59 @@ import { Step2GenerateBinding } from '../../components/ua/v5/Step2GenerateBindin
 import { Step3DiiaSign } from '../../components/ua/v5/Step3DiiaSign';
 import { Step4ProveAndRegister } from '../../components/ua/v5/Step4ProveAndRegister';
 import { StepIndicatorV5 } from '../../components/ua/v5/StepIndicatorV5';
+import { assessDeviceCapability } from '../../lib/deviceGate';
 
 type StepNumber = 1 | 2 | 3 | 4;
+type GateState = 'pending' | 'ready' | 'denied';
 
 export function RegisterV5Screen() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [step, setStep] = useState<StepNumber>(1);
   const [p7s, setP7s] = useState<Uint8Array | null>(null);
+  // Device-capability gate (spec amendment 9c866ad). Runs BEFORE Step 1 is
+  // shown so the user can't even start connecting a wallet on a device
+  // that can't finish the proof. Out-of-gate → /ua/use-desktop.
+  const [gate, setGate] = useState<GateState>('pending');
+
+  useEffect(() => {
+    let cancelled = false;
+    assessDeviceCapability()
+      .then((result) => {
+        if (cancelled) return;
+        if (result.kind === 'denied') {
+          setGate('denied');
+          void navigate({ to: '/ua/use-desktop' });
+        } else {
+          setGate('ready');
+        }
+      })
+      .catch(() => {
+        // Detection itself failed — be conservative and reroute. The user
+        // can still get back via the ← back link on /ua/use-desktop.
+        if (cancelled) return;
+        setGate('denied');
+        void navigate({ to: '/ua/use-desktop' });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [navigate]);
+
+  if (gate !== 'ready') {
+    // Render a minimal placeholder while the gate runs (typically <50ms).
+    // Once denied, navigation kicks in and this component unmounts; until
+    // then we don't want to flash Step 1.
+    return (
+      <main className="relative min-h-screen">
+        <PaperGrain />
+        <div className="doc-grid pt-24 relative z-10">
+          <div />
+          <div className="max-w-3xl" data-testid="v5-device-gate-pending" />
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="relative min-h-screen">

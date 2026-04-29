@@ -10,6 +10,7 @@ import { SubmitScreen } from './routes/ua/submit';
 import { MintScreen } from './routes/ua/mint';
 import { MintNftScreen } from './routes/ua/mintNft';
 import { RegisterV5Screen } from './routes/ua/registerV5';
+import { UseDesktopScreen } from './routes/ua/useDesktop';
 import { IntegrationsScreen } from './routes/integrations';
 
 function RootLayout() {
@@ -54,6 +55,12 @@ const mintNftRoute = createRoute({
   component: MintNftScreen,
 });
 
+const useDesktopRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/ua/use-desktop',
+  component: UseDesktopScreen,
+});
+
 const integrationsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/integrations',
@@ -67,6 +74,7 @@ const routeTree = rootRoute.addChildren([
   mintRoute,
   registerV5Route,
   mintNftRoute,
+  useDesktopRoute,
   integrationsRoute,
 ]);
 
