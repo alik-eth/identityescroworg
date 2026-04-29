@@ -277,18 +277,18 @@ Estimated gas (Base mainnet):
 |-----------|-------------|-----|
 | `BindingParseV2Core` | ~350K | Walks canonical QKB/2.0 binding bytes; locates `@context`, `timestamp`, `ctx`, and the `policy.leafHash` field (the field-domain `policyLeafHash` per QKB/2.0 §3); exposes them as constrained signals |
 | `Sha256Var(MAX_BCANON)` + `Sha256CanonPad` | ~250K | Produces `bindingHash` (= SHA-256 of canonical binding bytes) |
-| `Sha256Var(MAX_SA)` + `Sha256CanonPad` | ~150K | Produces `signedAttrsHash` (= SHA-256 of CAdES signedAttrs DER) |
+| `Sha256Var(MAX_SA)` + `Sha256CanonPad` | ~600K | Produces `signedAttrsHash` (= SHA-256 of CAdES signedAttrs DER); MAX_SA=1536 to fit real Diia 1388 B |
 | `Sha256Var(MAX_LEAF_TBS)` + `Sha256CanonPad` | ~350K | Produces `leafTbsHash` (= SHA-256 of leaf cert TBSCertificate) |
-| `SignedAttrsParser(MAX_SA)` | ~80K | Walks signedAttrs DER, locates `messageDigest` SignedAttribute, equality-constrains it to `bindingHash` (closes the CAdES binding) |
+| `SignedAttrsParser(MAX_SA)` | ~180K | Walks signedAttrs DER, locates `messageDigest` SignedAttribute, equality-constrains it to `bindingHash` (closes the CAdES binding); O(MAX_SA) byte-window scan |
 | `X509SubjectSerial(MAX_CERT)` | ~100K | Locates OID 2.5.4.5; extracts `PNOUA-…` identifier |
 | `NullifierDerive` | ~5K | Poseidon₅ + Poseidon₂ |
 | Poseidon SPKI commits ×4 | ~8K | `Poseidon(6)` over X/Y limbs + `Poseidon(2)` to combine, for both certs |
 | `Bytes32ToHiLo` ×4 | ~4K | Decomposes each 256-bit SHA-256 hash output (ctxHash, bindingHash, signedAttrsHash, leafTbsHash) into 2 × 128-bit field elements (M11-hardened with `<p` checks). `policyLeafHash` is already field-domain — no decomposition needed. |
 | `Secp256k1PkMatch` | ~2K | Binds proof to `msg.sender` |
 | Slack / glue | ~30K | |
-| **Total** | **~1.3M** | |
+| **Total** | **~1.85M** | |
 
-**Constraint count delta vs. v1 spec:** +200K from signedAttrs hashing + parser + extra hi/lo decompositions. Still well within the budget — final zkey ~300-400 MB, browser-friendly.
+**Constraint count delta vs. v1 spec:** +200K from signedAttrs hashing + parser + extra hi/lo decompositions, then +550K from the v5 amendment raising `MAX_SA` 256→1536 once real Diia signedAttrs was measured at 1388 B (the pre-measurement assumption "50-150 bytes" treated CAdES-BES as canonical; the CAdES-X-L profile Diia actually emits is ~10× larger). Final zkey ~430-570 MB. Browser proving remains feasible (V4 chain proof was already ~600 MB and demonstrably ran in-browser); ceremony download is meaningfully larger than initial estimate but still inside the "downloadable in a single session" envelope.
 
 ### Components removed
 
@@ -300,7 +300,7 @@ Estimated gas (Base mainnet):
 
 - `MAX_BCANON`: 768 (trim from real Diia 200-400 byte typical with safety margin).
 - `MAX_CERT`: 2048 (real Diia leaf cert ~1.2-1.6 KB).
-- `MAX_SA`: 256 (real signedAttrs ~50-150 bytes).
+- `MAX_SA`: 1536 (real Diia admin-ecdsa signedAttrs measured 1388 B post-impl: ETSI EN 319 122 CAdES with `id-aa-ets-signerLocation` + `id-aa-signing-certificateV2` attributes mandates ~1300 B; the pre-measurement estimate "50-150 bytes" was wrong because it implicitly assumed CAdES-BES rather than the CAdES-X-L profile Diia actually emits. 1536 leaves ~10% headroom).
 - `MAX_LEAF_TBS`: 1024 (real Diia leaf TBS ~700-900 bytes).
 
 ### Public signal layout (14 field elements)
