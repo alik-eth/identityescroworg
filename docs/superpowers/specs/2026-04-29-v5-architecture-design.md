@@ -276,19 +276,21 @@ Estimated gas (Base mainnet):
 | Component | Constraints | Job |
 |-----------|-------------|-----|
 | `BindingParseV2CoreFast` | ~1.05M | Walks canonical QKB/2.0 binding bytes (single-pass Decoder amortization, MAX_BCANON=1024); locates `@context`, `timestamp`, `ctx`, and the `policy.leafHash` field (the field-domain `policyLeafHash` per QKB/2.0 §3); exposes them as constrained signals |
-| `Sha256Var(MAX_BCANON)` + `Sha256CanonPad` | ~250K | Produces `bindingHash` (= SHA-256 of canonical binding bytes) |
-| `Sha256Var(MAX_SA)` + `Sha256CanonPad` | ~600K | Produces `signedAttrsHash` (= SHA-256 of CAdES signedAttrs DER); MAX_SA=1536 to fit real Diia 1388 B |
-| `Sha256Var(MAX_LEAF_TBS)` + `Sha256CanonPad` | ~350K | Produces `leafTbsHash` (= SHA-256 of leaf cert TBSCertificate) |
+| `Sha256Var(MAX_BCANON)` + `Sha256CanonPad` | ~880K | Produces `bindingHash` (= SHA-256 of canonical binding bytes); 16 SHA blocks at 1024 B + per-byte block-index mux for variable-length |
+| `Sha256Var(MAX_SA)` + `Sha256CanonPad` | ~1.28M | Produces `signedAttrsHash` (= SHA-256 of CAdES signedAttrs DER); 24 SHA blocks at 1536 B (real Diia 1388 B); largest single SHA in the circuit |
+| `Sha256Var(MAX_LEAF_TBS)` + `Sha256CanonPad` | ~880K | Produces `leafTbsHash` (= SHA-256 of leaf cert TBSCertificate); 16 SHA blocks at 1024 B |
+| `Sha256Var(MAX_CTX)` + `Sha256CanonPad` | ~280K | Produces public-domain `ctxHash` (= SHA-256 of ctxBytes for hi/lo public signals; nullifier path uses Poseidon-domain ctxHash separately via NullifierDerive); 4 SHA blocks at 256 B |
 | `SignedAttrsParser(MAX_SA)` | ~180K | Walks signedAttrs DER, locates `messageDigest` SignedAttribute, equality-constrains it to `bindingHash` (closes the CAdES binding); O(MAX_SA) byte-window scan |
 | `X509SubjectSerial(MAX_CERT)` | ~100K | Locates OID 2.5.4.5; extracts `PNOUA-…` identifier |
 | `NullifierDerive` | ~5K | Poseidon₅ + Poseidon₂ |
 | Poseidon SPKI commits ×4 | ~8K | `Poseidon(6)` over X/Y limbs + `Poseidon(2)` to combine, for both certs |
 | `Bytes32ToHiLo` ×4 | ~4K | Decomposes each 256-bit SHA-256 hash output (ctxHash, bindingHash, signedAttrsHash, leafTbsHash) into 2 × 128-bit field elements (M11-hardened with `<p` checks). `policyLeafHash` is already field-domain — no decomposition needed. |
-| `Secp256k1PkMatch` | ~2K | Binds proof to `msg.sender` |
+| `Secp256k1PkMatch` | ~50K | Binds proof to `msg.sender` |
+| `leafTbs ↔ leafCert` byte-consistency | ~100-300K | Asserts the leafCert bytes used by `X509SubjectSerial` match the leafTbs bytes hashed by `Sha256Var(MAX_LEAF_TBS)` |
 | Slack / glue | ~50K | |
-| **Total** | **~2.6M** (cap **3M**) | |
+| **Total** | **~4.0M** (cap **4.5M**) | |
 
-**Constraint count delta vs. v1 spec:** +200K from signedAttrs hashing + parser + extra hi/lo decompositions, then +550K from raising `MAX_SA` 256→1536 once real Diia signedAttrs was measured at 1388 B (the pre-measurement assumption "50-150 bytes" treated CAdES-BES as canonical; the CAdES-X-L profile Diia actually emits is ~10× larger), then +700K from raising `MAX_BCANON` 768→1024 and the V2Core implementation reality (V2CoreLegacy measured 2.62M; V2CoreFast single-pass Decoder amortization brought it back to ~1.05M, a 2.49× shrink — see circuits-eng §6.0a). The circuit budget envelope is set at **3M constraints** with the empirical projection at **~2.6M** for ~14% headroom. Final zkey targets ~1.2-1.4 GB. Browser proving remains feasible (V4 chain proof was already ~600 MB and demonstrably ran in-browser); ceremony download is meaningfully larger than initial estimate but still inside the "downloadable in a single session" envelope.
+**Constraint count delta vs. v1 spec:** +200K from signedAttrs hashing + parser + extra hi/lo decompositions, then +550K from raising `MAX_SA` 256→1536 once real Diia signedAttrs was measured at 1388 B (the pre-measurement assumption "50-150 bytes" treated CAdES-BES as canonical; the CAdES-X-L profile Diia actually emits is ~10× larger), then +700K from raising `MAX_BCANON` 768→1024 and the V2Core implementation reality (V2CoreLegacy measured 2.62M; V2CoreFast single-pass Decoder amortization brought it back to ~1.05M, a 2.49× shrink — see circuits-eng §6.0a), then +1.4M from correcting the per-`Sha256Var` cost estimate from the original ~250K-per-chain to the empirical ~880K-per-chain at MAX≈1024 B (variable-length wrapper plus per-byte block-index mux scales near-linearly in MAX). The circuit budget envelope is set at **4.5M constraints** with the empirical projection at **~4.0M** for ~12% headroom. Final zkey targets ~2.0-2.4 GB. Browser proving remains feasible (V4 chain proof was already ~600 MB and demonstrably ran in-browser; modern Chrome handles ~4 GB memory pressure for snarkjs Web Worker proving); prove time projects to 8-12 s. **Future optimization (V5.1 candidate, NOT in A1 scope):** moving any of the three large in-circuit SHA chains (binding / signedAttrs / leafTbs) off-circuit and replacing the public commitment with `PoseidonChunkHashVar` over the bytes saves ~880K-1.28M per chain at the cost of an ABI-level public-signal layout change, a new Solidity Poseidon-over-bytes primitive, and additional audit surface; deferred to a post-A1 sub-project once the V5 baseline ships and any browser-UX complaints actually materialize.
 
 ### Components removed
 
@@ -397,9 +399,9 @@ Vendored or rolled Poseidon₂ Solidity implementation. Verifies a 16-deep Merkl
 
 ### Phase 1 (universal)
 
-**Reuse `powersOfTau28_hez_final_22.ptau`** (Powers of Tau Phase 1, ~600 MB). Supports circuits up to 2^22 = 4,194,304 constraints; our ~2.6M-constraint V5 circuit fits comfortably with ~60% headroom against the 3M envelope cap. Already public + audited (Hermez ceremony). No new Phase 1 needed.
+**Reuse `powersOfTau28_hez_final_23.ptau`** (Powers of Tau Phase 1, ~1.2 GB). Supports circuits up to 2^23 = 8,388,608 constraints; our ~4.0M-constraint V5 circuit fits with ~110% headroom against the 4.5M envelope cap. Already public + audited (Hermez ceremony). No new Phase 1 needed.
 
-**Why pot22 instead of the larger pot28 (9.1 GB)**: pot28 supports 33M constraints — 12× more than we need and 7× more than the 3M envelope cap. The smaller file cuts the coordinator's one-time Phase 1 download from 9.1 GB to ~600 MB and meaningfully shortens local Phase 2 setup time. (Phase 2 zkey size — what 20-30 contributors download/upload — is determined by the circuit, not by ptau capacity, so the smaller ptau is purely an upside for the coordinator with no contributor-side regression.) If §6.10's measured constraint count drifts above ~3.5M, switch to pot23 (~1.2 GB, supports 8.4M); we have room to escalate without bumping ceremony complexity.
+**Why pot23 instead of pot22 or pot28**: pot22 (~600 MB, 4.19M cap) was the original right-sized choice when V5 was projected at 2.6M, but the §6.4 empirical measurement raised the projection to ~4.0M, which would leave only ~5% headroom under pot22 and would need an upgrade if any further constraint creep emerges. pot23 doubles the ceiling to 8.4M, costs only +600 MB of one-time coordinator download, and keeps zero risk of mid-development ptau swaps. Still 7.5× smaller than the maximum-size pot28 (9.1 GB), so the original "smaller-than-pot28" simplification largely stands. (Phase 2 zkey size — what 20-30 contributors download/upload — is determined by the circuit, not by ptau capacity.)
 
 ### Phase 2 (circuit-specific)
 
