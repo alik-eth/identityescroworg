@@ -1,6 +1,6 @@
 # V5 Architecture Design
 
-**Status:** Brainstorming complete · Spec review pass 3 applied · Awaiting user spec review
+**Status:** Brainstorming complete · Spec review pass 4 applied (doc-only consistency cleanup) · Awaiting user spec review
 **Date:** 2026-04-29
 **Predecessor:** [V4 Sepolia deployment](../../../fixtures/contracts/sepolia.json) — to be deprecated.
 **Sub-project of:** Path A (Pragmatic full ship of identity-escrow to production).
@@ -9,6 +9,7 @@
 - v2 (2026-04-29): incorporated external review pass 1 — five findings (trust-list binding, CAdES digest separation, nullifier-uniqueness, policy root enforcement, multi-limb public encoding for 256-bit hashes).
 - v3 (2026-04-29): incorporated external review pass 2 — three findings (policy leaf field-reduction undefined, `declHash` vs `policyLeafHash` regression to legacy binding model, mixed SPKI hash semantics between circuit limb-Poseidon and contract byte-Poseidon). All three fix wire-format ambiguity.
 - v4 (2026-04-29): incorporated external review pass 3 — two findings (policyLeafHash construction was specified over raw declaration text, not the QKB/2.0 structured `JCS(policyLeafObject)`; stale `Poseidon(intSpki)` references in calldata description, contract field comment, and migration prose conflicted with the canonical `SpkiCommit(intSpki)` defined elsewhere in the same spec). Both fixes close consistency drift; the on-the-wire data-model now matches the QKB/2.0 policy-root spec exactly.
+- v4.1 (2026-04-29): doc-only cleanup from external review pass 4. The summary diagram + "Key shift" prose still showed a 3-gate model with "intermediateCert in trustedListRoot" wording; updated to the 5-gate model already implemented in §Data flow with explicit `SpkiCommit(intSpki)` and `policyLeafHash` Merkle gates. `BindingParseV2Core` component description updated to reference the QKB/2.0 `policy.leafHash` field instead of legacy `decl`. No semantic changes; closes summary-vs-detail drift.
 
 ---
 
@@ -47,20 +48,24 @@ Three-layer trust composition. Each layer has independent verification; all thre
              │
              ▼ register() tx
 ┌─────────────────────────┐
-│ Smart contract (Base)    │  Three-gate verification:
-│  ① Groth16Verifier        │   • ZK proof: binding parse + nullifier
-│  ② EIP-7212 (P-256)      │   • ECDSA: leafCert signed signedAttrs
-│  ② EIP-7212 (P-256)      │   • ECDSA: intermediateCert signed leafTBS
-│  ③ MerkleVerify          │   • intermediateCert in trustedListRoot
-│  → store nullifierOf     │
+│ Smart contract (Base)    │  Five-gate verification:
+│  ① Groth16Verifier        │   • ZK proof: binding parse + nullifier + commits
+│  ② EIP-7212 (P-256) ×2   │   • ECDSA: leaf signed signedAttrs
+│                          │   • ECDSA: intermediate signed leafTBS
+│  ③ MerkleVerify (trust)   │   • SpkiCommit(intSpki) ∈ trustedListRoot
+│  ④ MerkleVerify (policy)  │   • policyLeafHash ∈ policyRoot
+│  ⑤ replay + timing        │   • nullifier ∉ registrantOf, age ≤ MAX_BINDING_AGE
+│  → store nullifierOf      │
 └─────────────────────────┘
 ```
 
-**Key shift from V4:** the proof is no longer the sole verification gate. Three independent gates, all must pass:
+**Key shift from V4:** the proof is no longer the sole verification gate. Five independent gates, all must pass:
 
-1. **ZK proof (small)** — proves the user knows canonical-form binding bytes whose hash and signed-attrs digest the proof commits to, derived nullifier is correct, SPKIs hash to commits.
-2. **EIP-7212 native ECDSA verification** — contract checks signature math directly (~3500 gas/call, two calls per register).
-3. **MerkleVerify** — contract checks the intermediate cert hash is in `trustedListRoot`.
+1. **ZK proof (small)** — proves the user knows canonical-form binding bytes whose hash and signed-attrs digest the proof commits to, derived nullifier is correct, SPKIs hash to commits, signedAttrs.messageDigest equals bindingHash.
+2. **EIP-7212 native ECDSA verification** — contract checks signature math directly (~3500 gas/call, two calls per register: leaf-over-signedAttrs and intermediate-over-leafTBS).
+3. **Trust-list MerkleVerify** — contract checks `SpkiCommit(intSpki)` is a leaf in `trustedListRoot` (i.e., the verifying intermediate's signing key is from an authorized QTSP).
+4. **Policy MerkleVerify** — contract checks `policyLeafHash` is a leaf in `policyRoot` (the binding's declared QKB/2.0 policy is one this registry accepts).
+5. **Replay + timing** — both `nullifierOf[msg.sender] == 0` AND `registrantOf[nullifier] == address(0)`; binding `timestamp` within `MAX_BINDING_AGE`.
 
 ## Components
 
@@ -270,7 +275,7 @@ Estimated gas (Base mainnet):
 
 | Component | Constraints | Job |
 |-----------|-------------|-----|
-| `BindingParseV2Core` | ~350K | Walks canonical binding bytes; locates `@context`, `timestamp`, `ctx`, `decl` fields |
+| `BindingParseV2Core` | ~350K | Walks canonical QKB/2.0 binding bytes; locates `@context`, `timestamp`, `ctx`, and the `policy.leafHash` field (the field-domain `policyLeafHash` per QKB/2.0 §3); exposes them as constrained signals |
 | `Sha256Var(MAX_BCANON)` + `Sha256CanonPad` | ~250K | Produces `bindingHash` (= SHA-256 of canonical binding bytes) |
 | `Sha256Var(MAX_SA)` + `Sha256CanonPad` | ~150K | Produces `signedAttrsHash` (= SHA-256 of CAdES signedAttrs DER) |
 | `Sha256Var(MAX_LEAF_TBS)` + `Sha256CanonPad` | ~350K | Produces `leafTbsHash` (= SHA-256 of leaf cert TBSCertificate) |
