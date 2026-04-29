@@ -1,6 +1,6 @@
 pragma circom 2.1.9;
 
-include "./binding/BindingParseV2Core.circom";
+include "./binding/BindingParseV2CoreLegacy.circom";
 include "./primitives/Sha256Var.circom";
 include "./primitives/Sha256CanonPad.circom";
 include "./primitives/SignedAttrsParser.circom";

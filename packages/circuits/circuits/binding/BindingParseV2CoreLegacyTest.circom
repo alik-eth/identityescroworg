@@ -10,6 +10,6 @@ pragma circom 2.1.9;
 // (§6.0a Phase 3) lands as a sibling template + sibling test wrapper; both
 // wrappers run identical witness inputs so the parity test is byte-exact.
 
-include "./BindingParseV2Core.circom";
+include "./BindingParseV2CoreLegacy.circom";
 
 component main = BindingParseV2Core(1024, 256, 20);
