@@ -1,0 +1,54 @@
+import { useState } from 'react';
+import { DocumentFooter } from '../../components/DocumentFooter';
+import { PaperGrain } from '../../components/PaperGrain';
+import { Step1ConnectWallet } from '../../components/ua/v5/Step1ConnectWallet';
+import { Step2GenerateBinding } from '../../components/ua/v5/Step2GenerateBinding';
+import { Step3DiiaSign } from '../../components/ua/v5/Step3DiiaSign';
+import { Step4ProveAndRegister } from '../../components/ua/v5/Step4ProveAndRegister';
+import { StepIndicatorV5 } from '../../components/ua/v5/StepIndicatorV5';
+
+type StepNumber = 1 | 2 | 3 | 4;
+
+export function RegisterV5Screen() {
+  const [step, setStep] = useState<StepNumber>(1);
+  const [p7s, setP7s] = useState<Uint8Array | null>(null);
+
+  return (
+    <main className="relative min-h-screen">
+      <PaperGrain />
+      <div className="doc-grid pt-24 relative z-10">
+        <div />
+        <div className="max-w-3xl space-y-12">
+          <header className="space-y-6">
+            <h1 className="text-5xl leading-none" style={{ color: 'var(--ink)' }}>
+              Register your identity
+            </h1>
+            <p className="text-base max-w-prose" style={{ color: 'var(--ink)' }}>
+              Four steps. Your private credentials never leave this browser —
+              only a zero-knowledge proof reaches the chain.
+            </p>
+            <StepIndicatorV5 current={step} />
+          </header>
+          <hr className="rule" />
+          {step === 1 && <Step1ConnectWallet onAdvance={() => setStep(2)} />}
+          {step === 2 && (
+            <Step2GenerateBinding onAdvance={() => setStep(3)} onBack={() => setStep(1)} />
+          )}
+          {step === 3 && (
+            <Step3DiiaSign
+              onP7s={(bytes) => {
+                setP7s(bytes);
+                setStep(4);
+              }}
+              onBack={() => setStep(2)}
+            />
+          )}
+          {step === 4 && p7s && (
+            <Step4ProveAndRegister p7s={p7s} onBack={() => setStep(3)} />
+          )}
+        </div>
+      </div>
+      <DocumentFooter />
+    </main>
+  );
+}

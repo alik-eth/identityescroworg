@@ -8,6 +8,7 @@ import { IndexScreen } from './routes/index';
 import { CliInstall } from './routes/ua/cli';
 import { SubmitScreen } from './routes/ua/submit';
 import { MintScreen } from './routes/ua/mint';
+import { RegisterV5Screen } from './routes/ua/registerV5';
 import { IntegrationsScreen } from './routes/integrations';
 
 function RootLayout() {
@@ -40,6 +41,12 @@ const mintRoute = createRoute({
   component: MintScreen,
 });
 
+const registerV5Route = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/ua/registerV5',
+  component: RegisterV5Screen,
+});
+
 const integrationsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/integrations',
@@ -51,6 +58,7 @@ const routeTree = rootRoute.addChildren([
   cliRoute,
   submitRoute,
   mintRoute,
+  registerV5Route,
   integrationsRoute,
 ]);
 

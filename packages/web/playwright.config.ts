@@ -39,6 +39,11 @@ export default defineConfig({
       testMatch: /wasm-prover-benchmark\.spec\.ts/,
     },
     {
+      name: 'v5',
+      use: { browserName: 'chromium' },
+      testMatch: /v5-(register-route|flow)\.spec\.ts/,
+    },
+    {
       name: 'chromium',
       use: { browserName: 'chromium' },
       testMatch: /(landing|flow-happy|flow-already-minted|flow-deadline-expired|i18n|mobile)\.spec\.ts/,
