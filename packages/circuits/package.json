@@ -8,7 +8,8 @@
     "test:vitest": "vitest run",
     "build": "bash ceremony/scripts/compile.sh",
     "lint": "biome check .",
-    "extract:spkis": "ts-node scripts/extract-spkis.ts"
+    "extract:spkis": "ts-node scripts/extract-spkis.ts",
+    "parity:v5": "ts-node scripts/emit-spki-parity-fixture.ts"
   },
   "devDependencies": {
     "@types/chai": "^4.3.16",
