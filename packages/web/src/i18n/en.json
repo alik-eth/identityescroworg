@@ -2,7 +2,9 @@
   "landing": {
     "title": "Verified Identity. On-chain.",
     "lede": "Mint your Verified Ukrainian certificate. Your identity stays on your machine — only the proof reaches the chain.",
-    "subline": "Powered by Diia QES + Groth16. Your identity bytes never enter this browser."
+    "subline": "Powered by Diia QES + Groth16. Your identity bytes never enter this browser.",
+    "useCli": "Use the CLI instead →",
+    "viewCertificate": "View your certificate →"
   },
   "cli": {
     "title": "Install the CLI",
@@ -26,5 +28,34 @@
     "cta": "Mint Certificate",
     "opensea": "View on OpenSea",
     "share": "Share"
+  },
+  "registerV5": {
+    "title": "Register your identity",
+    "lede": "Four steps. Your private credentials never leave this browser — only a zero-knowledge proof reaches the chain.",
+    "step1": {
+      "title": "Connect your wallet",
+      "body": "The wallet you connect here will own the Verified Ukrainian certificate on-chain. Use a wallet on Base mainnet — this binding is what your Diia signature certifies.",
+      "advance": "Continue to binding generation"
+    },
+    "step2": {
+      "title": "Generate your binding",
+      "advance": "Continue to Diia signing",
+      "back": "Back"
+    },
+    "step3": {
+      "title": "Sign with Diia",
+      "body": "Open the Diia client on your phone, attach the binding you just generated, and produce a CAdES-BES signature. Drop the resulting .p7s file here.",
+      "back": "Back"
+    },
+    "step4": {
+      "title": "Prove and register",
+      "ceremonyPending": "Awaiting ceremony artifacts. The Phase 2 ceremony hasn't finished yet — this button activates once the prover .zkey is published.",
+      "cta": "Generate proof + register",
+      "back": "Back"
+    }
+  },
+  "mintV5": {
+    "awaitingDeploy": "Awaiting V5 registry deployment. Mint becomes available once orchestration §9.4 (Base Sepolia E2E) closes.",
+    "awaitingRegistration": "Awaiting registration"
   }
 }

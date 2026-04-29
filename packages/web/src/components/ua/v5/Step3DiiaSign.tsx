@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 export interface Step3Props {
   onP7s: (bytes: Uint8Array) => void;
   onBack: () => void;
@@ -10,15 +12,14 @@ export interface Step3Props {
  * UX. Task 7 will wire `onP7s` to the proof pipeline.
  */
 export function Step3DiiaSign({ onP7s, onBack }: Step3Props) {
+  const { t } = useTranslation();
   return (
     <section aria-labelledby="step3-heading" className="space-y-6">
       <h2 id="step3-heading" className="text-3xl" style={{ color: 'var(--ink)' }}>
-        Sign with Diia
+        {t('registerV5.step3.title')}
       </h2>
       <p className="text-base max-w-prose" style={{ color: 'var(--ink)' }}>
-        Open the Diia client on your phone, attach the binding you just
-        generated, and produce a CAdES-BES signature. Drop the resulting
-        <code className="text-mono px-1">.p7s</code> file here.
+        {t('registerV5.step3.body')}
       </p>
       <input
         type="file"
@@ -38,7 +39,7 @@ export function Step3DiiaSign({ onP7s, onBack }: Step3Props) {
         className="px-6 py-3 text-mono text-sm"
         style={{ border: '1px solid var(--ink)', color: 'var(--ink)' }}
       >
-        Back
+        {t('registerV5.step3.back')}
       </button>
     </section>
   );

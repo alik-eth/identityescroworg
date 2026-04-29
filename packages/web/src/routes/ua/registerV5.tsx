@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { DocumentFooter } from '../../components/DocumentFooter';
 import { PaperGrain } from '../../components/PaperGrain';
 import { Step1ConnectWallet } from '../../components/ua/v5/Step1ConnectWallet';
@@ -10,6 +11,7 @@ import { StepIndicatorV5 } from '../../components/ua/v5/StepIndicatorV5';
 type StepNumber = 1 | 2 | 3 | 4;
 
 export function RegisterV5Screen() {
+  const { t } = useTranslation();
   const [step, setStep] = useState<StepNumber>(1);
   const [p7s, setP7s] = useState<Uint8Array | null>(null);
 
@@ -21,11 +23,10 @@ export function RegisterV5Screen() {
         <div className="max-w-3xl space-y-12">
           <header className="space-y-6">
             <h1 className="text-5xl leading-none" style={{ color: 'var(--ink)' }}>
-              Register your identity
+              {t('registerV5.title')}
             </h1>
             <p className="text-base max-w-prose" style={{ color: 'var(--ink)' }}>
-              Four steps. Your private credentials never leave this browser —
-              only a zero-knowledge proof reaches the chain.
+              {t('registerV5.lede')}
             </p>
             <StepIndicatorV5 current={step} />
           </header>
