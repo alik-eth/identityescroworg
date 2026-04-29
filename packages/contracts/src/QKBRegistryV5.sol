@@ -185,6 +185,7 @@ contract QKBRegistryV5 is IQKBRegistry {
     error BadLeafSig();      // Gate 2b: leaf P-256 over sha256(signedAttrs) failed.
     error BadIntSig();       // Gate 2b: intermediate P-256 over leafTbsHash failed.
     error BadTrustList();    // Gate 3:  intSpkiCommit ∉ trustedListRoot Merkle tree.
+    error BadPolicy();       // Gate 4:  policyLeafHash ∉ policyRoot Merkle tree.
 
     /// @notice 5-gate registration. Gates land incrementally:
     ///   Gate 1 (this commit, §6.2): Groth16 verify call.
@@ -210,9 +211,8 @@ contract QKBRegistryV5 is IQKBRegistry {
         bytes32[16]    calldata policyMerklePath,
         uint256                 policyMerklePathBits
     ) external {
-        // Suppress unused-parameter warnings for fields gated in subsequent
-        // commits (§6.6..§6.7). They become live as each gate lands.
-        policyMerklePath; policyMerklePathBits;
+        // No more deferred params — Gates 4 and 5 (replay/timing/sender)
+        // are the remaining unimplemented gates after this commit.
 
         /* ===== Gate 1 (§6.2): Groth16 verify ===== */
         // Pack the 14-signal public-input array. Order MUST match V5 spec
@@ -300,7 +300,21 @@ contract QKBRegistryV5 is IQKBRegistry {
             revert BadTrustList();
         }
 
-        // Gates 4..5 land in §6.6..§6.7. Until then register() succeeds
-        // after Gate 3.
+        /* ===== Gate 4 (§6.6): policy-list Merkle membership ===== */
+        // Leaf = sig.policyLeafHash (already field-domain Poseidon
+        // commitment per spec §0.5; no SpkiCommit step needed). The policy
+        // tree contains all currently-accepted QKB binding policies; admin
+        // rotates the root when the policy fleet changes.
+        if (!PoseidonMerkle.verify(
+            poseidonT3,
+            bytes32(sig.policyLeafHash),
+            policyMerklePath,
+            policyMerklePathBits,
+            policyRoot
+        )) {
+            revert BadPolicy();
+        }
+
+        // Gate 5 lands in §6.7 — timing + sender + replay (write-out path).
     }
 }

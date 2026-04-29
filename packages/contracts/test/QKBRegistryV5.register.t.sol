@@ -44,11 +44,18 @@ contract QKBRegistryV5RegisterTest is Test {
 
     /// Per-level empty-subtree Poseidon roots Z[0..15], read from the
     /// generated Merkle fixture in setUp. Z[0] = Poseidon₁(0); Z[i+1] =
-    /// Poseidon₂(Z[i], Z[i]). Used to build a trivial single-leaf trust
-    /// tree containing baselineIntSpkiCommit at index 0.
+    /// Poseidon₂(Z[i], Z[i]). Used to build trivial single-leaf trees
+    /// for the trust + policy gates.
     bytes32[16] internal emptyZ;
     bytes32[16] internal baselineTrustPath;
     bytes32     internal baselineTrustRoot;
+    bytes32[16] internal baselinePolicyPath;
+    bytes32     internal baselinePolicyRoot;
+    /// Baseline policyLeafHash — non-zero so the tree shape mirrors the
+    /// trust tree (single leaf at index 0, all-empty siblings). The
+    /// concrete value is arbitrary for §6.6 testing; in production this
+    /// is a Poseidon commitment to the QKB binding policy.
+    uint256 internal constant BASELINE_POLICY_LEAF_HASH = uint256(0xC0FFEE);
 
     /// EIP-7212 / RIP-7212 P256VERIFY precompile address. Forge 1.5.1's
     /// revm doesn't ship it (per V5 §2 escalation), so unit tests mock it
@@ -114,6 +121,17 @@ contract QKBRegistryV5RegisterTest is Test {
         // baseline intSpkiCommit at index 0.
         vm.prank(admin);
         registry.setTrustedListRoot(baselineTrustRoot);
+
+        // Same single-leaf-at-index-0 construction for policy. Leaf =
+        // BASELINE_POLICY_LEAF_HASH; siblings = empty subtree roots.
+        for (uint256 i = 0; i < 16; i++) baselinePolicyPath[i] = emptyZ[i];
+        cur = BASELINE_POLICY_LEAF_HASH;
+        for (uint256 i = 0; i < 16; i++) {
+            cur = Poseidon.hashT3(registry.poseidonT3(), [cur, uint256(emptyZ[i])]);
+        }
+        baselinePolicyRoot = bytes32(cur);
+        vm.prank(admin);
+        registry.setPolicyRoot(baselinePolicyRoot);
 
         // By default, mock the precompile to accept any input — keeps Gate
         // 2b tests passing through to subsequent gates unless a test
@@ -215,7 +233,7 @@ contract QKBRegistryV5RegisterTest is Test {
             signedAttrsHashLo: saLo,
             leafTbsHashHi:     0,
             leafTbsHashLo:     0,
-            policyLeafHash:    0,
+            policyLeafHash:    BASELINE_POLICY_LEAF_HASH,
             leafSpkiCommit:    baselineLeafSpkiCommit,
             intSpkiCommit:     baselineIntSpkiCommit
         });
@@ -233,13 +251,12 @@ contract QKBRegistryV5RegisterTest is Test {
     ) internal {
         bytes32[2] memory leafSig;
         bytes32[2] memory intSig;
-        bytes32[16] memory policyPath;
         registry.register(
             proof, sig,
             leafSpki, intSpki, BASELINE_SIGNED_ATTRS,
             leafSig, intSig,                    // P256 sigs (Gate 2b)
             baselineTrustPath, 0,               // trust Merkle (Gate 3)
-            policyPath, 0                       // policy Merkle (Gate 4)
+            baselinePolicyPath, 0               // policy Merkle (Gate 4)
         );
     }
 
@@ -531,6 +548,61 @@ contract QKBRegistryV5RegisterTest is Test {
         sig.intSpkiCommit = uint256(0xFEED);
         vm.expectRevert(QKBRegistryV5.BadIntSpki.selector); // not BadTrustList
         _callRegister(_baselineProof(), sig);
+    }
+
+    /* ===== Gate 4 — policy-list Merkle membership ===== */
+
+    function test_register_revertsBadPolicy_whenPathTampered() public {
+        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        bytes32[2] memory leafSig;
+        bytes32[2] memory intSig;
+        bytes32[16] memory tamperedPolicy = baselinePolicyPath;
+        tamperedPolicy[0] = bytes32(uint256(tamperedPolicy[0]) ^ 1);
+
+        vm.expectRevert(QKBRegistryV5.BadPolicy.selector);
+        registry.register(
+            _baselineProof(), sig,
+            leafSpki, intSpki, BASELINE_SIGNED_ATTRS,
+            leafSig, intSig,
+            baselineTrustPath, 0,
+            tamperedPolicy, 0
+        );
+    }
+
+    function test_register_revertsBadPolicy_whenLeafHashTampered() public {
+        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        sig.policyLeafHash ^= 1;
+        vm.expectRevert(QKBRegistryV5.BadPolicy.selector);
+        _callRegister(_baselineProof(), sig);
+    }
+
+    function test_register_revertsBadPolicy_whenRootRotated() public {
+        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        vm.prank(admin);
+        registry.setPolicyRoot(bytes32(uint256(0xDEADBEEF)));
+        vm.expectRevert(QKBRegistryV5.BadPolicy.selector);
+        _callRegister(_baselineProof(), sig);
+    }
+
+    /// Sanity: trust + policy Merkle calls are independent — wrong trust
+    /// path with valid policy still fails Gate 3 (BadTrustList), and
+    /// vice versa (valid trust + wrong policy → BadPolicy). Earlier
+    /// Gate 3 negatives cover the first; this confirms the second.
+    function test_register_revertsBadPolicy_whenTrustValidButPolicyInvalid() public {
+        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        bytes32[2] memory leafSig;
+        bytes32[2] memory intSig;
+        bytes32[16] memory tamperedPolicy = baselinePolicyPath;
+        tamperedPolicy[5] = bytes32(uint256(tamperedPolicy[5]) ^ 1);
+
+        vm.expectRevert(QKBRegistryV5.BadPolicy.selector);
+        registry.register(
+            _baselineProof(), sig,
+            leafSpki, intSpki, BASELINE_SIGNED_ATTRS,
+            leafSig, intSig,
+            baselineTrustPath, 0,           // trust path is valid
+            tamperedPolicy, 0
+        );
     }
 
     /// Tampering the leaf SPKI bytes themselves (rather than the commit
