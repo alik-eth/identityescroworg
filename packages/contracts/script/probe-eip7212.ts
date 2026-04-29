@@ -3,17 +3,20 @@
 // Cross-chain RIP-7212 (EIP-7212) reachability probe.
 //
 // For each chain in CHAINS:
-//   1. eth_chainId  — sanity-check we hit the right network
-//   2. eth_blockNumber  — record block we tested at
-//   3. Comparator probe: eth_call to 0x000…0b (BLS12-381 G1Add).
-//      A real precompile responds with a PrecompileError on zero input;
-//      a chain that DOES surface precompile-recognition will show this.
-//   4. Target probe: eth_call to 0x000…0100 (RIP-7212 P256VERIFY) with
-//      a known-good RFC 6979 / Wycheproof valid-signature vector.
-//      Real precompile → 32-byte 0x…01 (valid). Absent → empty result.
-//   5. Negative probe: same vector, R bit-flipped → 32-byte 0x…00.
+//   1. eth_chainId        — sanity-check we hit the right network
+//   2. eth_blockNumber    — record block we tested at
+//   3. Valid-sig probe    — eth_call to 0x000…0100 with a known-good
+//                           sentinel. A live RIP-7212 precompile MUST return
+//                           0x…01 (32-byte one). Empty bytes is wire-
+//                           indistinguishable between "precompile absent" and
+//                           "calldata describes invalid sig" — that's why we
+//                           use a self-verified known-good vector here, so a
+//                           non-0x…01 response unambiguously means "not live".
+//   4. Tampered-R probe   — same vector with R bit-flipped. RIP-7212 spec
+//                           says invalid sigs return empty bytes. A 0x…01 here
+//                           would mean a broken impl (accepting tampered sigs).
 //
-// No spend, no signing — pure read-only fork-style queries.
+// No spend, no signing — pure read-only eth_calls.
 
 const CHAINS: Array<{ name: string; rpc: string; expectedChainId: number }> = [
   { name: "Base Sepolia",       rpc: "https://sepolia.base.org",     expectedChainId: 84532 },
@@ -24,19 +27,33 @@ const CHAINS: Array<{ name: string; rpc: string; expectedChainId: number }> = [
 ];
 
 // Self-verified P-256/SHA-256 sentinel vector. (msgHash, r, s, qx, qy) — all
-// 32-byte big-endian. Generated with Node's crypto.generateKeyPairSync +
-// crypto.sign(IEEE P1363) and round-tripped through crypto.verify before
-// commit. Any chain with RIP-7212 live MUST return 0x…01 for these inputs;
-// any chain returning 0x (empty) does not have it; any chain returning
-// 0x…00 has a broken impl (rejecting a known-valid sig).
+// 32-byte big-endian. Reproducible via packages/contracts/script/
+// gen-eip7212-sentinel.ts (variant pinned to a deterministic key for stable
+// probe output). Public-key (qx, qy) here is the well-known NIST P-256
+// test vector for the RFC 6979 §A.2.5 private scalar
+// C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721;
+// signing is over an in-script fixed message via createSign("sha256").
 //
-// Reproducer: packages/contracts/script/gen-eip7212-sentinel.ts (committed alongside).
+// Empirically confirmed live (returns 0x…01) on Base Sepolia / Base mainnet /
+// Optimism mainnet at 0x100 via direct eth_call.
+//
+// HISTORY — root-cause comment for the v1 of this vector that returned 0x
+// across every chain (which I initially read as "RIP-7212 not deployed"):
+// crypto.sign(null, msgHash, …) signs over sha256(msgHash), not over msgHash
+// itself. The matching crypto.verify(null, …) passes the self-test because
+// both apply the extra sha256 internally, but the precompile (which does NOT
+// hash) sees mismatched (digest, sig) and returns the same empty-bytes
+// response per the RIP-7212 spec — wire-indistinguishable from a missing
+// precompile. Use crypto.createSign("sha256").update(message) instead.
+// See gen-eip7212-sentinel.ts for the corrected pattern + a belt-and-suspenders
+// self-verify pair (createVerify + ieee-p1363 verify with explicit "sha256")
+// that catches this exact bug if anyone re-introduces it.
 const VECTOR = {
-  msgHash: "e2b146f3516261e4423a45cf639b8f8688ea30728d6bdfdb0e925c9167953e6a",
-  r:       "68f1f8594956f0c929a7657df422b496bc231b8d0f3f338408db31bd7bcea216",
-  s:       "a6b9f485c6afc5a2782715aec661b949cff70af68a84d7b8c7eea90fabb317b5",
-  qx:      "3f02af229ad0964a1a030e9f32b66e7e1d44a5cc33354907cf0aed8d70616f87",
-  qy:      "62cda3b9aec42ffbcdfd96584ff8dd89b9c98ae25110cc53eaf1c17f6c4b5b6c",
+  msgHash: "d342621c0cc3c35c278e624c45b799cf0209e95a71e41f52e2a5cb36a6e445db",
+  r:       "55b738ae334746353ac5f3761c7bdc4d69810bec15b5fa78896a9449f2d2dfa3",
+  s:       "42b6e893e050dc275c903474d20f1cd1489fc373eb846adf8c784f37a032413d",
+  qx:      "60fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb6",
+  qy:      "7903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299",
 };
 
 function rpc(url: string, method: string, params: unknown[] = []): Promise<any> {
@@ -64,30 +81,29 @@ async function probeChain(c: { name: string; rpc: string; expectedChainId: numbe
   console.log("  chainid: " + chainId + (chainId === c.expectedChainId ? " (OK)" : " (MISMATCH; expected " + c.expectedChainId + ")"));
   console.log("  block:   " + block);
 
-  // Comparator: 0x0b BLS G1Add. Zero input. Real precompile rejects with PrecompileError.
-  const cmpData = "0x" + "00".repeat(256);
-  const cmp = await rpc(c.rpc, "eth_call", [{ to: "0x000000000000000000000000000000000000000b", data: cmpData }, "latest"]);
-  if (cmp.error) {
-    console.log("  0x0b probe: PrecompileError (" + cmp.error.message + ") — node surfaces precompile recognition");
-  } else if (cmp.result === "0x") {
-    console.log("  0x0b probe: empty (0x) — node does NOT surface precompile recognition; absence proof at 0x100 will be weaker");
-  } else {
-    console.log("  0x0b probe: " + cmp.result.slice(0, 80) + (cmp.result.length > 80 ? "..." : ""));
-  }
+  // Per RIP-7212 spec: a valid signature returns 0x…01 (32-byte ONE);
+  // an invalid signature returns empty bytes (0x). A non-existent precompile
+  // address ALSO returns empty bytes — wire-indistinguishable. The valid-sig
+  // probe with a known-good vector disambiguates: only a live precompile can
+  // produce 0x…01, so 0x…01 ⇒ definitely live; empty ⇒ either missing OR
+  // verifier rejected our vector (calldata bug). The negative probe with a
+  // tampered signature gives the chain a chance to return empty for a
+  // genuinely-invalid input, which is the canonical "alive but rejected"
+  // signature.
 
-  // Target: 0x100 RIP-7212. Known-valid Wycheproof vector.
+  // Target: 0x100 RIP-7212. Known-good vector → must return 0x…01.
   const validData = "0x" + VECTOR.msgHash + VECTOR.r + VECTOR.s + VECTOR.qx + VECTOR.qy;
   const valid = await rpc(c.rpc, "eth_call", [{ to: "0x0000000000000000000000000000000000000100", data: validData }, "latest"]);
   if (valid.error) {
     console.log("  0x100 (valid sig):    PrecompileError (" + valid.error.message + ")");
-  } else if (valid.result === "0x") {
-    console.log("  0x100 (valid sig):    empty (0x) — precompile NOT installed");
   } else if (valid.result === "0x" + "0".repeat(63) + "1") {
-    console.log("  0x100 (valid sig):    0x...01 (LIVE — accepted valid sig)");
+    console.log("  0x100 (valid sig):    0x…01  ← LIVE — verified known-good vector");
+  } else if (valid.result === "0x") {
+    console.log("  0x100 (valid sig):    empty  ← AMBIGUOUS — precompile absent OR sig calldata wrong");
   } else if (valid.result === "0x" + "0".repeat(64)) {
-    console.log("  0x100 (valid sig):    0x...00 (LIVE — but rejected our 'valid' vector; vector wrong or chain-specific)");
+    console.log("  0x100 (valid sig):    0x…00  ← unexpected for spec-conformant impl (spec says invalid → empty)");
   } else {
-    console.log("  0x100 (valid sig):    " + valid.result + " (unexpected — needs investigation)");
+    console.log("  0x100 (valid sig):    " + valid.result + "  ← unexpected — needs investigation");
   }
 
   // Negative: same vector with R bit-flipped.
@@ -97,11 +113,11 @@ async function probeChain(c: { name: string; rpc: string; expectedChainId: numbe
   if (neg.error) {
     console.log("  0x100 (tampered R):   PrecompileError (" + neg.error.message + ")");
   } else if (neg.result === "0x") {
-    console.log("  0x100 (tampered R):   empty (0x) — precompile NOT installed");
+    console.log("  0x100 (tampered R):   empty  ← spec-conformant rejection of invalid sig");
   } else if (neg.result === "0x" + "0".repeat(63) + "1") {
-    console.log("  0x100 (tampered R):   0x...01 — UNEXPECTED, chain accepted tampered sig (broken impl)");
+    console.log("  0x100 (tampered R):   0x…01  ← BROKEN IMPL — chain accepted tampered sig");
   } else if (neg.result === "0x" + "0".repeat(64)) {
-    console.log("  0x100 (tampered R):   0x...00 (LIVE — correctly rejected tampered sig)");
+    console.log("  0x100 (tampered R):   0x…00  ← non-spec rejection (some impls return zero word for invalid)");
   } else {
     console.log("  0x100 (tampered R):   " + neg.result);
   }
