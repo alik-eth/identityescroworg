@@ -1,0 +1,31 @@
+{
+  "schema": "qkb2-binding-fixture-v1",
+  "description": "Synthetic QKB/2.0 binding for V5 circuit testing — V2Core refactor parity, §6.x E2E. See packages/circuits/scripts/emit-qkb2-fixture.ts for provenance.",
+  "bytesLength": 617,
+  "offsets": {
+    "pkValue": 204,
+    "schemeValue": 523,
+    "assertionsValue": 14,
+    "statementSchemaValue": 553,
+    "nonceValue": 130,
+    "ctxValue": 117,
+    "tsValue": 586,
+    "versionValue": 608,
+    "policyBindingSchemaValue": 365,
+    "policyLeafHashValue": 398,
+    "policyIdValue": 478,
+    "policyVersionValue": 510
+  },
+  "lengths": {
+    "ctxHex": 0,
+    "policyId": 14,
+    "tsDigit": 10,
+    "policyVersionDigit": 1
+  },
+  "expected": {
+    "timestamp": 1777478400,
+    "policyVersion": 1,
+    "policyLeafHashHex": "2d00e73da8dd4dc99f04371d3ce01ecbcf4ad8e476c9017a304c57873494f812",
+    "nonceHex": "abababababababababababababababababababababababababababababababab"
+  }
+}
