@@ -50,8 +50,11 @@ const targets: Extraction[] = [
 ];
 
 function extractSpki(certDer: Buffer): Buffer {
-    const certBer = certDer.buffer.slice(certDer.byteOffset, certDer.byteOffset + certDer.byteLength);
-    const asn1 = asn1js.fromBER(certBer);
+    // Pass a Uint8Array view to dodge the `ArrayBuffer | SharedArrayBuffer`
+    // union that `Buffer#buffer` carries under modern @types/node, while still
+    // pointing asn1js at the right offset/length into the underlying pool.
+    const certView = new Uint8Array(certDer.buffer, certDer.byteOffset, certDer.byteLength);
+    const asn1 = asn1js.fromBER(certView);
     if (asn1.offset === -1) {
         throw new Error('failed to parse certificate as ASN.1 (asn1js.fromBER returned -1)');
     }
