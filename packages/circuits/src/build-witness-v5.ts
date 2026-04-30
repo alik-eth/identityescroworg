@@ -19,11 +19,18 @@
 //     adding/reordering fields here ≡ a cross-worker breaking change.
 
 import { Buffer } from 'node:buffer';
-import { createHash } from 'node:crypto';
-// circomlibjs / ethers via require — both are untyped or partial-types in
-// this codebase. Same pattern as test/integration/qkb-presentation-v5.test.ts.
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { keccak256: ethersKeccak256 } = require('ethers/lib/utils');
+// Browser-isomorphic hash primitives. @noble/hashes works identically in
+// Node + browser bundlers without polyfill (vs. node:crypto which needs
+// `crypto-browserify` shimming, and vs. ethers/lib/utils which would
+// drag the entire ethers v5 bundle into the SDK). Web-eng's vendored
+// copy at arch-web/sdk/src/witness/v5/ runs a SHA-256 fingerprint
+// drift-check against this file; keep imports isomorphic — see
+// CLAUDE.md V5.10.
+// `@noble/hashes` v2 ships an explicit exports map requiring the `.js`
+// suffix on every subpath. TS resolves this via the package's typings;
+// the `.js` is mandatory at runtime under Node ESM and modern bundlers.
+import { sha256 } from '@noble/hashes/sha2.js';
+import { keccak_256 } from '@noble/hashes/sha3.js';
 
 import { extractBindingOffsets } from './binding-offsets';
 import { findSubjectSerial, findTbsInCert } from './leaf-cert-walk';
@@ -156,11 +163,11 @@ export async function buildWitnessV5(
   })();
 
   // -------- §6.3 — 3× SHA chains + canonical-pad witness --------
-  const bindingDigest = createHash('sha256').update(input.bindingBytes).digest();
+  const bindingDigest = Buffer.from(sha256(input.bindingBytes));
   const bindingHash = digestHiLo(bindingDigest);
   const bindingPadded = shaPad(input.bindingBytes);
 
-  const saDigest = createHash('sha256').update(input.signedAttrsDer).digest();
+  const saDigest = Buffer.from(sha256(input.signedAttrsDer));
   const saHash = digestHiLo(saDigest);
   const saPadded = shaPad(input.signedAttrsDer);
 
@@ -176,7 +183,7 @@ export async function buildWitnessV5(
     tbsLoc.offset,
     tbsLoc.offset + tbsLoc.length,
   );
-  const leafTbsDigest = createHash('sha256').update(leafTbsBuf).digest();
+  const leafTbsDigest = Buffer.from(sha256(leafTbsBuf));
   const leafTbsHash = digestHiLo(leafTbsDigest);
   const leafTbsPadded = shaPad(leafTbsBuf);
 
@@ -220,7 +227,7 @@ export async function buildWitnessV5(
   const nullifier = await poseidon2(secret, ctxHashField);
 
   // -------- §6.7 — Byte-domain SHA over ctx --------
-  const ctxDigest = createHash('sha256').update(ctxBytes).digest();
+  const ctxDigest = Buffer.from(sha256(ctxBytes));
   const ctxHash = digestHiLo(ctxDigest);
   const ctxPaddedBuf = shaPad(ctxBytes);
 
@@ -240,8 +247,9 @@ export async function buildWitnessV5(
   })();
   const pkX = pkCoordToLimbs(pkBytes.subarray(1, 33));
   const pkY = pkCoordToLimbs(pkBytes.subarray(33, 65));
-  const addrHex = ethersKeccak256(pkBytes.subarray(1, 65)) as string;
-  const msgSender = BigInt('0x' + addrHex.slice(2 + 24));
+  // Ethereum address = keccak256(pk[1:65])[12:32] interpreted big-endian.
+  const pkKeccak = Buffer.from(keccak_256(pkBytes.subarray(1, 65)));
+  const msgSender = BigInt('0x' + pkKeccak.subarray(12, 32).toString('hex'));
 
   // -------- timestamp + policyLeafHash (parsed out of binding) --------
   const tsValue = (() => {

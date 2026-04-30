@@ -11,10 +11,11 @@
 // For the V5 ctx-domain hash the input is `parser.ctxBytes / parser.ctxLen`
 // — variable length up to MAX_CTX = 256.
 
-// circomlibjs is untyped in this codebase; same pattern as
-// test/primitives/poseidon-chunk-var.test.ts.
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const { buildPoseidon: cjsBuildPoseidon } = require('circomlibjs');
+// ESM import — keeps this file browser-bundleable. Tests + the CLI
+// run in Node via ts-node, both of which handle the ESM `import`
+// without a CJS shim. We rely on the local Poseidon interface declared
+// below for typing — circomlibjs's published types are partial.
+import { buildPoseidon as cjsBuildPoseidon } from 'circomlibjs';
 
 interface Poseidon {
   F: { e: (v: bigint) => unknown; toObject: (v: unknown) => bigint };
