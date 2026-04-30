@@ -225,61 +225,96 @@ test.describe('/ceremony', () => {
     await ctx.close();
   });
 
-  test('contribute → Fly launcher form renders all four inputs + command pre', async ({
+  test('contribute → Fly launcher form is gated behind a CTA, not the default surface', async ({
     page,
   }) => {
     await page.goto('/');
     await pushCeremonyRoute(page, '/ceremony/contribute');
-    const form = page.getByTestId('ceremony-fly-form');
-    await expect(form).toBeVisible({ timeout: 5_000 });
-    await expect(
-      form.getByRole('heading', { name: /Or launch on Fly\.io/i }),
-    ).toBeVisible();
-    // All four inputs are present and addressable by their stable testids.
-    await expect(page.getByTestId('ceremony-fly-handle')).toBeVisible();
-    await expect(page.getByTestId('ceremony-fly-round')).toBeVisible();
-    await expect(page.getByTestId('ceremony-fly-url')).toBeVisible();
-    await expect(page.getByTestId('ceremony-fly-entropy')).toBeVisible();
-    await expect(
-      page.getByTestId('ceremony-fly-generate-entropy'),
-    ).toBeVisible();
-    // Command block renders the placeholder shape pre-fill, including
-    // the "apps destroy" terminal step (the dispatch's named contract).
-    const cmd = page.getByTestId('ceremony-fly-command');
-    await expect(cmd).toBeVisible();
-    await expect(cmd).toContainText(/flyctl auth login/);
-    await expect(cmd).toContainText(/flyctl apps create/);
-    await expect(cmd).toContainText(/flyctl secrets set/);
-    await expect(cmd).toContainText(/flyctl deploy/);
-    await expect(cmd).toContainText(/flyctl apps destroy/);
+    // The CTA renders by default; the form does NOT.
+    await expect(page.getByTestId('fly-launch-cta')).toBeVisible({
+      timeout: 5_000,
+    });
+    await expect(page.getByTestId('fly-launch-form')).toHaveCount(0);
+    // Click the CTA — the form expands; the CTA goes away.
+    await page.getByRole('button', { name: /generate a launch command/i }).click();
+    await expect(page.getByTestId('fly-launch-form')).toBeVisible();
+    await expect(page.getByTestId('fly-launch-cta')).toHaveCount(0);
+    // All five fields are present.
+    await expect(page.getByTestId('fly-launch-signed-url')).toBeVisible();
+    await expect(page.getByTestId('fly-launch-round')).toBeVisible();
+    await expect(page.getByTestId('fly-launch-name')).toBeVisible();
+    await expect(page.getByTestId('fly-launch-profile-url')).toBeVisible();
+    await expect(page.getByTestId('fly-launch-entropy')).toBeVisible();
+    await expect(page.getByTestId('fly-launch-generate-entropy')).toBeVisible();
+    // Both security warning paragraphs are visible.
+    const warnings = page.getByTestId('fly-launch-warnings');
+    await expect(warnings).toContainText(/runs entirely in your browser/i);
+    await expect(warnings).toContainText(/contribution receipt/i);
+    // Output block renders the canonical six-step sequence even with
+    // empty inputs — users should see the shape before they fill in.
+    const out = page.getByTestId('fly-launch-output');
+    await expect(out).toBeVisible();
+    await expect(out).toContainText(/APP="qkb-ceremony-/);
+    await expect(out).toContainText(/flyctl apps create "\$APP" --org personal/);
+    await expect(out).toContainText(/flyctl secrets set/);
+    await expect(out).toContainText(/flyctl deploy/);
+    await expect(out).toContainText(/flyctl logs -a "\$APP" --follow/);
+    await expect(out).toContainText(/flyctl apps destroy "\$APP" --yes/);
   });
 
-  test('contribute → Generate-entropy button populates the entropy field with 64 hex chars', async ({
+  test('contribute → generate-fresh-entropy button populates a 64-hex value and is reflected in the output', async ({
     page,
   }) => {
     await page.goto('/');
     await pushCeremonyRoute(page, '/ceremony/contribute');
-    const entropy = page.getByTestId('ceremony-fly-entropy');
+    await page.getByRole('button', { name: /generate a launch command/i }).click();
+    const entropy = page.getByTestId('fly-launch-entropy');
     await expect(entropy).toHaveValue('');
-    await page.getByTestId('ceremony-fly-generate-entropy').click();
-    // 32 bytes hex = 64 chars; strict regex prevents subtle bugs like
-    // accidentally emitting an Uint8Array literal or base64 instead.
+    await page.getByTestId('fly-launch-generate-entropy').click();
     const value = await entropy.inputValue();
     expect(value).toMatch(/^[0-9a-f]{64}$/);
-    // The command block must reflect the generated entropy verbatim.
-    await expect(page.getByTestId('ceremony-fly-command')).toContainText(
-      value,
+    // The output block must reflect the generated entropy verbatim
+    // and unquoted (cookbook contract).
+    await expect(page.getByTestId('fly-launch-output')).toContainText(
+      `CONTRIBUTOR_ENTROPY=${value}`,
     );
-    // Pressing again yields different bytes (sanity-check that the
-    // generator isn't accidentally seeded to a constant).
-    const firstValue = value;
-    await page.getByTestId('ceremony-fly-generate-entropy').click();
-    const secondValue = await entropy.inputValue();
-    expect(secondValue).toMatch(/^[0-9a-f]{64}$/);
-    expect(secondValue).not.toBe(firstValue);
   });
 
-  test('contribute → Fly form filled in renders a complete command + copy puts it on clipboard', async ({
+  test('contribute → typed entropy that is not 64 hex chars surfaces the inline error', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await pushCeremonyRoute(page, '/ceremony/contribute');
+    await page.getByRole('button', { name: /generate a launch command/i }).click();
+    const entropy = page.getByTestId('fly-launch-entropy');
+    // Typing too-short hex triggers the inline alert and aria-invalid.
+    await entropy.fill('abc');
+    await expect(
+      page.getByText(/exactly 64 lowercase hex characters/i),
+    ).toBeVisible();
+    await expect(entropy).toHaveAttribute('aria-invalid', 'true');
+    // Typing a valid 64-hex string clears the error.
+    await entropy.fill('cafebabe'.repeat(8));
+    await expect(
+      page.getByText(/exactly 64 lowercase hex characters/i),
+    ).toHaveCount(0);
+  });
+
+  test('contribute → signed URL containing /round-N.zkey auto-fills the round field', async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await pushCeremonyRoute(page, '/ceremony/contribute');
+    await page.getByRole('button', { name: /generate a launch command/i }).click();
+    await page
+      .getByTestId('fly-launch-signed-url')
+      .fill(
+        'https://prove.identityescrow.org/upload/round-7.zkey?sig=abc&exp=1234',
+      );
+    await expect(page.getByTestId('fly-launch-round')).toHaveValue('7');
+  });
+
+  test('contribute → fully-filled form renders the canonical command + copy puts it on the clipboard', async ({
     browser,
   }) => {
     const ctx = await browser.newContext({
@@ -288,51 +323,60 @@ test.describe('/ceremony', () => {
     const page = await ctx.newPage();
     await page.goto('/');
     await pushCeremonyRoute(page, '/ceremony/contribute');
-    await page.getByTestId('ceremony-fly-handle').fill('alice');
-    await page.getByTestId('ceremony-fly-round').fill('3');
-    await page
-      .getByTestId('ceremony-fly-url')
-      .fill('https://prove.identityescrow.org/ceremony/round-3-signed');
-    await page.getByTestId('ceremony-fly-entropy').fill('cafebabe'.repeat(8));
-    const cmd = page.getByTestId('ceremony-fly-command');
-    // App name slug is sanitised from the handle.
-    await expect(cmd).toContainText(/qkb-ceremony-alice-round-3/);
-    // The signed URL, handle, entropy and round all land in the
-    // secrets-set call exactly as typed.
-    await expect(cmd).toContainText(
-      "QKB_SIGNED_URL='https://prove.identityescrow.org/ceremony/round-3-signed'",
+    await page.getByRole('button', { name: /generate a launch command/i }).click();
+
+    const url =
+      'https://prove.identityescrow.org/upload/round-3.zkey?sig=abc&exp=1234';
+    const entropyHex = 'cafebabe'.repeat(8);
+    await page.getByTestId('fly-launch-signed-url').fill(url);
+    await page.getByTestId('fly-launch-name').fill('alice');
+    await page.getByTestId('fly-launch-entropy').fill(entropyHex);
+
+    // Output reflects every input verbatim, in the canonical order.
+    const out = page.getByTestId('fly-launch-output');
+    await expect(out).toContainText('APP="qkb-ceremony-alice"');
+    await expect(out).toContainText('ROUND="3"');
+    await expect(out).toContainText(
+      'PREV_ROUND_URL="https://prove.identityescrow.org/ceremony/rounds/round-2.zkey"',
     );
-    await expect(cmd).toContainText("QKB_HANDLE='alice'");
-    await expect(cmd).toContainText(`QKB_ENTROPY='${'cafebabe'.repeat(8)}'`);
-    await expect(cmd).toContainText("QKB_ROUND='3'");
-    // Click copy and read back from the clipboard. The bytes that
-    // hit the clipboard MUST be the same string the <pre> renders —
-    // otherwise the user copies the label, not the command.
-    await page.getByTestId('ceremony-copy-fly').click();
+    await expect(out).toContainText(
+      'R1CS_URL="https://prove.identityescrow.org/ceremony/main.r1cs"',
+    );
+    await expect(out).toContainText(
+      'PTAU_URL="https://prove.identityescrow.org/ceremony/pot/pot23.ptau"',
+    );
+    await expect(out).toContainText(`SIGNED_PUT_URL='${url}'`);
+    await expect(out).toContainText(`CONTRIBUTOR_NAME='alice'`);
+    await expect(out).toContainText(`CONTRIBUTOR_ENTROPY=${entropyHex}`);
+    await expect(out).toContainText(
+      '--image ghcr.io/identityescroworg/qkb-ceremony:v1',
+    );
+    await expect(out).toContainText('flyctl apps destroy "$APP" --yes');
+
+    // Copy and read back. The clipboard bytes MUST equal the rendered
+    // <pre> verbatim — otherwise the user pastes a corrupted command.
+    await page.getByTestId('fly-launch-copy').click();
     const clip = await page.evaluate(() => navigator.clipboard.readText());
-    expect(clip).toContain('flyctl auth login');
-    expect(clip).toContain('qkb-ceremony-alice-round-3');
-    expect(clip).toContain(
-      "QKB_SIGNED_URL='https://prove.identityescrow.org/ceremony/round-3-signed'",
-    );
-    expect(clip).toContain('flyctl apps destroy qkb-ceremony-alice-round-3');
+    expect(clip).toContain('APP="qkb-ceremony-alice"');
+    expect(clip).toContain(`SIGNED_PUT_URL='${url}'`);
+    expect(clip).toContain(`CONTRIBUTOR_ENTROPY=${entropyHex}`);
+    expect(clip).toContain('flyctl apps destroy "$APP" --yes');
     await ctx.close();
   });
 
-  test('contribute → Fly form sanitises hostile handles into a Fly-safe slug', async ({
+  test('contribute → hostile contributor names slugify into a Fly-safe app slug while CONTRIBUTOR_NAME stays original', async ({
     page,
   }) => {
     await page.goto('/');
     await pushCeremonyRoute(page, '/ceremony/contribute');
-    // Spaces, apostrophes, and uppercase: all illegal in Fly app
-    // names. The slug must collapse them into a-z0-9- only.
-    await page.getByTestId('ceremony-fly-handle').fill("Alice O'Neill");
-    await page.getByTestId('ceremony-fly-round').fill('1');
-    const cmd = page.getByTestId('ceremony-fly-command');
-    await expect(cmd).toContainText(/qkb-ceremony-alice-o-neill-round-1/);
-    // The original handle still goes into the QKB_HANDLE env verbatim
-    // (the slug is only used for the Fly app name).
-    await expect(cmd).toContainText("QKB_HANDLE='Alice O'Neill'");
+    await page.getByRole('button', { name: /generate a launch command/i }).click();
+    await page.getByTestId('fly-launch-name').fill("Alice O'Neill");
+    await page.getByTestId('fly-launch-round').fill('1');
+    const out = page.getByTestId('fly-launch-output');
+    // Slug collapses the apostrophe + space into hyphens.
+    await expect(out).toContainText('APP="qkb-ceremony-alice-o-neill"');
+    // Original name preserved verbatim in CONTRIBUTOR_NAME.
+    await expect(out).toContainText(`CONTRIBUTOR_NAME='Alice O'Neill'`);
   });
 
   test('UK locale renders Ukrainian ceremony copy', async ({ page }) => {

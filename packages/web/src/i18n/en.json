@@ -138,17 +138,22 @@
       "step4Body": "The signed URL is single-use, time-bounded, and tied to your assigned round. Do not share it.",
       "signupHeading": "Sign up",
       "signupBody": "Email the admin with your handle, preferred contribution slot, and a short note on who you are. The admin assigns rounds in arrival order and replies with your download + signed-upload URLs.",
-      "flyHeading": "Or launch on Fly.io",
-      "flyLede": "No 32 GB workstation handy? Fill in the four fields below and the page assembles a single flyctl command that creates a temporary Fly machine, runs the contribution there, and destroys the machine. Nothing leaves this browser — the command is yours to paste.",
-      "flyHandleLabel": "Handle",
-      "flyHandlePlaceholder": "alice",
-      "flyRoundLabel": "Round number",
-      "flyUrlLabel": "Signed URL (sent by admin at sign-up)",
-      "flyEntropyLabel": "Entropy (32 bytes, hex)",
-      "flyEntropyHint": "Generated locally via crypto.getRandomValues — never sent. You can also paste your own entropy if you prefer.",
-      "flyGenerateEntropy": "Generate",
-      "flyCommandHeading": "Your command",
-      "flyOutroHint": "Run this in a terminal with flyctl installed. The \"apps destroy\" step at the end ensures no machine sits idle after your contribution finishes."
+      "flyForm": {
+        "openCta": "Or generate a launch command interactively →",
+        "openHint": "For contributors who would rather paste their values into a form than assemble the flyctl secrets-set line by hand.",
+        "heading": "Generate launch command",
+        "warningBrowser": "This form generates a command for you to paste into a terminal. The form runs entirely in your browser; nothing you type is sent anywhere. Your entropy stays local until you run the generated `flyctl secrets set` line.",
+        "warningReceipt": "Save the SHA-256 you'll see in `flyctl logs` — it's your contribution receipt.",
+        "signedUrlLabel": "Signed PUT URL",
+        "roundLabel": "Round number",
+        "nameLabel": "Contributor name",
+        "profileUrlLabel": "Profile URL (optional)",
+        "entropyLabel": "Entropy (32 bytes, hex)",
+        "entropyError": "Entropy must be exactly 64 lowercase hex characters.",
+        "generateEntropy": "Generate fresh entropy",
+        "outputHeading": "Your launch command",
+        "incompleteHint": "(fill in all required fields above for a complete command)"
+      }
     },
     "status": {
       "back": "back to overview",
