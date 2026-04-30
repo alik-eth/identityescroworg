@@ -19,6 +19,36 @@ type BuildState =
   | { kind: 'error'; message: string };
 
 /**
+ * Trigger a browser download of the JCS-canonical bcanon bytes so the
+ * user can attach them to Diia (the only currently-supported QTSP) and
+ * produce a CAdES-BES signature. The file is just the raw bytes — this
+ * is what the V5 circuit's signed-attrs OID stream consumes verbatim,
+ * and what Diia's signer hashes inside the messageDigest attribute.
+ *
+ * Filename `binding.qkb2.bin` matches the JSON-shape display fixture
+ * (`binding.qkb2.json`) so users can pair them visually if they keep
+ * a copy of the display fields.
+ */
+function downloadBindingFile(bytes: Uint8Array): void {
+  // Copy into a fresh ArrayBuffer so the Blob owns its own memory; the
+  // SharedArrayBuffer-vs-ArrayBuffer typing in some bundler outputs
+  // breaks if we hand the Uint8Array directly.
+  const owned = new Uint8Array(bytes.length);
+  owned.set(bytes);
+  const blob = new Blob([owned], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'binding.qkb2.bin';
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  // Defer revoke so the click finishes before the blob URL is freed.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+/**
  * Step 2 — produce the QKB/2.0 binding bytes.
  *
  * Flow:
@@ -39,7 +69,10 @@ type BuildState =
  */
 export function Step2GenerateBinding({ onAdvance, onBack }: Step2Props) {
   const { t } = useTranslation();
-  const { address: walletAddress } = useAccount();
+  // Reserved: wallet address mirrored from wagmi if a Step 2 affordance
+  // ever needs it. Removed from the visible UI because RainbowKit
+  // already renders the truncated address pill at the page header.
+  useAccount();
   const [state, setState] = useState<BuildState>({ kind: 'idle' });
 
   // Mock-prover mode (Playwright e2e + dev preview): the wallet mock
@@ -121,18 +154,13 @@ export function Step2GenerateBinding({ onAdvance, onBack }: Step2Props) {
           'We will ask your wallet to sign a deterministic recovery message so we can include your public key in the binding. The signature itself is discarded.',
         )}
       </p>
-      {walletAddress && (
-        <p className="text-mono text-sm" style={{ color: 'var(--ink)' }}>
-          wallet: {walletAddress.slice(0, 6)}…{walletAddress.slice(-4)}
-        </p>
-      )}
       {state.kind === 'idle' && (
         <button
           type="button"
           onClick={() => void onGenerate()}
           data-testid="v5-generate-binding-cta"
           className="px-6 py-3 text-mono text-sm"
-          style={{ background: 'var(--sovereign)', color: 'var(--paper)' }}
+          style={{ background: 'var(--sovereign)', color: 'var(--bone)' }}
         >
           {t('registerV5.step2.generate', 'Generate binding')}
         </button>
@@ -164,6 +192,28 @@ export function Step2GenerateBinding({ onAdvance, onBack }: Step2Props) {
           >
             {state.bcanonText}
           </p>
+          <button
+            type="button"
+            onClick={() => downloadBindingFile(state.bindingBytes)}
+            data-testid="v5-binding-download"
+            className="px-6 py-3 text-mono text-sm"
+            style={{
+              border: '1px solid var(--sovereign)',
+              color: 'var(--sovereign)',
+              background: 'transparent',
+            }}
+          >
+            {t('registerV5.step2.download', 'Download binding (.bin)')}
+          </button>
+          <p
+            className="text-xs max-w-prose"
+            style={{ color: 'var(--ink)', opacity: 0.7 }}
+          >
+            {t(
+              'registerV5.step2.downloadHint',
+              'Attach this file to Diia (or your QTSP client) and produce a CAdES-BES signature over its bytes. The .p7s file you receive goes into Step 3.',
+            )}
+          </p>
         </div>
       )}
       <div className="flex gap-4">
@@ -181,7 +231,7 @@ export function Step2GenerateBinding({ onAdvance, onBack }: Step2Props) {
           disabled={state.kind !== 'ready'}
           data-testid="v5-binding-advance-cta"
           className="px-6 py-3 text-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{ background: 'var(--sovereign)', color: 'var(--paper)' }}
+          style={{ background: 'var(--sovereign)', color: 'var(--bone)' }}
         >
           {t('registerV5.step2.advance')}
         </button>

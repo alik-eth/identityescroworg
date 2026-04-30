@@ -50,7 +50,7 @@ export default defineConfig({
     {
       name: 'chromium',
       use: { browserName: 'chromium' },
-      testMatch: /(landing|flow-happy|flow-already-minted|flow-deadline-expired|i18n|mobile)\.spec\.ts/,
+      testMatch: /(landing|flow-happy|flow-already-minted|flow-deadline-expired|i18n|mobile|route-coverage)\.spec\.ts/,
     },
     {
       name: 'ceremony',

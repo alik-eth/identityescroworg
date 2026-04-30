@@ -192,7 +192,7 @@ export function Step4ProveAndRegister({ p7s, bindingBytes, onBack }: Step4Props)
         disabled={!canProve || txPending}
         data-testid="v5-prove-register-cta"
         className="px-6 py-3 text-mono text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-        style={{ background: 'var(--sovereign)', color: 'var(--paper)' }}
+        style={{ background: 'var(--sovereign)', color: 'var(--bone)' }}
       >
         {t('registerV5.step4.cta')}
       </button>

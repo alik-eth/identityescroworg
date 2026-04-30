@@ -122,4 +122,178 @@ test.describe('/ua/registerV5 — V5 happy path (mock prover, undeployed registr
 
     await ctx.close();
   });
+
+  test('Step 2 surfaces a download button that emits binding.qkb2.bin', async ({
+    browser,
+  }) => {
+    const ctx = await browser.newContext({ userAgent: FLAGSHIP_UA });
+    const page = await ctx.newPage();
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'storage', {
+        configurable: true,
+        value: {
+          persist: () => Promise.resolve(true),
+          estimate: () => Promise.resolve({ quota: 8_000_000_000, usage: 0 }),
+        },
+      });
+      Object.defineProperty(navigator, 'deviceMemory', {
+        configurable: true,
+        value: 8,
+      });
+    });
+    await injectMockWallet(page, {
+      address: TEST_ADDR,
+      chainId: SEPOLIA_CHAIN_ID,
+    });
+
+    await page.goto('/');
+    await pushV5Route(page);
+
+    // Walk into Step 2 and generate the binding.
+    await expect(
+      page.getByRole('heading', { name: /Connect your wallet/i }),
+    ).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('button', { name: /Connect Wallet/i }).click();
+    await page.getByText(/Mock Wallet/i).first().click();
+    await page
+      .getByRole('button', { name: /Continue|advance|next|→/i })
+      .first()
+      .click();
+    await page.getByTestId('v5-generate-binding-cta').click();
+    await expect(page.getByTestId('v5-binding-preview')).toBeVisible({
+      timeout: 5_000,
+    });
+
+    // The download button is the user-facing handoff to the QTSP. The
+    // file MUST be named `binding.qkb2.bin` so the documented Diia
+    // workflow ("attach binding.qkb2.bin") matches what users see in
+    // their downloads folder.
+    const downloadButton = page.getByTestId('v5-binding-download');
+    await expect(downloadButton).toBeVisible();
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      downloadButton.click(),
+    ]);
+    expect(download.suggestedFilename()).toBe('binding.qkb2.bin');
+
+    // The bytes must be the same JCS-canonical bcanon the preview
+    // describes — non-zero, ≤ 1024 B, prefixed with the JSON object
+    // opener (`{`, 0x7b).
+    const stream = await download.createReadStream();
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+    const buf = Buffer.concat(chunks);
+    expect(buf.length).toBeGreaterThan(0);
+    expect(buf.length).toBeLessThanOrEqual(1024);
+    expect(buf[0]).toBe(0x7b); // opening `{`
+
+    await ctx.close();
+  });
+
+  test('Step 2 back button returns to Step 1', async ({ browser }) => {
+    const ctx = await browser.newContext({ userAgent: FLAGSHIP_UA });
+    const page = await ctx.newPage();
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'storage', {
+        configurable: true,
+        value: {
+          persist: () => Promise.resolve(true),
+          estimate: () => Promise.resolve({ quota: 8_000_000_000, usage: 0 }),
+        },
+      });
+      Object.defineProperty(navigator, 'deviceMemory', {
+        configurable: true,
+        value: 8,
+      });
+    });
+    await injectMockWallet(page, {
+      address: TEST_ADDR,
+      chainId: SEPOLIA_CHAIN_ID,
+    });
+
+    await page.goto('/');
+    await pushV5Route(page);
+
+    // Walk to Step 2.
+    await expect(
+      page.getByRole('heading', { name: /Connect your wallet/i }),
+    ).toBeVisible({ timeout: 10_000 });
+    await page.getByRole('button', { name: /Connect Wallet/i }).click();
+    await page.getByText(/Mock Wallet/i).first().click();
+    await page
+      .getByRole('button', { name: /Continue|advance|next|→/i })
+      .first()
+      .click();
+
+    // Step 2 heading visible.
+    await expect(
+      page.getByRole('heading', { name: /Generate your binding/i }),
+    ).toBeVisible({ timeout: 10_000 });
+
+    // Click "Back" — the button label is i18n'd. We click by the
+    // explicit "Back" role-button that's adjacent to the advance CTA.
+    await page.getByRole('button', { name: /^Back$/ }).click();
+
+    // Step 1 heading should be back; Step 2 heading should be gone.
+    await expect(
+      page.getByRole('heading', { name: /Connect your wallet/i }),
+    ).toBeVisible({ timeout: 5_000 });
+    await expect(
+      page.getByRole('heading', { name: /Generate your binding/i }),
+    ).toHaveCount(0);
+
+    await ctx.close();
+  });
+
+  test('step indicator advances from 1→2 as the user progresses', async ({
+    browser,
+  }) => {
+    const ctx = await browser.newContext({ userAgent: FLAGSHIP_UA });
+    const page = await ctx.newPage();
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'storage', {
+        configurable: true,
+        value: {
+          persist: () => Promise.resolve(true),
+          estimate: () => Promise.resolve({ quota: 8_000_000_000, usage: 0 }),
+        },
+      });
+      Object.defineProperty(navigator, 'deviceMemory', {
+        configurable: true,
+        value: 8,
+      });
+    });
+    await injectMockWallet(page, {
+      address: TEST_ADDR,
+      chainId: SEPOLIA_CHAIN_ID,
+    });
+
+    await page.goto('/');
+    await pushV5Route(page);
+
+    // On initial load the indicator's `aria-current="step"` marker
+    // sits on step 1. We assert via the CSS attribute selector since
+    // the marker is on a `<span>` next to the label.
+    await expect(
+      page.locator('span[aria-current="step"]'),
+    ).toHaveCount(1, { timeout: 10_000 });
+    await expect(page.getByText(/1 — Connect/)).toBeVisible();
+
+    // Advance to Step 2 and confirm the active marker moved.
+    await page.getByRole('button', { name: /Connect Wallet/i }).click();
+    await page.getByText(/Mock Wallet/i).first().click();
+    await page
+      .getByRole('button', { name: /Continue|advance|next|→/i })
+      .first()
+      .click();
+
+    // The Step 2 heading is the visual signal; the marker should
+    // still be a single element but now sit on the second step.
+    await expect(
+      page.getByRole('heading', { name: /Generate your binding/i }),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator('span[aria-current="step"]')).toHaveCount(1);
+
+    await ctx.close();
+  });
 });

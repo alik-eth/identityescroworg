@@ -20,17 +20,20 @@ export function Step1ConnectWallet({ onAdvance }: Step1Props) {
       <ConnectButton />
       {isConnected && address && (
         <div className="space-y-3">
-          <p className="text-mono text-sm" style={{ color: 'var(--ink)' }}>
-            {address.slice(0, 6)}…{address.slice(-4)}
-            <span data-testid="v5-connected-address" className="sr-only">
-              {address}
-            </span>
-          </p>
+          {/*
+            RainbowKit's ConnectButton renders the truncated address pill
+            already; we only mirror the full address as sr-only so the
+            v5-connected-address testid (e2e + a11y reads) still fires
+            without duplicating the visual treatment.
+          */}
+          <span data-testid="v5-connected-address" className="sr-only">
+            {address}
+          </span>
           <button
             type="button"
             onClick={onAdvance}
             className="px-6 py-3 text-mono text-sm"
-            style={{ background: 'var(--sovereign)', color: 'var(--paper)' }}
+            style={{ background: 'var(--sovereign)', color: 'var(--bone)' }}
           >
             {t('registerV5.step1.advance')}
           </button>

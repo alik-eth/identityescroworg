@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { CopyButton } from '../../components/CopyButton';
 import { DocumentFooter } from '../../components/DocumentFooter';
 import { PaperGrain } from '../../components/PaperGrain';
+import { FlyLauncherForm } from '../../components/ceremony/FlyLauncherForm';
 
 interface CommandPanel {
   step: number;
@@ -238,6 +239,10 @@ export function CeremonyContribute() {
               </article>
             ))}
           </section>
+
+          <hr className="rule" />
+
+          <FlyLauncherForm />
 
           <hr className="rule" />
 
