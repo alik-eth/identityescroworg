@@ -2,14 +2,20 @@
   "name": "@qkb/circuits",
   "version": "0.0.0",
   "private": true,
-  "description": "QKB Phase 1 — Circom circuits for relation R_QKB",
+  "description": "QKB — Circom circuits for relation R_QKB (V5: ECDSA-on-chain, Poseidon nullifiers, single-circuit ZK proof)",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
   "scripts": {
     "test": "mocha --reporter spec --timeout 600000 -r ts-node/register 'test/**/*.test.ts'",
     "test:vitest": "vitest run",
     "build": "bash ceremony/scripts/compile.sh",
     "lint": "biome check .",
     "extract:spkis": "ts-node scripts/extract-spkis.ts",
-    "parity:v5": "ts-node scripts/emit-spki-parity-fixture.ts"
+    "parity:v5": "ts-node scripts/emit-spki-parity-fixture.ts",
+    "build-witness-v5": "ts-node bin/build-witness-v5.ts"
+  },
+  "bin": {
+    "build-witness-v5": "bin/build-witness-v5.ts"
   },
   "devDependencies": {
     "@types/chai": "^4.3.16",
