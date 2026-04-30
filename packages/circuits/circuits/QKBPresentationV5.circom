@@ -5,8 +5,11 @@ include "./primitives/Sha256Var.circom";
 include "./primitives/Sha256CanonPad.circom";
 include "./primitives/SignedAttrsParser.circom";
 include "./primitives/X509SubjectSerial.circom";
-include "./primitives/NullifierDerive.circom";
+// V5 NullifierDerive primitive replaced inline by V5.1 wallet-bound construction
+// (Poseidon₂(walletSecret, ctxFieldHash)) — see header docstring + §6.6 wiring.
 include "./primitives/PoseidonChunkHashVar.circom";
+include "circomlib/circuits/poseidon.circom";
+include "circomlib/circuits/bitify.circom";
 include "./primitives/Bytes32ToHiLo.circom";
 include "./primitives/SpkiCommit.circom";
 include "./secp/Secp256k1PkMatch.circom";
@@ -14,11 +17,13 @@ include "./secp/Secp256k1AddressDerive.circom";
 include "circomlib/circuits/comparators.circom";
 include "circomlib/circuits/multiplexer.circom";
 
-/// @title  QKBPresentationV5 — V5 single-circuit ZK presentation proof.
-/// @notice Public-signal layout per V5 spec §0.1 (frozen 14 elements):
+/// @title  QKBPresentationV5 — V5.1 single-circuit ZK presentation proof.
+/// @notice Public-signal layout per V5.1 wallet-bound nullifier amendment
+///         (`docs/superpowers/specs/2026-04-30-wallet-bound-nullifier-amendment.md`,
+///         user-approved at `df203b8` on 2026-04-30) — frozen 19 elements:
 ///         [0]  msgSender              ≤ 2^160
 ///         [1]  timestamp              ≤ 2^64
-///         [2]  nullifier              Poseidon₂ output
+///         [2]  nullifier              Poseidon₂(walletSecret, ctxFieldHash) — V5.1 construction
 ///         [3]  ctxHashHi              uint128 — high 128 bits of SHA-256(ctxBytes)
 ///         [4]  ctxHashLo              uint128 — low  128 bits
 ///         [5]  bindingHashHi          uint128 — high 128 bits of SHA-256(bindingBytes)
@@ -30,17 +35,43 @@ include "circomlib/circuits/multiplexer.circom";
 ///         [11] policyLeafHash         field — uint256(sha256(JCS(policyLeafObject))) mod p
 ///         [12] leafSpkiCommit         field — SpkiCommit(leafSpki)
 ///         [13] intSpkiCommit          field — SpkiCommit(intSpki)
+///         [14] identityFingerprint    field — Poseidon₂(subjectSerialPacked, FINGERPRINT_DOMAIN)  ← NEW
+///         [15] identityCommitment     field — Poseidon₂(subjectSerialPacked, walletSecret)        ← NEW
+///         [16] rotationMode           bool — 0 = register, 1 = rotateWallet                        ← NEW
+///         [17] rotationOldCommitment  field — under register: == identityCommitment;
+///                                              under rotate:   prior commitment from chain        ← NEW
+///         [18] rotationNewWallet      field — under register: == msgSender;
+///                                              under rotate:   new-wallet address (≤2^160)        ← NEW
 ///
-/// Layout MUST match arch-contracts QKBRegistryV5.PublicSignals struct
-/// (commit confirmed 2026-04-29). Per CLAUDE.md invariant 8, ALL 14 are
-/// declared as `signal input` so snarkjs's `[outputs..., public_inputs...]`
-/// emission order places them in the canonical positions.
+/// Layout MUST match arch-contracts QKBRegistryV5.PublicSignalsV51 struct
+/// (frozen by orchestration plan §1.1, 2026-04-30). All 19 are declared as
+/// `signal input` so snarkjs's `[outputs..., public_inputs...]` emission
+/// order places them in the canonical positions.
 ///
 /// ctxHash domain note (lead-greenlit option A, 2026-04-29):
 ///   Public ctxHashHi/Lo is the SHA-256 of ctxBytes (hi/lo 128-bit split).
-///   NullifierDerive's internal ctxHash input is PoseidonChunkHashVar(ctxBytes)
-///   — a separate field-domain hash. The two hashes are computed independently
-///   from the same witnessed ctxBytes; no cross-binding constraint needed.
+///   The internal ctxHash used by the V5.1 nullifier construction is
+///   PoseidonChunkHashVar(ctxBytes) — a separate field-domain hash. The two
+///   hashes are computed independently from the same witnessed ctxBytes; no
+///   cross-binding constraint needed.
+///
+/// V5.1 wallet-bound nullifier construction (replaces V5 NullifierDerive):
+///   subjectSerialPacked  = Poseidon₅(subjectSerialLimbs[0..3], subjectSerialLen)
+///   identityFingerprint  = Poseidon₂(subjectSerialPacked, FINGERPRINT_DOMAIN)
+///   identityCommitment   = Poseidon₂(subjectSerialPacked, walletSecret)
+///   nullifier            = Poseidon₂(walletSecret, ctxFieldHash)
+///
+/// `walletSecret` is a private 254-bit input. Off-circuit derivation per spec:
+///   EOA path: HKDF-SHA256(personal_sign(walletPriv, "qkb-personal-secret-v1" || subjectSerial))
+///   SCW path: Argon2id(passphrase, salt="qkb-walletsecret-v1" || walletAddr)
+/// then truncated/reduced mod the BN254 scalar field. Circuit treats it as
+/// an opaque field element with a 254-bit range check (Num2Bits) for safety.
+///
+/// rotation_mode no-op binding (under rotationMode == 0 register path):
+///   rotationOldCommitment === identityCommitment  (free under rotation mode)
+///   rotationNewWallet     === msgSender           (free under rotation mode)
+/// Implemented via `ForceEqualIfEnabled(enabled = 1 - rotationMode, ...)`.
+/// rotationMode itself is boolean-range-checked (`rm * (rm - 1) === 0`).
 template QKBPresentationV5() {
     // MAX bounds per V5 spec v5 §0.5. Two empirical bumps from the original
     // estimates (commit b8e0f74 / 139c475 in this worktree):
@@ -67,7 +98,7 @@ template QKBPresentationV5() {
     var MAX_TS_DIGITS = 20;
     var MAX_POLICY_ID = 128;
 
-    // ===== Public inputs (14 field elements, FROZEN order — see §0.1) =====
+    // ===== Public inputs (19 field elements, FROZEN order — see header §0.1 V5.1) =====
     signal input msgSender;
     signal input timestamp;
     signal input nullifier;
@@ -82,6 +113,22 @@ template QKBPresentationV5() {
     signal input policyLeafHash;
     signal input leafSpkiCommit;
     signal input intSpkiCommit;
+    // ----- V5.1 amendment additions (slots 14-18) -----
+    signal input identityFingerprint;
+    signal input identityCommitment;
+    signal input rotationMode;            // 0 = register, 1 = rotateWallet
+    signal input rotationOldCommitment;   // under register: == identityCommitment (no-op);
+                                          // under rotate:   prior commitment from chain
+    signal input rotationNewWallet;       // under register: == msgSender (no-op);
+                                          // under rotate:   new-wallet address (≤2^160)
+
+    // FINGERPRINT_DOMAIN — fixed compile-time constant for identity-fingerprint domain
+    // separation. Field-element encoding of the ASCII string "qkb-id-fingerprint-v1"
+    // (21 bytes, big-endian-packed). Verified: 0x71='q', 0x6b='k', 0x62='b', 0x2d='-',
+    // 0x69='i', 0x64='d', 0x2d='-', 0x66='f', 0x69='i', 0x6e='n', 0x67='g', 0x65='e',
+    // 0x72='r', 0x70='p', 0x72='r', 0x69='i', 0x6e='n', 0x74='t', 0x2d='-', 0x76='v',
+    // 0x31='1' = 168 bits. Well below the BN254 scalar field (~254 bits).
+    var FINGERPRINT_DOMAIN = 0x716b622d69642d66696e6765727072696e742d7631;
 
     // ===== Private witness inputs (variable-length data + offsets) =====
     // Canonical binding bytes + length (consumed by BindingParseV2Core +
@@ -157,6 +204,17 @@ template QKBPresentationV5() {
     // these against the binding's `pk` field).
     signal input pkX[4];
     signal input pkY[4];
+
+    // V5.1 wallet-bound nullifier secret. Off-circuit derivation:
+    //   EOA: walletSecret = HKDF-SHA256(personal_sign(walletPriv, "qkb-personal-secret-v1"
+    //                                              || subjectSerialPacked.bytes))
+    //                       reduced/truncated to fit the BN254 scalar field.
+    //   SCW: walletSecret = Argon2id(passphrase, salt="qkb-walletsecret-v1" || walletAddr)
+    //                       same field reduction.
+    // Circuit treats it as an opaque field element + applies a 254-bit range check
+    // (Num2Bits below) so an adversary witness cannot supply a value ≥ p that
+    // wraps to a colliding value mod p with a different on-chain commitment.
+    signal input walletSecret;
 
     // ===== Body wiring =====
     // Tasks 6.2-6.10 wire the constraints in order:
@@ -364,14 +422,62 @@ template QKBPresentationV5() {
     for (var i = 0; i < MAX_CTX; i++) ctxFieldHash.bytes[i] <== parser.ctxBytes[i];
     ctxFieldHash.len <== parser.ctxLen;
 
-    component nullifierDer = NullifierDerive();
-    for (var i = 0; i < 4; i++) {
-        nullifierDer.subjectSerialLimbs[i] <== subjectSerial.subjectSerialLimbs[i];
-    }
-    nullifierDer.subjectSerialLen <== subjectSerialValueLength;
-    nullifierDer.ctxHash          <== ctxFieldHash.out;
+    // ===== V5.1 wallet-bound nullifier construction (replaces V5 NullifierDerive) =====
+    //
+    // Three Poseidon₂ outputs share `subjectPack.out` (the existing Poseidon₅ pack of
+    // serialLimbs+len) — saves 2 redundant packs vs. computing from scratch each time.
+    //
+    //   subjectPack.out      = Poseidon₅(subjectSerialLimbs[0..3], subjectSerialLen)  — internal
+    //   identityFingerprint  = Poseidon₂(subjectPack.out, FINGERPRINT_DOMAIN)         — public[14]
+    //   identityCommitment   = Poseidon₂(subjectPack.out, walletSecret)               — public[15]
+    //   nullifier            = Poseidon₂(walletSecret, ctxFieldHash.out)              — public[2]
+    //
+    // walletSecret is range-checked to 254 bits to prevent a malicious prover from
+    // submitting two distinct >p values that reduce to the same field element on-chain
+    // (potential equivocation against the contract's identityCommitments mapping).
 
-    nullifierDer.nullifier === nullifier;
+    component walletSecretBits = Num2Bits(254);
+    walletSecretBits.in <== walletSecret;
+
+    component subjectPack = Poseidon(5);
+    for (var i = 0; i < 4; i++) subjectPack.inputs[i] <== subjectSerial.subjectSerialLimbs[i];
+    subjectPack.inputs[4] <== subjectSerialValueLength;
+
+    component fpHash = Poseidon(2);
+    fpHash.inputs[0] <== subjectPack.out;
+    fpHash.inputs[1] <== FINGERPRINT_DOMAIN;
+    fpHash.out === identityFingerprint;
+
+    component commitHash = Poseidon(2);
+    commitHash.inputs[0] <== subjectPack.out;
+    commitHash.inputs[1] <== walletSecret;
+    commitHash.out === identityCommitment;
+
+    component nullifierHash = Poseidon(2);
+    nullifierHash.inputs[0] <== walletSecret;
+    nullifierHash.inputs[1] <== ctxFieldHash.out;
+    nullifierHash.out === nullifier;
+
+    // ===== Rotation-mode gates =====
+    //
+    // rotationMode is boolean. Under register (rotationMode == 0), the no-op slots
+    // 17/18 must equal identityCommitment / msgSender respectively — preventing a
+    // register-mode caller from passing arbitrary garbage in those public slots.
+    // Under rotate (rotationMode == 1), the constraints are released; the contract
+    // takes over by gating `rotationOldCommitment == identityCommitments[fp]` and
+    // binding `rotationNewWallet` against tx semantics.
+
+    rotationMode * (rotationMode - 1) === 0;     // boolean range check
+
+    component oldCommitNoOp = ForceEqualIfEnabled();
+    oldCommitNoOp.enabled <== 1 - rotationMode;
+    oldCommitNoOp.in[0]   <== rotationOldCommitment;
+    oldCommitNoOp.in[1]   <== identityCommitment;
+
+    component newWalletNoOp = ForceEqualIfEnabled();
+    newWalletNoOp.enabled <== 1 - rotationMode;
+    newWalletNoOp.in[0]   <== rotationNewWallet;
+    newWalletNoOp.in[1]   <== msgSender;
 
     // §6.7 — Byte-domain SHA chain over ctxBytes → ctxHashHi / ctxHashLo.
     //
@@ -547,5 +653,10 @@ component main { public [
     leafTbsHashLo,
     policyLeafHash,
     leafSpkiCommit,
-    intSpkiCommit
+    intSpkiCommit,
+    identityFingerprint,
+    identityCommitment,
+    rotationMode,
+    rotationOldCommitment,
+    rotationNewWallet
 ] } = QKBPresentationV5();
