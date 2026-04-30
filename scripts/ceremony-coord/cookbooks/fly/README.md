@@ -1,5 +1,21 @@
 # Running your ceremony round on Fly.io
 
+## Quick start
+
+If the coordinator has already published the launcher script, one command is
+enough:
+
+```
+curl -sSL https://prove.identityescrow.org/ceremony/fly-launch.sh -o fly-launch.sh
+bash fly-launch.sh
+```
+
+The script prompts for your round details and entropy interactively.
+No Docker, no repository clone, no Node.js required on your machine.
+Continue reading for the full explanation of what the script does and why.
+
+---
+
 ## 1. What this is
 
 For contributors who do not have a 32 GB machine available locally. Rather
@@ -27,6 +43,9 @@ curl -L https://fly.io/install.sh | sh
 ```
 
 Full install instructions: [fly.io/docs/hands-on/install-flyctl](https://fly.io/docs/hands-on/install-flyctl/)
+
+The interactive launcher (`fly-launch.sh`) will offer to install flyctl for you
+if it is not present.
 
 **The four URLs from the coordinator**
 
@@ -58,9 +77,9 @@ The simplest method:
 openssl rand -hex 32
 ```
 
-Copy the 64-character hex string. You will set it as a Fly secret in step 4;
-it is encrypted at rest inside Fly's infrastructure and is never logged by the
-entrypoint script.
+Copy the 64-character hex string. You will enter it when the launcher prompts;
+it is stored as a Fly encrypted secret and is never logged by any script in
+this cookbook.
 
 Alternatively, you may use any high-quality random source: a hardware RNG,
 a few thousand keystrokes fed through a hash function, a dice roll encoded in
@@ -76,9 +95,13 @@ disclose it as a further transparency measure.
 
 ## 4. The five commands
 
-Run these from within the `scripts/ceremony-coord/cookbooks/fly/` directory of
-this repository (where `fly.toml` and `Dockerfile` live). Replace every
-`<placeholder>` with your actual values.
+If you prefer to run each step explicitly rather than using the launcher, this
+is the full manual flow. Replace every `<placeholder>` with your actual values.
+
+No Docker required: the `--image` flag in command 4 tells Fly to pull the
+ceremony image directly from GitHub Container Registry. If you want to build
+the image from source yourself (for maximum transparency), omit `--image`
+and run the command from the directory containing `Dockerfile` and `fly.toml`.
 
 **1. Authenticate with Fly**
 
@@ -94,9 +117,9 @@ Opens a browser window. Log in once per session.
 flyctl apps create qkb-ceremony-<your-handle>
 ```
 
-Your handle is a short identifier — any combination of letters, numbers, and
-hyphens. It becomes part of the app name, which appears in Fly's logs but not
-in any ceremony artefact. Example: `qkb-ceremony-vitalik`.
+Your handle is a short identifier — any combination of lowercase letters,
+numbers, and hyphens. It becomes part of the app name, which appears in Fly's
+logs but not in any ceremony artefact. Example: `qkb-ceremony-vitalik`.
 
 **3. Set secrets**
 
@@ -125,16 +148,17 @@ to be publicly associated with your contribution.
 
 ```
 flyctl deploy \
+  --image ghcr.io/identityescroworg/qkb-ceremony:v1 \
   --vm-size performance-cpu-4x \
   --vm-memory 32768 \
   --strategy immediate \
   -a qkb-ceremony-<your-handle>
 ```
 
-This builds the Docker image (from the `Dockerfile` in this directory) on Fly's
-build infrastructure, starts a `performance-cpu-4x` machine with 32 GB RAM,
-mounts the scratch volume, and runs the entrypoint. The machine proceeds
-automatically through download, contribute, verify, and upload.
+Fly pulls the pre-built ceremony image from GitHub Container Registry, starts
+a `performance-cpu-4x` machine with 32 GB RAM, mounts the 60 GB scratch
+volume, and runs the entrypoint. The machine proceeds automatically through
+download, contribute, verify, and upload. No local Docker build required.
 
 `--strategy immediate` deploys without a health-check wait, which is correct
 for a one-shot job.
@@ -277,10 +301,23 @@ same app, so only the missing file is re-fetched.
 
 ---
 
-## Alternative: convenience script
+## Alternative: convenience scripts
 
-If you prefer to avoid typing the five commands individually, copy
-`contrib.env.example` to `contrib.env`, fill in every value, and run:
+**Interactive launcher (no repo clone required)**
+
+Download and run `fly-launch.sh` from the coordinator's R2 host:
+
+```
+curl -sSL https://prove.identityescrow.org/ceremony/fly-launch.sh -o fly-launch.sh
+bash fly-launch.sh
+```
+
+Prompts for all values interactively. Uses the pre-built GHCR image.
+Equivalent to the five explicit commands in §4.
+
+**Env-file wrapper (requires repo clone)**
+
+Copy `contrib.env.example` to `contrib.env`, fill in every field, and run:
 
 ```
 cp contrib.env.example contrib.env
@@ -288,5 +325,71 @@ $EDITOR contrib.env
 ./launch.sh
 ```
 
-`launch.sh` executes the same five steps in sequence. The explicit five-command
-form in §4 is the canonical reference; use it if anything goes wrong.
+`launch.sh` executes the same five steps from a pre-filled env file.
+Useful if you prefer to edit a file rather than answer prompts.
+
+In either case, the five-command form in §4 is the canonical reference; use it
+if anything goes wrong with the scripts.
+
+---
+
+## 9. For coordinators: publishing the GHCR image
+
+Contributors use the pre-built image `ghcr.io/identityescroworg/qkb-ceremony:v1`
+so they do not need Docker locally. This section documents how the coordinator
+builds and publishes that image. Contributors do not need to read this section.
+
+**One-time setup**
+
+A GitHub Personal Access Token with `write:packages` scope is required.
+Create one at github.com/settings/tokens and store it securely.
+
+**Build**
+
+Run from the `scripts/ceremony-coord/cookbooks/fly/` directory:
+
+```
+docker build \
+  -t ghcr.io/identityescroworg/qkb-ceremony:v1 \
+  -t ghcr.io/identityescroworg/qkb-ceremony:latest \
+  .
+```
+
+Note: replace `identityescroworg` with the final GitHub organisation name once
+confirmed by the founder. The `v1` tag is pinned in `launcher.sh`; if the image
+is rebuilt (e.g., to update the snarkjs version), bump the tag in `launcher.sh`
+and this README in the same commit.
+
+**Login and push**
+
+```
+echo $GITHUB_PAT | docker login ghcr.io -u <github-username> --password-stdin
+docker push ghcr.io/identityescroworg/qkb-ceremony:v1
+docker push ghcr.io/identityescroworg/qkb-ceremony:latest
+```
+
+**Make the package public**
+
+By default, GitHub Container Registry packages inherit the visibility of the
+repository. For contributors to pull without authenticating:
+
+1. Go to `github.com/orgs/identityescroworg/packages` (or
+   `github.com/<org>/qkb/pkgs/container/qkb-ceremony`).
+2. Under Package settings → Danger Zone → Change visibility → set to Public.
+
+Once public, `flyctl deploy --image ghcr.io/identityescroworg/qkb-ceremony:v1`
+works for any contributor without additional authentication.
+
+**Hosting `fly-launch.sh`**
+
+After confirming the script, upload it to R2 so the curl-pipe URL resolves:
+
+```
+# From scripts/ceremony-coord/
+wrangler r2 object put prove-identityescrow-org/ceremony/fly-launch.sh \
+  --file cookbooks/fly/launcher.sh \
+  --content-type "text/plain"
+```
+
+Or use the AWS-CLI-compatible S3 syntax against R2 if wrangler is not available.
+The object must be public-read at `prove.identityescrow.org/ceremony/fly-launch.sh`.
