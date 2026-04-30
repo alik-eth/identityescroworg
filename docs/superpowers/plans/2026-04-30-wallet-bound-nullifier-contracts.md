@@ -139,8 +139,8 @@ function rotateWallet(
   - `require(nullifierOf[newWallet] == 0, "new wallet already has identity")` — wallet uniqueness.
 
 - [ ] **Step 5: Verify old-wallet authorization signature** via ECDSA recover:
-  - Reconstruct hash: `keccak256(abi.encodePacked("qkb-rotate-auth-v1", fingerprint, newWallet))`
-  - Recover signer from `oldWalletAuthSig` against the EIP-191 personal-message hash.
+  - Reconstruct hash: `keccak256(abi.encodePacked("qkb-rotate-auth-v1", block.chainid, address(this), fingerprint, newWallet))`. The `block.chainid` + `address(this)` binding closes cross-deployment-replay (different chains, different registry instances). Web-eng's off-chain `personal_sign` payload MUST byte-match this construction.
+  - Recover signer from `oldWalletAuthSig` against the EIP-191 personal-message hash (`signMessage` automatically applies the `"\x19Ethereum Signed Message:\n32"` prefix on both sides).
   - `require(recovered == identityWallets[fingerprint], "invalid old wallet auth")`.
 
 - [ ] **Step 6: Update state atomically**:
