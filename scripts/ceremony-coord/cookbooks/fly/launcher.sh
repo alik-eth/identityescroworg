@@ -107,6 +107,35 @@ confirm_n() {
   [ "$ans" = "y" ] || [ "$ans" = "Y" ]
 }
 
+preflight_url() {
+  # preflight_url <label> <url> <allow_403>
+  # HEAD a URL with a 10s cap. Allow 2xx/3xx always. Allow 403/405 only when
+  # <allow_403> is "yes" — that's the case for signed URLs whose method-specific
+  # signature legitimately rejects HEAD (R2/S3 PUT URLs in particular).
+  # Connection failures (000) are always fatal.
+  local label="$1" url="$2" allow_403="${3:-no}"
+  local code
+  code="$(curl -sIL --max-time 10 -o /dev/null -w '%{http_code}' "$url" 2>/dev/null)" || code="000"
+  case "$code" in
+    2*|3*)
+      tty_out "      ${label}: HTTP ${code} OK"
+      ;;
+    403|405)
+      if [ "$allow_403" = "yes" ]; then
+        tty_out "      ${label}: HTTP ${code} (signed URL — host reachable, signature not validated)"
+      else
+        die "${label} returned HTTP ${code} on HEAD — URL may be misconfigured or wrong host."
+      fi
+      ;;
+    000)
+      die "${label}: connection failed (DNS error, timeout, or unreachable). Check the URL."
+      ;;
+    *)
+      die "${label} returned HTTP ${code} — URL may be wrong, expired, or already consumed."
+      ;;
+  esac
+}
+
 # ── cleanup / signal trap ─────────────────────────────────────────────────────
 
 _cleanup() {
@@ -153,6 +182,10 @@ fi
 
 if ! command -v openssl >/dev/null 2>&1; then
   die "openssl is required for entropy generation. Install via your package manager."
+fi
+
+if ! command -v curl >/dev/null 2>&1; then
+  die "curl is required for URL pre-flight checks. Install via your package manager."
 fi
 
 # ── banner ────────────────────────────────────────────────────────────────────
@@ -275,6 +308,26 @@ TAGWARN
 fi
 
 confirm_n "Proceed?" || { tty_out "Aborted."; exit 0; }
+
+# ── pre-flight URL checks ────────────────────────────────────────────────────
+# Validate URLs are reachable BEFORE spinning up Fly auth + machine. Catches
+# typos, wrong hosts, expired signed URLs, R2 outages — saves ~5 min and a
+# Fly machine boot if any URL is broken.
+
+tty_out ""
+tty_out "Pre-flight: checking URLs are reachable..."
+
+# PREV_ROUND_URL is usually public, but coordinators sometimes mint signed
+# read URLs for it; allow 403 in that case.
+preflight_url "PREV_ROUND_URL" "${PREV_ROUND_URL}" "yes"
+preflight_url "R1CS_URL"       "${R1CS_URL}"       "no"
+preflight_url "PTAU_URL"       "${PTAU_URL}"       "no"
+
+# SIGNED_PUT_URL is single-use and PUT-only; HEAD will return 403 because the
+# signature does not authorise HEAD. We only check that the host is reachable.
+preflight_url "SIGNED_PUT_URL" "${SIGNED_PUT_URL}" "yes"
+
+tty_out "      All URLs reachable."
 
 # ── 1. Auth ───────────────────────────────────────────────────────────────────
 
