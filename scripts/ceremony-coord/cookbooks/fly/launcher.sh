@@ -60,9 +60,8 @@ FLY_REGIONS="ams arn atl bog bom bos cdg den dfw ewr eze fra gdl gig gru \
 hkg iad jnb lax lhr mad mia nrt ord otp phx qro scl sea sin sjc syd waw \
 yul yyz"
 
-# ── state (used by cleanup trap) ─────────────────────────────────────────────
+# ── state (used by interrupt trap) ───────────────────────────────────────────
 APP=""
-CLEANUP_DONE=0
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 # All terminal I/O via /dev/tty so the script works when stdin is the pipe
@@ -83,6 +82,12 @@ ask() {
   if [ -z "${!varname}" ] && [ -n "$default" ]; then
     printf -v "$varname" '%s' "$default"
   fi
+}
+
+ask_required() {
+  # ask_required <prompt> <varname>  — prompt and abort if empty.
+  ask "$1" "$2"
+  [ -n "${!2}" ] || die "$2 is required."
 }
 
 ask_secret() {
@@ -144,12 +149,19 @@ preflight_url() {
   esac
 }
 
-# ── cleanup / signal trap ─────────────────────────────────────────────────────
-
-_cleanup() {
-  [ "$CLEANUP_DONE" -eq 1 ] && return
-  CLEANUP_DONE=1
+extract_sha() {
+  # extract_sha <log-file>  — scan for the attestation SHA (line after "SAVE THIS").
+  # Prints the hash on hit, empty on miss.
+  awk '
+    /SAVE THIS/ { found=1; next }
+    found && match($0, /[0-9a-f]{64}/) {
+      print substr($0, RSTART, RLENGTH)
+      exit
+    }
+  ' "$1" 2>/dev/null || true
 }
+
+# ── signal trap ──────────────────────────────────────────────────────────────
 
 _interrupt() {
   set +e
@@ -165,11 +177,9 @@ _interrupt() {
       tty_out "Reminder: flyctl apps destroy ${APP} --yes"
     fi
   fi
-  _cleanup
   exit 130
 }
 
-trap '_cleanup' EXIT
 trap '_interrupt' INT TERM
 
 # ── prerequisite checks ───────────────────────────────────────────────────────
@@ -241,26 +251,18 @@ esac
 
 tty_out ""
 tty_out "--- Round details (paste from the coordinator's DM) ---"
-ask "Round number" ROUND
+ask_required "Round number" ROUND
 [[ "$ROUND" =~ ^[1-9][0-9]*$ ]] || die "Round must be a positive integer (≥ 1)."
 
-ask "PREV_ROUND_URL  (previous contributor's zkey)" PREV_ROUND_URL
-[ -n "$PREV_ROUND_URL" ] || die "PREV_ROUND_URL is required."
-
-ask "R1CS_URL" R1CS_URL
-[ -n "$R1CS_URL" ] || die "R1CS_URL is required."
-
-ask "PTAU_URL" PTAU_URL
-[ -n "$PTAU_URL" ] || die "PTAU_URL is required."
-
-ask "SIGNED_PUT_URL  (your single-use upload URL)" SIGNED_PUT_URL
-[ -n "$SIGNED_PUT_URL" ] || die "SIGNED_PUT_URL is required."
+ask_required "PREV_ROUND_URL  (previous contributor's zkey)" PREV_ROUND_URL
+ask_required "R1CS_URL" R1CS_URL
+ask_required "PTAU_URL" PTAU_URL
+ask_required "SIGNED_PUT_URL  (your single-use upload URL)" SIGNED_PUT_URL
 
 tty_out ""
 tty_out "--- Attestation name ---"
 tty_out "(appears in the public contribution log at prove.identityescrow.org)"
-ask "Contributor name" CONTRIBUTOR_NAME
-[ -n "$CONTRIBUTOR_NAME" ] || die "Contributor name is required."
+ask_required "Contributor name" CONTRIBUTOR_NAME
 
 # ── entropy ───────────────────────────────────────────────────────────────────
 
@@ -438,39 +440,22 @@ cat >/dev/tty <<'LOGINFO'
 
 LOGINFO
 
-# Stream pass — use a temp file in $HOME so it survives /tmp cleanup races.
+# Temp files in $HOME so they survive /tmp cleanup races.
 SHA_LOG="$(mktemp -p "${HOME}" qkb-ceremony-stream.XXXXXX)"
+ARCHIVE_LOG="$(mktemp -p "${HOME}" qkb-ceremony-archive.XXXXXX)"
+
+# Stream pass — real-time progress for the contributor; tee'd for awk.
 flyctl logs --app "${APP}" --follow 2>&1 | tee "${SHA_LOG}" || true
 
-# Archive pass — always run, even if stream looked clean. flyctl logs
-# without --follow returns the full machine-side history; safer than
-# trusting --follow held the connection for 45 min.
-ARCHIVE_LOG="$(mktemp -p "${HOME}" qkb-ceremony-archive.XXXXXX)"
+# Archive pass — full machine-side history; safer than trusting --follow
+# held the connection for 45 min.
 tty_out ""
 tty_out "      Fetching full archived log (post-stream double-check)..."
 flyctl logs --app "${APP}" --no-tail >"${ARCHIVE_LOG}" 2>/dev/null || true
 
-# Helper: scan one file for the attestation SHA (line after "SAVE THIS").
-# Prints the hash on success, empty on miss.
-extract_sha() {
-  awk '
-    /SAVE THIS/ { found=1; next }
-    found && match($0, /[0-9a-f]{64}/) {
-      print substr($0, RSTART, RLENGTH)
-      exit
-    }
-  ' "$1" 2>/dev/null || true
-}
-
-# Prefer the archive (full machine-side history), fall back to the stream
-# if archive came back empty (e.g., flyctl logs --no-tail not yet available).
-CONTRIBUTION_HASH=""
-if [ -s "${ARCHIVE_LOG}" ]; then
-  CONTRIBUTION_HASH="$(extract_sha "${ARCHIVE_LOG}")"
-fi
-if [ -z "${CONTRIBUTION_HASH}" ] && [ -s "${SHA_LOG}" ]; then
-  CONTRIBUTION_HASH="$(extract_sha "${SHA_LOG}")"
-fi
+# Prefer archive; fall back to stream.
+CONTRIBUTION_HASH="$(extract_sha "${ARCHIVE_LOG}")"
+[ -n "${CONTRIBUTION_HASH}" ] || CONTRIBUTION_HASH="$(extract_sha "${SHA_LOG}")"
 rm -f "${SHA_LOG}" "${ARCHIVE_LOG}"
 
 # ── final summary + destroy ───────────────────────────────────────────────────
@@ -507,20 +492,17 @@ if [ -n "$CONTRIBUTION_HASH" ]; then
 
  Save this hash and your DM thread with the coordinator.
  That is your complete contribution record.
-SUMMARY
-
-  if [ -n "${SUMMARY_FILE}" ] && [ -f "${SUMMARY_FILE}" ]; then
-    tty_out ""
-    tty_out " A copy was saved to: ${SUMMARY_FILE}"
-  fi
-
-  cat >/dev/tty <<'TAIL'
 
  The coordinator will verify independently and publish your
  entry to the public log at:
  https://prove.identityescrow.org/ceremony/status.json
 ================================================================
-TAIL
+SUMMARY
+
+  if [ -n "${SUMMARY_FILE}" ] && [ -f "${SUMMARY_FILE}" ]; then
+    tty_out ""
+    tty_out "A copy was saved to: ${SUMMARY_FILE}"
+  fi
 else
   cat >/dev/tty <<NOSUMMARY
 
