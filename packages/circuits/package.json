@@ -8,10 +8,14 @@
   "scripts": {
     "test": "mocha --reporter spec --exit --timeout 600000 -r ts-node/register 'test/**/*.test.ts'",
     "test:vitest": "vitest run",
+    "test:v5": "mocha --reporter spec --exit --timeout 600000 -r ts-node/register 'test/integration/{qkb-presentation-v5,build-witness-v5,v5-e2e,v5-prove-verify}.test.ts'",
     "build": "bash ceremony/scripts/compile.sh",
+    "compile:v5": "mkdir -p build/qkb-presentation && circom circuits/QKBPresentationV5.circom --r1cs --wasm -l circuits -l node_modules -o build/qkb-presentation/ && pnpm exec snarkjs r1cs info build/qkb-presentation/QKBPresentationV5.r1cs",
+    "ceremony:v5:stub": "bash ceremony/scripts/stub-v5.sh",
     "lint": "biome check .",
     "extract:spkis": "ts-node scripts/extract-spkis.ts",
-    "parity:v5": "ts-node scripts/emit-spki-parity-fixture.ts",
+    "parity:v5": "vitest run test/SpkiCommitParity.vitest.ts",
+    "parity:v5:emit": "ts-node scripts/emit-spki-parity-fixture.ts",
     "build-witness-v5": "ts-node bin/build-witness-v5.ts"
   },
   "bin": {
