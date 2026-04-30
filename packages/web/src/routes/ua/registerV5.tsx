@@ -17,6 +17,7 @@ export function RegisterV5Screen() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [step, setStep] = useState<StepNumber>(1);
+  const [bindingBytes, setBindingBytes] = useState<Uint8Array | null>(null);
   const [p7s, setP7s] = useState<Uint8Array | null>(null);
   // Device-capability gate (spec amendment 9c866ad). Runs BEFORE Step 1 is
   // shown so the user can't even start connecting a wallet on a device
@@ -80,7 +81,13 @@ export function RegisterV5Screen() {
           <hr className="rule" />
           {step === 1 && <Step1ConnectWallet onAdvance={() => setStep(2)} />}
           {step === 2 && (
-            <Step2GenerateBinding onAdvance={() => setStep(3)} onBack={() => setStep(1)} />
+            <Step2GenerateBinding
+              onAdvance={(bytes) => {
+                setBindingBytes(bytes);
+                setStep(3);
+              }}
+              onBack={() => setStep(1)}
+            />
           )}
           {step === 3 && (
             <Step3DiiaSign
@@ -91,8 +98,12 @@ export function RegisterV5Screen() {
               onBack={() => setStep(2)}
             />
           )}
-          {step === 4 && p7s && (
-            <Step4ProveAndRegister p7s={p7s} onBack={() => setStep(3)} />
+          {step === 4 && p7s && bindingBytes && (
+            <Step4ProveAndRegister
+              p7s={p7s}
+              bindingBytes={bindingBytes}
+              onBack={() => setStep(3)}
+            />
           )}
         </div>
       </div>

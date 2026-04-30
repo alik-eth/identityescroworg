@@ -80,12 +80,15 @@ test.describe('/ua/registerV5 — V5 happy path (mock prover, undeployed registr
     await expect(step1Advance.first()).toBeVisible({ timeout: 10_000 });
     await step1Advance.first().click();
 
-    // ---- Step 2: generate binding (currently a no-op handoff) ----
-    const step2Advance = page.getByRole('button', {
-      name: /Continue|advance|next|→/i,
+    // ---- Step 2: generate binding ----
+    // In mock-prover mode (the playwright global env) Step 2 synthesises
+    // a deterministic binding without invoking the wallet, so the
+    // "Generate binding" CTA resolves directly to "ready".
+    await page.getByTestId('v5-generate-binding-cta').click();
+    await expect(page.getByTestId('v5-binding-preview')).toBeVisible({
+      timeout: 5_000,
     });
-    await expect(step2Advance.first()).toBeVisible();
-    await step2Advance.first().click();
+    await page.getByTestId('v5-binding-advance-cta').click();
 
     // ---- Step 3: upload p7s ----
     // Mock-prover doesn't parse the bytes, but Step 3's onP7s gates on

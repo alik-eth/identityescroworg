@@ -18,6 +18,9 @@ import {
 
 export interface Step4Props {
   p7s: Uint8Array;
+  /** JCS-canonicalized QKB/2.0 binding bytes from Step 2. Required for the
+   *  real prover path; mock prover ignores it. */
+  bindingBytes: Uint8Array;
   onBack: () => void;
 }
 
@@ -44,7 +47,7 @@ const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
  * The UI gates the "Generate proof + register" button on the
  * mode-resolution outcome: configured (real) OR explicit mock toggle.
  */
-export function Step4ProveAndRegister({ p7s, onBack }: Step4Props) {
+export function Step4ProveAndRegister({ p7s, bindingBytes, onBack }: Step4Props) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { address } = useAccount();
@@ -82,6 +85,7 @@ export function Step4ProveAndRegister({ p7s, onBack }: Step4Props) {
     try {
       const { registerArgs } = await runV5Pipeline(p7s, {
         useMockProver,
+        bindingBytes,
         onProgress: setStage,
       });
       setPipelineDone(true);
