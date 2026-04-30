@@ -12,6 +12,10 @@ import { MintNftScreen } from './routes/ua/mintNft';
 import { RegisterV5Screen } from './routes/ua/registerV5';
 import { UseDesktopScreen } from './routes/ua/useDesktop';
 import { IntegrationsScreen } from './routes/integrations';
+import { CeremonyIndex } from './routes/ceremony/index';
+import { CeremonyContribute } from './routes/ceremony/contribute';
+import { CeremonyStatus } from './routes/ceremony/status';
+import { CeremonyVerify } from './routes/ceremony/verify';
 
 function RootLayout() {
   return <Outlet />;
@@ -61,6 +65,30 @@ const useDesktopRoute = createRoute({
   component: UseDesktopScreen,
 });
 
+const ceremonyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/ceremony',
+  component: CeremonyIndex,
+});
+
+const ceremonyContributeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/ceremony/contribute',
+  component: CeremonyContribute,
+});
+
+const ceremonyStatusRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/ceremony/status',
+  component: CeremonyStatus,
+});
+
+const ceremonyVerifyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/ceremony/verify',
+  component: CeremonyVerify,
+});
+
 const integrationsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/integrations',
@@ -75,6 +103,10 @@ const routeTree = rootRoute.addChildren([
   registerV5Route,
   mintNftRoute,
   useDesktopRoute,
+  ceremonyRoute,
+  ceremonyContributeRoute,
+  ceremonyStatusRoute,
+  ceremonyVerifyRoute,
   integrationsRoute,
 ]);
 

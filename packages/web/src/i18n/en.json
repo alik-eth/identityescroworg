@@ -75,5 +75,83 @@
       "body": "The prover needs about 2.5 GB of cached storage on your device — most phone browsers cap web pages well below that, so the proof would fail mid-flight. Open this page on a desktop or laptop browser instead and pick up where you left off.",
       "qrCaption": "Scan with another phone, or type the URL into a desktop browser."
     }
+  },
+  "ceremony": {
+    "copy": {
+      "idle": "Copy",
+      "copied": "Copied",
+      "failed": "Copy failed",
+      "aria": "Copy command"
+    },
+    "landing": {
+      "heading": "A trusted setup. In public.",
+      "lede": "The V5 prover keys are produced by a multi-contributor ceremony. So long as one contributor honestly destroys their entropy, the ceremony is sound. We are publishing every step.",
+      "whyHeading": "Why a ceremony at all",
+      "whyBody": "Groth16 proofs require a structured reference string. The string is generated once, by a specific party, with private randomness that — if known to anyone — would let that party forge proofs. A multi-party ceremony randomises the string across many independent contributors. Each adds entropy and destroys their own. The final string is sound under the assumption that at least one contributor was honest.",
+      "trustHeading": "What we publish",
+      "publishChainLabel": "The contributor chain",
+      "publishChainBody": "Every contributor's handle, round number, and signed attestation hash. Anyone can independently verify each link.",
+      "publishBeaconLabel": "A public-randomness beacon",
+      "publishBeaconBody": "After the last contributor, we mix in a Bitcoin (or Ethereum mainnet) block hash. The block height is committed in advance — no one can predict the bytes.",
+      "publishHashLabel": "The final zkey hash",
+      "publishHashBody": "The SHA-256 of the final prover key, committed on chain alongside the verifier contract. Anyone can verify their downloaded zkey matches.",
+      "navAria": "Ceremony sections",
+      "contributeLink": "Contribute to the ceremony →",
+      "statusLink": "Live progress →",
+      "verifyLink": "Verify the final zkey →"
+    },
+    "contribute": {
+      "back": "back to overview",
+      "heading": "Contribute on your machine.",
+      "lede": "The actual contribution runs as a local snarkjs CLI invocation on your laptop or workstation. The browser cannot host it — V8 caps WebAssembly at 4 GB of heap and the prover key needs more than that to ingest.",
+      "requirementsHeading": "What you need",
+      "req32gb": "snarkjs holds the intermediate zkey + working memory in V8 heap; ~30 GB peak.",
+      "req5gb": "Download + working space + output zkey.",
+      "reqOS": "Node 20 or newer. snarkjs ≥ 0.7.4 (npm install -g snarkjs).",
+      "reqTime": "Download + contribute + verify + upload.",
+      "notSupported": "Phones, tablets, and Chromebooks cannot contribute — heap caps are too low and the disk requirement exceeds typical mobile-class storage.",
+      "commandsHeading": "The four commands",
+      "step1Title": "Download the previous contributor's intermediate zkey",
+      "step1Body": "About 2.2 GB. The download URL for your assigned round is sent at sign-up time.",
+      "step2Title": "Run the contribution",
+      "step2Body": "Around 5–10 minutes wall-clock. snarkjs holds the intermediate key + working memory in V8 heap; expect ~30 GB RAM peak. Use any high-quality entropy source.",
+      "step3Title": "Verify locally before uploading",
+      "step3Body": "Runs in seconds. Confirms your output zkey is structurally valid against the circuit r1cs and the Phase 1 powers-of-tau. If verify fails, do not upload.",
+      "step4Title": "Upload via your signed URL",
+      "step4Body": "The signed URL is single-use, time-bounded, and tied to your assigned round. Do not share it.",
+      "signupHeading": "Sign up",
+      "signupBody": "Email the admin with your handle, preferred contribution slot, and a short note on who you are. The admin assigns rounds in arrival order and replies with your download + signed-upload URLs."
+    },
+    "status": {
+      "back": "back to overview",
+      "heading": "Live progress.",
+      "lede": "Each round closes when the contributor uploads their attested intermediate zkey. We publish the chain here as it grows.",
+      "loading": "Loading status feed…",
+      "unavailable": "Status feed unavailable. The ceremony admin publishes the JSON manually after each round; transient outages are expected. Try again in a minute.",
+      "statePlanned": "Awaiting first contributor.",
+      "stateInProgress": "Ceremony in progress.",
+      "stateComplete": "Ceremony complete.",
+      "plannedBlurb": "The first contributor has not yet uploaded their round. Sign-ups are open.",
+      "inProgressBlurb": "Round {{round}} of {{total}}.",
+      "completeBlurb": "The final zkey is fixed. Anyone can verify their downloaded copy below.",
+      "chainHeading": "Contributor chain",
+      "chainEmpty": "No rounds yet.",
+      "roundLabel": "Round",
+      "finalHeading": "Final zkey",
+      "verifyLink": "Verify your downloaded zkey →"
+    },
+    "verify": {
+      "back": "back to overview",
+      "heading": "Verify your zkey.",
+      "lede": "Drop the prover key file you downloaded. The browser computes a SHA-256 of every byte and compares against the hash committed in the on-chain verifier contract — published below once the ceremony is complete.",
+      "publishedHeading": "Published final hash",
+      "published.pending": "Ceremony is not yet complete. The final zkey hash is published here once the last contributor uploads and the public-randomness beacon is mixed in.",
+      "uploadHeading": "Hash your downloaded zkey",
+      "fileAria": "Upload your downloaded qkb-v5-final.zkey",
+      "progress": "Hashing",
+      "matched": "Match. This file is the same prover key the verifier contract was deployed with.",
+      "mismatch": "No match. Do not use this file. Re-download from the canonical source.",
+      "noPublished": "Computed"
+    }
   }
 }
