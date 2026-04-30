@@ -15,12 +15,13 @@
 #   flyctl   — https://fly.io/docs/hands-on/install-flyctl/
 #   openssl  — pre-installed on macOS/Linux; used for entropy generation
 #
-# Does NOT require: Docker, Node.js, or this repository.
+# Does NOT require: Docker, Node.js, fly.toml, or this repository.
 # The ceremony image is pulled by Fly's infrastructure from GHCR.
+# Uses fly machine run — the correct primitive for one-shot batch jobs.
 #
-# SECURITY: set +x is unconditional and permanent. CONTRIBUTOR_ENTROPY is
-# never written to disk, never echoed, and never appears in this script's
-# stdout or stderr. It is stored in Fly's HSM-backed encrypted secrets store.
+# SECURITY: set +x is unconditional. CONTRIBUTOR_ENTROPY is never echoed
+# and is unset from the shell immediately after flyctl machine run launches.
+# See README §6 (trust model) for the --env vs encrypted-secrets trade-off.
 
 set +x
 set -euo pipefail
@@ -30,16 +31,14 @@ DEFAULT_REGION="fra"
 
 # ── state (used by cleanup trap) ─────────────────────────────────────────────
 APP=""
-WORK_DIR=""
 CLEANUP_DONE=0
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 # All terminal I/O via /dev/tty so the script works when stdin is the pipe
-# (curl ... | bash). Entropy is never passed through any of these helpers.
+# (curl ... | bash).
 
-tty_out()    { printf '%s\n' "$*" >/dev/tty; }
-tty_outf()   { printf '%s'   "$*" >/dev/tty; }
-tty_banner() { printf '\n%s\n\n' "$*" >/dev/tty; }
+tty_out()  { printf '%s\n' "$*" >/dev/tty; }
+tty_outf() { printf '%s'   "$*" >/dev/tty; }
 
 ask() {
   # ask <prompt> <varname> [default]
@@ -60,7 +59,7 @@ ask_secret() {
   local prompt="$1" varname="$2"
   tty_outf "${prompt}: "
   IFS= read -rs "${varname?}" </dev/tty
-  tty_out ""    # newline after silent read
+  tty_out ""
 }
 
 die() {
@@ -69,29 +68,27 @@ die() {
   exit 1
 }
 
-# Default Y — empty answer = yes
 confirm_y() {
+  # Default Y — empty answer = yes
   tty_outf "$* [Y/n]: "
   local ans
   IFS= read -r ans </dev/tty || true
   [ -z "$ans" ] || [ "$ans" = "y" ] || [ "$ans" = "Y" ]
 }
 
-# Default N — explicit y required
 confirm_n() {
+  # Default N — explicit y required
   tty_outf "$* [y/N]: "
   local ans
   IFS= read -r ans </dev/tty || true
   [ "$ans" = "y" ] || [ "$ans" = "Y" ]
 }
 
-# ── cleanup ───────────────────────────────────────────────────────────────────
+# ── cleanup / signal trap ─────────────────────────────────────────────────────
 
 _cleanup() {
   [ "$CLEANUP_DONE" -eq 1 ] && return
   CLEANUP_DONE=1
-  set +e
-  [ -n "$WORK_DIR" ] && rm -rf "$WORK_DIR"
 }
 
 _interrupt() {
@@ -101,10 +98,10 @@ _interrupt() {
   if [ -n "$APP" ]; then
     if confirm_y "Destroy Fly app ${APP} to avoid orphan charges?"; then
       tty_out "Destroying ${APP}..."
-      flyctl apps destroy "${APP}" --yes 2>/dev/null || tty_out "(destroy failed — run manually: flyctl apps destroy ${APP} --yes)"
+      flyctl apps destroy "${APP}" --yes 2>/dev/null \
+        || tty_out "(destroy failed — run manually: flyctl apps destroy ${APP} --yes)"
       tty_out "App destroyed."
     else
-      tty_out ""
       tty_out "Reminder: flyctl apps destroy ${APP} --yes"
     fi
   fi
@@ -132,7 +129,7 @@ MISSING
 fi
 
 if ! command -v openssl >/dev/null 2>&1; then
-  die "openssl is required for entropy generation. Install it via your package manager."
+  die "openssl is required for entropy generation. Install via your package manager."
 fi
 
 # ── banner ────────────────────────────────────────────────────────────────────
@@ -143,8 +140,8 @@ cat >/dev/tty <<'BANNER'
  zk-QES V5 Phase 2 trusted-setup ceremony
  Fly.io one-command launcher
 
- Prompts you for your round details, then handles everything:
-   apps create → secrets set → deploy → logs → cleanup
+ Prompts you for your round details, then runs:
+   apps create → volumes create → machine run → logs → destroy
 
  Time:  ~45-60 min total
  Cost:  under $0.30 (free-tier credit covers it)
@@ -155,14 +152,13 @@ BANNER
 
 # ── collect inputs ────────────────────────────────────────────────────────────
 
-# Default app name: random 8-char hex suffix, unguessable, disposable.
 DEFAULT_APP="qkb-ceremony-$(openssl rand -hex 4)"
 
 tty_out "--- Fly app name ---"
 tty_out "(leave blank for auto-generated; the name only appears in Fly logs)"
 ask "App name" APP "${DEFAULT_APP}"
 [[ "$APP" =~ ^[a-zA-Z0-9][a-zA-Z0-9-]{1,}[a-zA-Z0-9]$ ]] \
-  || die "App name must be at least 3 chars, letters/numbers/hyphens only."
+  || die "App name must be ≥3 chars, letters/numbers/hyphens only."
 
 ask "Region" FLY_REGION "${DEFAULT_REGION}"
 
@@ -190,9 +186,6 @@ ask "Contributor name" CONTRIBUTOR_NAME
 [ -n "$CONTRIBUTOR_NAME" ] || die "Contributor name is required."
 
 # ── entropy ───────────────────────────────────────────────────────────────────
-# Default: generate on this machine with openssl rand.
-# Optional override: contributor pastes their own high-entropy string.
-# The entropy variable is NEVER echoed or logged anywhere.
 
 tty_out ""
 tty_out "--- Entropy ---"
@@ -213,7 +206,7 @@ if [ -n "$CUSTOM_ENTROPY" ]; then
   ENTROPY_SOURCE="user-supplied (${#CONTRIBUTOR_ENTROPY} chars)"
 else
   CONTRIBUTOR_ENTROPY="$(openssl rand -hex 32)"
-  ENTROPY_SOURCE="openssl rand -hex 32 (auto-generated on this machine)"
+  ENTROPY_SOURCE="openssl rand -hex 32 on this machine"
 fi
 unset CUSTOM_ENTROPY
 
@@ -235,108 +228,91 @@ CONFIRM
 
 confirm_n "Proceed?" || { tty_out "Aborted."; exit 0; }
 
-# From this point, the signal trap will offer to destroy the app on Ctrl-C.
-
 # ── 1. Auth ───────────────────────────────────────────────────────────────────
 
 tty_out ""
 tty_out "[1/4] Checking Fly authentication..."
 if ! flyctl auth whoami >/dev/null 2>&1; then
-  tty_out "      Not logged in. Opening browser for Fly auth..."
+  tty_out "      Not logged in — opening browser..."
   flyctl auth login
 fi
 tty_out "      Authenticated."
 
-# ── 2. Create app ─────────────────────────────────────────────────────────────
+# ── 2. Create app + volume ────────────────────────────────────────────────────
 
 tty_out ""
-tty_out "[2/4] Creating Fly app ${APP}..."
+tty_out "[2/4] Creating app and scratch volume..."
+
 if flyctl apps create "${APP}" --region "${FLY_REGION}" 2>/dev/null; then
-  tty_out "      Created."
+  tty_out "      App created."
 else
   tty_out "      App already exists — continuing."
 fi
 
-# ── 3. Secrets ────────────────────────────────────────────────────────────────
+# Volumes are independent of machines; must be created before machine run.
+# --yes suppresses the interactive region-confirmation prompt.
+if flyctl volumes create ceremony_scratch \
+     --app     "${APP}" \
+     --region  "${FLY_REGION}" \
+     --size    60 \
+     --yes 2>/dev/null; then
+  tty_out "      Volume created (60 GB)."
+else
+  tty_out "      Volume already exists — continuing."
+fi
+
+# ── 3. Machine run ────────────────────────────────────────────────────────────
+# fly machine run is the correct primitive for one-shot batch jobs on Fly:
+# no fly.toml needed, no persistent app config, exits when the entrypoint exits.
+#
+# ENTROPY NOTE: --env passes values as plain-text machine config (visible in
+# Fly's Machines API to account holders). This is intentional: the alternative
+# (flyctl secrets set + --file-secret) requires a separate step and a change to
+# entrypoint.sh, with no meaningful ceremony-security benefit — if Fly is
+# adversarial they control the compute directly. See README §6.
 
 tty_out ""
-tty_out "[3/4] Setting encrypted secrets..."
-flyctl secrets set \
-  "ROUND=${ROUND}" \
-  "PREV_ROUND_URL=${PREV_ROUND_URL}" \
-  "R1CS_URL=${R1CS_URL}" \
-  "PTAU_URL=${PTAU_URL}" \
-  "SIGNED_PUT_URL=${SIGNED_PUT_URL}" \
-  "CONTRIBUTOR_NAME=${CONTRIBUTOR_NAME}" \
-  "CONTRIBUTOR_ENTROPY=${CONTRIBUTOR_ENTROPY}" \
-  --app "${APP}" \
-  --stage
-unset CONTRIBUTOR_ENTROPY   # clear from shell env immediately after handing off
-tty_out "      Secrets staged (entropy cleared from shell)."
-
-# ── 4. Deploy ─────────────────────────────────────────────────────────────────
-
-tty_out ""
-tty_out "[4/4] Deploying ceremony machine..."
+tty_out "[3/4] Starting ceremony machine..."
 tty_out "      Image:  ${GHCR_IMAGE}"
-tty_out "      Size:   performance-cpu-4x / 32 GB RAM / 60 GB scratch volume"
-tty_out "      No local Docker build — image pulled by Fly's builder from GHCR."
+tty_out "      Size:   performance-cpu-4x / 32 GB RAM / 60 GB scratch"
 tty_out ""
 
-WORK_DIR="$(mktemp -d)"
+flyctl machine run "${GHCR_IMAGE}" \
+  --app         "${APP}" \
+  --region      "${FLY_REGION}" \
+  --vm-size     performance-cpu-4x \
+  --vm-memory   32768 \
+  --volume      "ceremony_scratch:/data" \
+  --restart     no \
+  --env         "ROUND=${ROUND}" \
+  --env         "PREV_ROUND_URL=${PREV_ROUND_URL}" \
+  --env         "R1CS_URL=${R1CS_URL}" \
+  --env         "PTAU_URL=${PTAU_URL}" \
+  --env         "SIGNED_PUT_URL=${SIGNED_PUT_URL}" \
+  --env         "CONTRIBUTOR_NAME=${CONTRIBUTOR_NAME}" \
+  --env         "CONTRIBUTOR_ENTROPY=${CONTRIBUTOR_ENTROPY}"
 
-cat > "${WORK_DIR}/fly.toml" <<TOML
-# Auto-generated by launcher.sh — not committed.
-app            = "${APP}"
-primary_region = "${FLY_REGION}"
+# Clear entropy from shell env immediately after machine run accepts it.
+# The value now lives only inside the Fly machine's process for ~45 min.
+unset CONTRIBUTOR_ENTROPY
 
-[processes]
-  contribute = "/entrypoint.sh"
-
-[[vm]]
-  size      = "performance-cpu-4x"
-  memory    = "32gb"
-  processes = ["contribute"]
-
-[[mounts]]
-  source       = "ceremony_scratch"
-  destination  = "/data"
-  initial_size = "60gb"
-  processes    = ["contribute"]
-TOML
-
-flyctl deploy \
-  --config    "${WORK_DIR}/fly.toml" \
-  --image     "${GHCR_IMAGE}" \
-  --vm-size   performance-cpu-4x \
-  --vm-memory 32768 \
-  --strategy  immediate \
-  --app       "${APP}"
-
-# ── Tail logs + capture SHA-256 ───────────────────────────────────────────────
-# flyctl logs --follow exits when the machine stops.
-# We tee everything to a temp file so we can extract the attestation hash.
+# ── 4. Tail logs + capture SHA-256 ───────────────────────────────────────────
 
 cat >/dev/tty <<'LOGINFO'
 
 ================================================================
- Ceremony machine running (30-45 min).
+ Machine running (30-45 min).
 
- Logs will stream below. The machine exits when done and the log
- stream ends automatically. If it does not stop after ~60 min,
- press Ctrl-C — the interrupt handler will offer to clean up.
+ Logs stream below. The machine exits when done and the stream
+ ends automatically. Ctrl-C at any time — the interrupt handler
+ will offer to destroy the app cleanly.
 ================================================================
 
 LOGINFO
 
 SHA_LOG="$(mktemp)"
-# Pipe flyctl logs through tee: contributor sees everything on stdout,
-# and the full log is saved to SHA_LOG for hash extraction.
 flyctl logs --app "${APP}" --follow 2>&1 | tee "${SHA_LOG}" || true
 
-# Extract the SHA-256 from the log: look for the first 64-char hex that
-# appears after the "SAVE THIS" marker line printed by entrypoint.sh.
-CONTRIBUTION_HASH=""
 CONTRIBUTION_HASH="$(
   awk '
     /SAVE THIS/ { found=1; next }
@@ -374,12 +350,10 @@ else
   cat >/dev/tty <<NOSUMMARY
 
 ================================================================
- Log stream ended — attestation hash not found in output.
+ Log stream ended — attestation hash not captured.
 
- This may mean the machine exited before the contribution
- finished, or you pressed Ctrl-C before the hash was printed.
-
- Check the machine status:
+ The machine may still be running, or exited before the
+ contribution completed. Check status:
    flyctl machine list -a ${APP}
  Retrieve full logs:
    flyctl logs -a ${APP} --no-tail
@@ -388,12 +362,11 @@ NOSUMMARY
 fi
 
 tty_out ""
-if confirm_y "Destroy app ${APP} now? (Recommended — removes all artefacts from Fly infra.)"; then
+if confirm_y "Destroy app ${APP} now? (Removes all artefacts from Fly infra.)"; then
   flyctl apps destroy "${APP}" --yes
-  APP=""   # prevent double-destroy in EXIT trap
+  APP=""
   tty_out "App destroyed. No artefacts remain on Fly infrastructure."
 else
-  tty_out ""
   tty_out "Reminder: flyctl apps destroy ${APP} --yes"
 fi
 

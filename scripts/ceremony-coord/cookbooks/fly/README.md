@@ -93,15 +93,13 @@ disclose it as a further transparency measure.
 
 ---
 
-## 4. The five commands
+## 4. The four commands
 
 If you prefer to run each step explicitly rather than using the launcher, this
 is the full manual flow. Replace every `<placeholder>` with your actual values.
 
-No Docker required: the `--image` flag in command 4 tells Fly to pull the
-ceremony image directly from GitHub Container Registry. If you want to build
-the image from source yourself (for maximum transparency), omit `--image`
-and run the command from the directory containing `Dockerfile` and `fly.toml`.
+No Docker required: `fly machine run` pulls the ceremony image directly from
+GitHub Container Registry. No fly.toml, no local build.
 
 **1. Authenticate with Fly**
 
@@ -111,62 +109,59 @@ flyctl auth login
 
 Opens a browser window. Log in once per session.
 
-**2. Create the app**
+**2. Create the app and scratch volume**
 
 ```
 flyctl apps create qkb-ceremony-<your-handle>
+
+flyctl volumes create ceremony_scratch \
+  --app    qkb-ceremony-<your-handle> \
+  --region fra \
+  --size   60 \
+  --yes
 ```
 
 Your handle is a short identifier — any combination of lowercase letters,
 numbers, and hyphens. It becomes part of the app name, which appears in Fly's
 logs but not in any ceremony artefact. Example: `qkb-ceremony-vitalik`.
 
-**3. Set secrets**
+The volume must be created before the machine runs; `fly machine run` cannot
+auto-create volumes. Frankfurt (`fra`) is the default region; change it if
+you prefer a different data centre.
+
+**3. Start the ceremony machine**
 
 ```
-flyctl secrets set \
-  ROUND=<N> \
-  PREV_ROUND_URL="<url from coordinator>" \
-  R1CS_URL="<url from coordinator>" \
-  PTAU_URL="<url from coordinator>" \
-  SIGNED_PUT_URL="<url from coordinator>" \
-  CONTRIBUTOR_NAME="<your public name>" \
-  CONTRIBUTOR_ENTROPY=<your 32-byte hex> \
-  -a qkb-ceremony-<your-handle>
+fly machine run ghcr.io/identityescroworg/qkb-ceremony:v1 \
+  --app       qkb-ceremony-<your-handle> \
+  --region    fra \
+  --vm-size   performance-cpu-4x \
+  --vm-memory 32768 \
+  --volume    "ceremony_scratch:/data" \
+  --restart   no \
+  --env       "ROUND=<N>" \
+  --env       "PREV_ROUND_URL=<url from coordinator>" \
+  --env       "R1CS_URL=<url from coordinator>" \
+  --env       "PTAU_URL=<url from coordinator>" \
+  --env       "SIGNED_PUT_URL=<url from coordinator>" \
+  --env       "CONTRIBUTOR_NAME=<your public name>" \
+  --env       "CONTRIBUTOR_ENTROPY=<your 32-byte hex>"
 ```
 
-`CONTRIBUTOR_ENTROPY` is stored with Fly's envelope encryption (encrypted with
-a per-secret key, wrapped by a root key stored in Fly's HSM). It is injected
-into the machine's environment at runtime and is never printed by the
-entrypoint script.
+`fly machine run` is the correct Fly primitive for one-shot batch jobs: no
+fly.toml required, no persistent app config, machine exits when the entrypoint
+exits. `--restart no` ensures it does not restart after the run completes.
+
+`CONTRIBUTOR_ENTROPY` is passed as a plain `--env` value. See §6 for the
+security reasoning.
 
 `CONTRIBUTOR_NAME` is the name that will appear in the public contribution log
-at `prove.identityescrow.org/ceremony/status.json`. Use whatever name you want
-to be publicly associated with your contribution.
+at `prove.identityescrow.org/ceremony/status.json`.
 
-**4. Deploy and run**
-
-```
-flyctl deploy \
-  --image ghcr.io/identityescroworg/qkb-ceremony:v1 \
-  --vm-size performance-cpu-4x \
-  --vm-memory 32768 \
-  --strategy immediate \
-  -a qkb-ceremony-<your-handle>
-```
-
-Fly pulls the pre-built ceremony image from GitHub Container Registry, starts
-a `performance-cpu-4x` machine with 32 GB RAM, mounts the 60 GB scratch
-volume, and runs the entrypoint. The machine proceeds automatically through
-download, contribute, verify, and upload. No local Docker build required.
-
-`--strategy immediate` deploys without a health-check wait, which is correct
-for a one-shot job.
-
-**5. Watch the logs**
+**4. Watch the logs**
 
 ```
-flyctl logs -a qkb-ceremony-<your-handle>
+flyctl logs -a qkb-ceremony-<your-handle> --follow
 ```
 
 The contribution phase takes 30-45 minutes. When it finishes you will see an
@@ -214,22 +209,34 @@ toxic waste for any one contributor's round is unknown to all other parties,
 the final key is sound. Your toxic waste is derived from `CONTRIBUTOR_ENTROPY`
 combined with the previous round's intermediate key, entirely within the
 `snarkjs zkey contribute` computation. Fly's infrastructure touches the
-computation but cannot observe the entropy (it is encrypted at rest in secrets
-storage and passed to the process only as an environment variable inside the
-machine). Even if Fly could observe the entropy, that would compromise only
-your specific contribution — it would not compromise the ceremony as a whole,
-because at least one other contributor's entropy remains unknown.
+computation but cannot observe the entropy in a meaningful way — even if Fly
+could see it, that would compromise only your specific contribution, not the
+ceremony as a whole, because at least one other contributor's entropy remains
+unknown.
 
-**Why Fly secrets keep your entropy safe**
+**`--env` vs encrypted secrets — why the launcher uses `--env`**
 
-Fly encrypts each secret individually using envelope encryption: a per-secret
-data key is encrypted with an account-level root key stored in a hardware
-security module. Secrets are decrypted only at machine start, injected into
-the environment, and not persisted to disk. The entrypoint script uses
-`set +x` unconditionally, so bash never echoes the entropy in debug traces.
-The entropy does briefly appear in the Linux process table (visible via `ps`)
-during the ~30-45 minute compute window, but the machine is single-tenant,
-not shared with other Fly customers, and is destroyed immediately after.
+The interactive launcher (`fly-launch.sh`) passes `CONTRIBUTOR_ENTROPY` as a
+plain `--env` flag to `fly machine run`. This is intentional.
+
+`fly machine run` has no native `--secret` flag. The alternative —
+`flyctl secrets set` followed by a separate deploy — requires an additional
+step and a different entrypoint (to read from Fly's secret-injection path),
+with no meaningful gain for the ceremony's security model. The reason: Fly
+secrets are encrypted at rest in an HSM, but they are decrypted and injected
+into the machine's environment at runtime. An adversarial Fly infrastructure
+operator with access to the running machine's memory can read the entropy
+either way. The launcher therefore uses `--env` directly.
+
+One practical consequence: `CONTRIBUTOR_ENTROPY` appears in plain text in the
+Fly Machines API response for this machine (visible to the account holder via
+`fly machine inspect`). This is acceptable — you are the account holder, and
+the value is only relevant for the ~45 minutes the machine is running.
+
+The entrypoint script uses `set +x` unconditionally, so bash never echoes
+the entropy in debug traces. The launcher unsets the variable from the local
+shell immediately after `fly machine run` launches, so it does not linger in
+your terminal session.
 
 **Why one-shot-plus-destroy leaves no residue**
 
@@ -313,7 +320,8 @@ bash fly-launch.sh
 ```
 
 Prompts for all values interactively. Uses the pre-built GHCR image.
-Equivalent to the five explicit commands in §4.
+Equivalent to the four explicit commands in §4 (uses `fly machine run`
+internally).
 
 **Env-file wrapper (requires repo clone)**
 
@@ -325,10 +333,12 @@ $EDITOR contrib.env
 ./launch.sh
 ```
 
-`launch.sh` executes the same five steps from a pre-filled env file.
-Useful if you prefer to edit a file rather than answer prompts.
+`launch.sh` uses `flyctl secrets set` + `flyctl deploy` — the older app-model
+flow. It stores `CONTRIBUTOR_ENTROPY` in Fly's HSM-backed secrets rather than
+passing it as `--env`. Either approach is acceptable for the ceremony's trust
+model (see §6).
 
-In either case, the five-command form in §4 is the canonical reference; use it
+In either case, the four-command form in §4 is the canonical reference; use it
 if anything goes wrong with the scripts.
 
 ---
