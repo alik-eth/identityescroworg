@@ -4,6 +4,12 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { compile, type CompiledCircuit } from '../helpers/compile';
 import { rightPadZero, shaPad } from '../helpers/shaPad';
+// keccak-from-pkBytes off-circuit reference. ethers v5 is already a
+// transitive dep (used in @ethersproject/solidity downstream); using its
+// keccak256 keeps the test surface consistent with web-eng's witness
+// builder, which will also use ethers for address derivation.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { keccak256: ethersKeccak256 } = require('ethers/lib/utils');
 import {
   buildV2CoreWitnessFromFixture,
   loadFixture,
@@ -175,9 +181,8 @@ const MD_PREFIX = Buffer.from([
 ]);
 const SYNTH_MD_OFFSET = 60; // matches Diia's actual offset; keeps mdAttrOffset < 256
 
-function zeros(n: number): number[] {
-  return new Array<number>(n).fill(0);
-}
+// `zeros` helper retired post-§6.8 — every formerly-zero-padded witness slot
+// (leafCertBytes, pkX/pkY, etc.) is now bound to real-fixture values.
 
 /**
  * Build a synthetic signedAttrs blob whose messageDigest at SYNTH_MD_OFFSET
@@ -199,6 +204,29 @@ function buildSyntheticSignedAttrs(bindingDigest: Buffer): {
   MD_PREFIX.copy(bytes, SYNTH_MD_OFFSET);
   bindingDigest.copy(bytes, SYNTH_MD_OFFSET + 17);
   return { bytes, length, mdAttrOffset: SYNTH_MD_OFFSET };
+}
+
+/**
+ * Pack a 32-byte big-endian secp256k1 coordinate into 4 × uint64 limbs, in
+ * the order Secp256k1PkMatch.circom expects (LE across limbs, BE within):
+ *
+ *   limb[3] = bytes[0..7]   (most-significant 64 bits)
+ *   limb[2] = bytes[8..15]
+ *   limb[1] = bytes[16..23]
+ *   limb[0] = bytes[24..31] (least-significant 64 bits)
+ *
+ * Each limb is the BE concatenation of 8 bytes packed into a single uint64.
+ */
+function pkCoordToLimbs(bytes32: Buffer): bigint[] {
+  if (bytes32.length !== 32) throw new Error('expected 32-byte coordinate');
+  const limbs: bigint[] = [0n, 0n, 0n, 0n];
+  for (let l = 0; l < 4; l++) {
+    const off = (3 - l) * 8;
+    let acc = 0n;
+    for (let j = 0; j < 8; j++) acc = (acc << 8n) | BigInt(bytes32[off + j] as number);
+    limbs[l] = acc;
+  }
+  return limbs;
 }
 
 /**
@@ -303,9 +331,30 @@ async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
   const ctxHashLo = BigInt('0x' + ctxDigest.subarray(16, 32).toString('hex'));
   const ctxPaddedBuf = shaPad(ctxPlain);
 
+  // §6.8 — Bind msg.sender to the binding's `pk` field (signed-over by
+  // Diia). The fixture's pk is `0x04 || 0x11×32 || 0x22×32` (synthetic
+  // SEC1-uncompressed admin-ecdsa key); decode → split into X (32) || Y
+  // (32) → pack as 4×64-bit limbs (LE across limbs, BE within) for the
+  // Secp256k1PkMatch witness side. msgSender = uint160(keccak256(pk[1:65])).
+  const bindingObj = JSON.parse(bindingBuf.toString('utf8'));
+  if (!bindingObj.pk || typeof bindingObj.pk !== 'string') {
+    throw new Error('binding.qkb2.json: missing/non-string pk field');
+  }
+  const pkHex = (bindingObj.pk as string).startsWith('0x')
+    ? (bindingObj.pk as string).slice(2)
+    : (bindingObj.pk as string);
+  const pkBytes = Buffer.from(pkHex, 'hex');
+  if (pkBytes.length !== 65 || pkBytes[0] !== 0x04) {
+    throw new Error('binding.pk must be 65-byte SEC1 uncompressed (0x04 || X || Y)');
+  }
+  const pkX = pkCoordToLimbs(pkBytes.subarray(1, 33));
+  const pkY = pkCoordToLimbs(pkBytes.subarray(33, 65));
+  const addrHex = ethersKeccak256(pkBytes.subarray(1, 65)) as string;
+  const expectedMsgSender = BigInt('0x' + addrHex.slice(2 + 24));
+
   return {
     // 14 public inputs (canonical V5 spec §0.1 order).
-    msgSender: 0,
+    msgSender: expectedMsgSender,                  // §6.8
     timestamp: fix.expected.timestamp,             // §6.2
     nullifier: expectedNullifier,                  // §6.6
     ctxHashHi,                                     // §6.7
@@ -374,13 +423,15 @@ async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
     ctxPaddedIn: rightPadZero(ctxPaddedBuf, MAX_CTX_PADDED),
     ctxPaddedLen: ctxPaddedBuf.length,
 
-    // Still-unwired inputs (§6.8-§6.10) — zero-padded.
-    pkX: zeros(4),
-    pkY: zeros(4),
+    // §6.8 — pkX/pkY limbs of the binding's wallet pubkey (Secp256k1PkMatch
+    // asserts they repack identically to parser.pkBytes; Secp256k1AddressDerive
+    // separately hashes parser.pkBytes[1..65] and binds to msgSender public).
+    pkX: pkX.map((x) => x.toString()),
+    pkY: pkY.map((y) => y.toString()),
   };
 }
 
-describe('QKBPresentationV5 — §6.2-§6.9 (parser + 4× SHA + signedAttrs binding + 2× SpkiCommit + nullifier + ctxHash + tbs↔cert consistency)', function () {
+describe('QKBPresentationV5 — §6.2-§6.9 (full body — parser + 4× SHA + 2× SpkiCommit + nullifier + ctxHash + tbs↔cert + msgSender via keccak)', function () {
   this.timeout(1800000);
 
   let circuit: CompiledCircuit;
@@ -687,6 +738,55 @@ describe('QKBPresentationV5 — §6.2-§6.9 (parser + 4× SHA + signedAttrs bind
       subjectSerialValueOffsetInTbs:
         (input.subjectSerialValueOffsetInTbs as number) + 1,
     };
+    let threw = false;
+    try {
+      await circuit.calculateWitness(tampered, true);
+    } catch {
+      threw = true;
+    }
+    expect(threw).to.equal(true);
+  });
+
+  // §6.8 happy-path — assert the witnessed msgSender matches the off-circuit
+  // address derivation `keccak256(parser.pkBytes[1..65])[12..32]`.
+  it('derives msgSender from the binding pk via keccak256 (§6.8)', async () => {
+    const input = await buildV5SmokeWitness();
+    const w = await circuit.calculateWitness(input, true);
+    await circuit.checkConstraints(w);
+    // Synthetic admin-ecdsa fixture pk = 0x04 || 0x11×32 || 0x22×32. Derive
+    // address off-circuit and verify the witness matches.
+    const pkUncompressed = Buffer.concat([
+      Buffer.alloc(32, 0x11),
+      Buffer.alloc(32, 0x22),
+    ]);
+    const expectedAddrHex = ethersKeccak256(pkUncompressed).slice(2 + 24);
+    expect((input.msgSender as bigint).toString(16).padStart(40, '0'))
+      .to.equal(expectedAddrHex);
+  });
+
+  // §6.8 tamper — flip a limb of pkX. The Secp256k1PkMatch limb-equality
+  // with parser.pkBytes (extracted from binding) fails on any single-limb
+  // mismatch.
+  it('rejects a tampered pkX[0] (§6.8 Secp256k1PkMatch)', async () => {
+    const input = await buildV5SmokeWitness();
+    const pkXTampered = [...(input.pkX as string[])];
+    pkXTampered[0] = (BigInt(pkXTampered[0] as string) + 1n).toString();
+    const tampered = { ...input, pkX: pkXTampered };
+    let threw = false;
+    try {
+      await circuit.calculateWitness(tampered, true);
+    } catch {
+      threw = true;
+    }
+    expect(threw).to.equal(true);
+  });
+
+  // §6.8 tamper — flip the public msgSender signal. The keccak256
+  // chain (Secp256k1AddressDerive) outputs an address that no longer
+  // matches the witnessed public signal.
+  it('rejects a tampered msgSender public signal (§6.8 keccak link)', async () => {
+    const input = await buildV5SmokeWitness();
+    const tampered = { ...input, msgSender: (input.msgSender as bigint) ^ 1n };
     let threw = false;
     try {
       await circuit.calculateWitness(tampered, true);

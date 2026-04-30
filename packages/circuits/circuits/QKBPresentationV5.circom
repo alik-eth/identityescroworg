@@ -10,6 +10,7 @@ include "./primitives/PoseidonChunkHashVar.circom";
 include "./primitives/Bytes32ToHiLo.circom";
 include "./primitives/SpkiCommit.circom";
 include "./secp/Secp256k1PkMatch.circom";
+include "./secp/Secp256k1AddressDerive.circom";
 include "circomlib/circuits/comparators.circom";
 include "circomlib/circuits/multiplexer.circom";
 
@@ -471,20 +472,65 @@ template QKBPresentationV5() {
         activeMask69[i].out * (leafTbsByte[i].out[0] - subjectSerial.rawBytes[i]) === 0;
     }
 
-    // Witness-anchor for the still-unwired public signal (§6.8 wires
-    // Secp256k1PkMatch + keccak256 → msgSender; after that the anchor
-    // goes empty).
+    // §6.8 — Secp256k1PkMatch + Keccak256 → msgSender bind.
     //
-    // Now constrained for real (removed from the sum):
-    //   timestamp, policyLeafHash (§6.2)
-    //   bindingHashHi/Lo, signedAttrsHashHi/Lo, leafTbsHashHi/Lo (§6.3)
-    //   leafSpkiCommit, intSpkiCommit (§6.5)
-    //   nullifier (§6.6)
-    //   ctxHashHi, ctxHashLo (§6.7)
-    //   (§6.9 closes the leafTbs ↔ leafCert byte-equality gate but
-    //    doesn't bind a public signal — its job is internal soundness.)
-    signal _unusedHash;
-    _unusedHash <== msgSender;
+    // Two-step gate:
+    //   (a) Secp256k1PkMatch asserts that parser.pkBytes (the user's
+    //       uncompressed wallet pubkey embedded in the binding's `pk`
+    //       field, signed-over by Diia QES) is byte-identical to the
+    //       4×64-bit limb encoding of the witness pkX/pkY. This pins
+    //       pkX/pkY to the genuine-cert wallet pubkey. (V4 template,
+    //       reused unchanged.)
+    //   (b) Secp256k1AddressDerive runs Keccak-256 (vendored
+    //       bkomuves/hash-circuits @
+    //       4ef64777cc9b78ba987fbace27e0be7348670296, MIT) over
+    //       parser.pkBytes[1..65] — the 64-byte uncompressed pubkey
+    //       sans the 0x04 SEC1 prefix — and emits the low 160 bits of
+    //       the digest packed as a single field element (Ethereum
+    //       address convention: digest[12..32] big-endian). Equality-
+    //       bound to the public msgSender signal.
+    //
+    // Soundness: closes the gap V4's Secp256k1PkMatch alone left open.
+    // Without (b), msgSender would be unconstrained vs. parser.pkBytes,
+    // letting an attacker re-prove a stolen .p7s under their own wallet
+    // by simply lying about msgSender. With (b), msgSender is uniquely
+    // determined by the binding's `pk` field via the keccak chain.
+    //
+    // Cost: ~50K (Secp256k1PkMatch limb pack + range checks) + ~150K
+    // (Keccak_256_bytes(64) — single absorb block since 64 B < 136 B
+    // rate) + ~20 (linear address packing) ≈ 200K. Per spec amendment
+    // 55e388f: "Secp256k1PkMatch | ~150K | Binds proof to msg.sender
+    // (includes Keccak256 over uncompressed pk)".
+    component pkMatch = Secp256k1PkMatch();
+    for (var i = 0; i < 65; i++) pkMatch.pkBytes[i] <== parser.pkBytes[i];
+    for (var i = 0; i < 4; i++) {
+        pkMatch.pkX[i] <== pkX[i];
+        pkMatch.pkY[i] <== pkY[i];
+    }
+
+    component pkAddr = Secp256k1AddressDerive();
+    for (var i = 0; i < 64; i++) {
+        pkAddr.pkBytes64[i] <== parser.pkBytes[i + 1];
+    }
+    pkAddr.addr === msgSender;
+
+    // After §6.8, every public signal in V5 spec §0.1 is bound to a
+    // circuit-computed value. The witness-anchor is no longer needed.
+    //
+    // Constrained-for-real summary (all 14):
+    //   msgSender                 (§6.8) ← keccak256(parser.pkBytes[1..65])[12..32]
+    //   timestamp                 (§6.2) ← parser.tsValue
+    //   nullifier                 (§6.6) ← NullifierDerive over X509SubjectSerial
+    //   ctxHashHi, ctxHashLo      (§6.7) ← Bytes32ToHiLo(sha256(parser.ctxBytes))
+    //   bindingHashHi, bindingHashLo (§6.3) ← Bytes32ToHiLo(sha256(bindingBytes))
+    //   signedAttrsHashHi, signedAttrsHashLo (§6.3) ← Bytes32ToHiLo(sha256(signedAttrsBytes))
+    //   leafTbsHashHi, leafTbsHashLo (§6.3) ← Bytes32ToHiLo(sha256(leafTbsBytes))
+    //   policyLeafHash            (§6.2) ← parser.policyLeafHash
+    //   leafSpkiCommit            (§6.5) ← SpkiCommit(leafXLimbs, leafYLimbs)
+    //   intSpkiCommit             (§6.5) ← SpkiCommit(intXLimbs, intYLimbs)
+    //
+    // (§6.9 closes the leafTbs ↔ leafCert byte-equality gate as an
+    // internal-soundness invariant — doesn't bind a public signal.)
 }
 
 component main { public [
