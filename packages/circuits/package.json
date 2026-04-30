@@ -6,7 +6,7 @@
   "main": "src/index.ts",
   "types": "src/index.ts",
   "scripts": {
-    "test": "mocha --reporter spec --timeout 600000 -r ts-node/register 'test/**/*.test.ts'",
+    "test": "mocha --reporter spec --exit --timeout 600000 -r ts-node/register 'test/**/*.test.ts'",
     "test:vitest": "vitest run",
     "build": "bash ceremony/scripts/compile.sh",
     "lint": "biome check .",
