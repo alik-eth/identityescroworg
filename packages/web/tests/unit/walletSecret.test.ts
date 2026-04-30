@@ -143,6 +143,12 @@ const SUBJECT_B = new Uint8Array(32).fill(0xbb);
 const ADDR_A: `0x${string}` = '0x0102030405060708090a0b0c0d0e0f1011121314';
 const ADDR_B: `0x${string}` = '0x1112131415161718191a1b1c1d1e1f2021222324';
 
+// Re-declared inline so the test asserts against an independent
+// source-of-truth — if the lib's constant ever drifts, the test
+// catches it via the byte-equality assertions in the parity tests.
+const P_BN254 =
+  21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+
 /* ------------------------------------------------------------------ */
 /* EOA path                                                           */
 /* ------------------------------------------------------------------ */
@@ -206,43 +212,101 @@ describe('deriveWalletSecretEoa', () => {
     expect((observed as { raw: Uint8Array }).raw).toEqual(expected);
   });
 
-  it('reproduces the HKDF formula from orchestration §1.2 exactly + clears top 2 bits', async () => {
+  it('reproduces the HKDF formula from orchestration §1.2 exactly + reduces mod p_bn254', async () => {
     // The function is a thin wrapper over @noble/hashes/hkdf with
-    // a BN254-fit truncation step. We recompute the expected output
-    // from the same primitives and assert byte-equality so any
-    // future refactor immediately fails this assertion.
+    // a canonical mod-p_bn254 reduction step. We recompute the
+    // expected output from the same primitives and assert byte-
+    // equality so any future refactor immediately fails this.
     const sigHex = '0x' + 'cd'.repeat(65);
     const client: SignMessageClient = {
       signMessage: async () => sigHex as `0x${string}`,
     };
     const ikm = new Uint8Array(65).fill(0xcd);
-    const expected = hkdf(
+    const hkdfOut = hkdf(
       sha256,
       ikm,
       new TextEncoder().encode('qkb-walletsecret-v1'),
       SUBJECT_A,
       32,
     );
-    // BN254 fit: clear the top 2 bits of byte 0 (big-endian high
-    // byte). Matches @qkb/circuits §6.4 truncation convention.
-    expected[0] = (expected[0] as number) & 0x3f;
+    // Canonical reduction: bytes → bigint → mod p → bytes.
+    let asBig = 0n;
+    for (const b of hkdfOut) asBig = (asBig << 8n) | BigInt(b);
+    const reduced = asBig % P_BN254;
+    const expected = new Uint8Array(32);
+    let v = reduced;
+    for (let i = 31; i >= 0; i--) {
+      expected[i] = Number(v & 0xffn);
+      v >>= 8n;
+    }
     const got = await deriveWalletSecretEoa(client, SUBJECT_A);
     expect(got).toEqual(expected);
   });
 
-  it('output[0] always has its top 2 bits cleared (BN254 range fit)', async () => {
-    // The HKDF top-2 bits are uniformly random, so a non-truncated
-    // implementation would produce ~75% of outputs with at least
-    // one of the top 2 bits set. We sample 8 distinct subjectSerials
-    // through the deterministic mock signer and assert all outputs
-    // satisfy the bound — catches a regression that drops the
-    // truncation step.
+  it('output is always strictly < p_bn254 (canonical BN254 reduction)', async () => {
+    // The locked invariant. The HKDF output is uniformly distributed
+    // in [0, 2^256), and p_bn254 ≈ 0.7 × 2^254, so a mask-2-bits
+    // implementation (out[0] &= 0x3f, output ∈ [0, 2^254)) would
+    // still yield ~30% of samples with values ≥ p. Sampling 32
+    // distinct subjectSerials reduces the false-negative probability
+    // to (1 - 0.3)^32 ≈ 7e-6 against a regression that drops the
+    // canonical reduction step in favour of the older mask form.
     const client = makeDeterministicSigner('walletA');
-    for (let i = 0; i < 8; i++) {
-      const subj = new Uint8Array(32).fill(0x10 + i);
+    for (let i = 0; i < 32; i++) {
+      const subj = new Uint8Array(32);
+      // Spread the input space so distinct samples produce distinct
+      // HKDF outputs through the deterministic mock signer.
+      for (let j = 0; j < 32; j++) subj[j] = (i * 31 + j) & 0xff;
       const out = await deriveWalletSecretEoa(client, subj);
-      expect(out[0]! & 0xc0).toBe(0);
+      let asBig = 0n;
+      for (const b of out) asBig = (asBig << 8n) | BigInt(b);
+      expect(asBig).toBeLessThan(P_BN254);
     }
+  });
+
+  it('reduces a constructed HKDF output that exceeds p_bn254', async () => {
+    // Defence-in-depth against the false-negative branch of the
+    // sampling test above. We construct a signature that produces
+    // an HKDF output we can predict, verify it's ≥ p (so a missing
+    // reduction would fail this assertion), and check the function
+    // returns the canonical representative in [0, p).
+    const enc = new TextEncoder();
+    // Brute-force a signature byte until the resulting HKDF output
+    // exceeds p. ~30% probability per sample, so this finishes fast.
+    let chosenIkm: Uint8Array | null = null;
+    let chosenHkdfBig = 0n;
+    for (let probe = 0; probe < 64; probe++) {
+      const ikm = new Uint8Array(65).fill(probe);
+      const out = hkdf(
+        sha256,
+        ikm,
+        enc.encode('qkb-walletsecret-v1'),
+        SUBJECT_A,
+        32,
+      );
+      let asBig = 0n;
+      for (const b of out) asBig = (asBig << 8n) | BigInt(b);
+      if (asBig >= P_BN254) {
+        chosenIkm = ikm;
+        chosenHkdfBig = asBig;
+        break;
+      }
+    }
+    expect(chosenIkm).not.toBeNull();
+    expect(chosenHkdfBig).toBeGreaterThan(P_BN254);
+    // Build a signer that returns the chosen ikm as its signature.
+    const sigHex =
+      '0x' +
+      Array.from(chosenIkm!, (b) => b.toString(16).padStart(2, '0')).join('');
+    const client: SignMessageClient = {
+      signMessage: async () => sigHex as `0x${string}`,
+    };
+    const got = await deriveWalletSecretEoa(client, SUBJECT_A);
+    let gotBig = 0n;
+    for (const b of got) gotBig = (gotBig << 8n) | BigInt(b);
+    // The canonical representative.
+    expect(gotBig).toBe(chosenHkdfBig % P_BN254);
+    expect(gotBig).toBeLessThan(P_BN254);
   });
 
   it('rejects an empty subjectSerialPacked', async () => {

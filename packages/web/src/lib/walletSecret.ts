@@ -51,6 +51,20 @@ const HKDF_SALT = 'qkb-walletsecret-v1';
 const SIGN_MESSAGE_PREFIX = 'qkb-personal-secret-v1';
 const ARGON2_SALT_PREFIX = 'qkb-walletsecret-v1';
 
+/**
+ * BN254 scalar field prime (the value the snarkjs / Circom witness
+ * arithmetic is reduced modulo). Hex form
+ *   0x30644E72E131A029B85045B68181585D2833E84879B9709143E1F593F0000001
+ * ≈ 0.7 × 2^254. Outputs reduced mod p_bn254 fit in 32 bytes.
+ *
+ * Sourced from the bn254 specification (also encoded in
+ * `@noble/curves/bn254` and `snarkjs`'s ffjavascript). We re-declare
+ * here rather than depend on @noble/curves to avoid bundle-size
+ * inflation for a single 32-byte constant.
+ */
+const P_BN254 =
+  21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+
 /** Argon2id parameters (orchestration §1.2 + spec §SCW path). */
 export const ARGON2_PARAMS = {
   /** memory cost, KiB (64 MiB = 64 * 1024). */
@@ -128,10 +142,43 @@ function concatBytes(...parts: Uint8Array[]): Uint8Array {
   return out;
 }
 
+/** Big-endian Uint8Array → bigint. */
+function bytesToBigIntBE(bytes: Uint8Array): bigint {
+  let result = 0n;
+  for (const b of bytes) {
+    result = (result << 8n) | BigInt(b);
+  }
+  return result;
+}
+
+/**
+ * bigint → fixed-length big-endian Uint8Array. Throws if `value`
+ * doesn't fit in `length` bytes — defensive guard against a future
+ * caller passing a value that wasn't reduced.
+ */
+function bigIntToBytesBE(value: bigint, length: number): Uint8Array {
+  if (value < 0n) {
+    throw new Error('bigIntToBytesBE: negative value');
+  }
+  const out = new Uint8Array(length);
+  let v = value;
+  for (let i = length - 1; i >= 0; i--) {
+    out[i] = Number(v & 0xffn);
+    v >>= 8n;
+  }
+  if (v !== 0n) {
+    throw new Error(
+      `bigIntToBytesBE: value does not fit in ${length} bytes`,
+    );
+  }
+  return out;
+}
+
 /**
  * EOA path: derive a 32-byte walletSecret by signing a deterministic
  * message (raw bytes!) with the wallet, then HKDF-SHA256 over the
- * signature with the top-2 bits cleared to fit BN254.
+ * signature with the result reduced mod p_bn254 to fit the BN254
+ * scalar field.
  *
  * The signing message binds the subjectSerial bytes so a single
  * wallet that registers two distinct identities (e.g. before and
@@ -143,6 +190,17 @@ function concatBytes(...parts: Uint8Array[]): Uint8Array {
  * web plan Task 1 Step 1): drift to string form would produce a
  * different signature for the same bytes and silently break any
  * future rotation that re-derives via the locked formula.
+ *
+ * BN254 reduction: HKDF emits 256 random bits but the circuit
+ * arithmetic is mod p_bn254 ≈ 0.7 × 2^254. The earlier mask-2-bits
+ * approach (`out[0] &= 0x3f`) only guaranteed `out < 2^254`, which
+ * leaves ~30% of HKDF outputs in the [p, 2^254) band that wraps mod
+ * p inside the circuit. The on-chain commitment is identical either
+ * way (the circuit reduces mod p anyway), but cross-implementation
+ * audit clarity demands the canonical form: reduce to a unique
+ * representative in [0, p) here, so wallet-side and circuit-side
+ * agree on the exact field element pre-Poseidon. Aligns with
+ * circuits-eng's helper.
  *
  * Determinism depends on the wallet using RFC-6979 deterministic
  * ECDSA. MetaMask, Rabby, Frame, Coinbase Wallet, and Ledger Nano
@@ -165,18 +223,18 @@ export async function deriveWalletSecretEoa(
   );
   const sigHex = await client.signMessage({ message: { raw: messageBytes } });
   const ikm = hexToBytes(sigHex);
-  const out = hkdf(
+  const hkdfOut = hkdf(
     sha256,
     ikm,
     utf8.encode(HKDF_SALT),
     subjectSerialPacked,
     WALLET_SECRET_BYTES,
   );
-  // BN254 fit: clear the top 2 bits of the big-endian high byte, so
-  // out ∈ [0, 2^254). Matches the @qkb/circuits §6.4 truncation
-  // convention so wallet-side and circuit-side agree byte-for-byte.
-  out[0] = (out[0] as number) & 0x3f;
-  return out;
+  // Canonical mod-p reduction: bytes → bigint → mod p_bn254 → bytes.
+  // Result is in [0, p_bn254), strict — the only representative the
+  // circuit's witness arithmetic recognises.
+  const reduced = bytesToBigIntBE(hkdfOut) % P_BN254;
+  return bigIntToBytesBE(reduced, WALLET_SECRET_BYTES);
 }
 
 /**
