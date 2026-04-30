@@ -26,7 +26,30 @@
 set +x
 set -euo pipefail
 
-GHCR_IMAGE="ghcr.io/identityescroworg/qkb-ceremony:v1"
+# ── image reference ──────────────────────────────────────────────────────────
+# CONTRIBUTORS: this is the SHA-256 digest of the GHCR ceremony image. Pinning
+# by digest (not tag) means the team-lead cannot swap the image under your
+# feet — Docker/Fly will pull exactly this digest or fail. To independently
+# verify, compare against the digest published in the coordinator's DM and
+# at:  https://prove.identityescrow.org/ceremony/image-digest.txt
+#
+# TEAM-LEAD: after `docker push` (README §9), copy the resulting digest into
+# GHCR_IMAGE_DIGEST below, re-publish launcher.sh to R2, and update the
+# image-digest.txt object. Contributors NEVER see a moving target.
+GHCR_IMAGE_REPO="ghcr.io/identityescroworg/qkb-ceremony"
+GHCR_IMAGE_TAG="v1"          # human-readable, used only as fallback in DEV
+GHCR_IMAGE_DIGEST=""         # set to "sha256:abc123..." after first push
+
+# Build the canonical image reference. Prefer digest; fall back to tag with a
+# loud warning (DEV mode only — never publish a launcher with empty digest).
+if [ -n "$GHCR_IMAGE_DIGEST" ]; then
+  GHCR_IMAGE="${GHCR_IMAGE_REPO}@${GHCR_IMAGE_DIGEST}"
+  IMAGE_REF_KIND="digest-pinned"
+else
+  GHCR_IMAGE="${GHCR_IMAGE_REPO}:${GHCR_IMAGE_TAG}"
+  IMAGE_REF_KIND="TAG-ONLY (dev)"
+fi
+
 DEFAULT_REGION="fra"
 
 # ── state (used by cleanup trap) ─────────────────────────────────────────────
@@ -223,8 +246,22 @@ cat >/dev/tty <<CONFIRM
    Contributor: ${CONTRIBUTOR_NAME}
    Entropy:     ${ENTROPY_SOURCE}
    Image:       ${GHCR_IMAGE}
+   Image ref:   ${IMAGE_REF_KIND}
 ================================================================
 CONFIRM
+
+if [ "$IMAGE_REF_KIND" = "TAG-ONLY (dev)" ]; then
+  cat >/dev/tty <<'TAGWARN'
+
+  ⚠  WARNING: image is referenced by tag, not digest.
+     The team-lead has not yet pinned a digest in this launcher.
+     A tag-pinned image can be silently replaced; a digest-pinned
+     image cannot. If you obtained this launcher from the official
+     coordinator URL and the published digest is empty, that's
+     expected pre-first-push. Otherwise STOP and re-fetch the launcher.
+
+TAGWARN
+fi
 
 confirm_n "Proceed?" || { tty_out "Aborted."; exit 0; }
 
@@ -337,6 +374,8 @@ if [ -n "$CONTRIBUTION_HASH" ]; then
    Round:           ${ROUND}
    Contributor:     ${CONTRIBUTOR_NAME}
    Attestation SHA: ${CONTRIBUTION_HASH}
+   Image ran:       ${GHCR_IMAGE}
+   Image ref:       ${IMAGE_REF_KIND}
 
  Save this hash and your DM thread with the coordinator.
  That is your complete contribution record.

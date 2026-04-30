@@ -250,6 +250,30 @@ from the volume before exiting. `flyctl apps destroy` then deallocates the
 volume entirely. Neither the intermediate nor the output zkey persists on Fly
 infrastructure beyond the lifetime of a single job run.
 
+**Image is digest-pinned, not tag-pinned**
+
+The launcher pins the GHCR ceremony image by SHA-256 digest
+(`ghcr.io/identityescroworg/qkb-ceremony@sha256:<digest>`), not by mutable
+tag (`:v1`). This closes a real supply-chain hole: even with push access to
+the GHCR namespace, an attacker cannot replace the image bytes that
+contributors actually pull, because Docker/Fly will refuse to use anything
+whose computed digest does not match what the launcher requested. A
+contributor who runs the launcher from round-3 and the launcher from round-7
+is mathematically certain they ran the same code, even if the team-lead
+re-published the `:v1` tag in between.
+
+To independently verify the digest is the one the coordinator intended,
+compare the value in the launcher script (or in the pre-launch confirmation
+block) against the digest published at:
+
+```
+https://prove.identityescrow.org/ceremony/image-digest.txt
+```
+
+The launcher prints the resolved image reference in both the pre-launch
+confirmation and the post-run contribution summary, so the digest is part
+of the contributor's permanent record.
+
 ---
 
 ## 7. Cost
@@ -383,6 +407,37 @@ docker tag  ghcr.io/identityescroworg/qkb-ceremony:v1 \
             ghcr.io/identityescroworg/qkb-ceremony:latest
 docker push ghcr.io/identityescroworg/qkb-ceremony:latest
 ```
+
+**Capture and pin the image digest (CRITICAL — do not skip)**
+
+Tag-pinned images are mutable; digest-pinned images are not. The launcher
+refuses to leave the "TAG-ONLY (dev)" warning state until you embed a digest.
+
+After `docker push`, capture the digest:
+
+```
+DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' \
+  ghcr.io/identityescroworg/qkb-ceremony:v1 | awk -F@ '{print $2}')
+echo "$DIGEST"   # sha256:<64-hex>
+```
+
+Then:
+
+1. Edit `launcher.sh` and set `GHCR_IMAGE_DIGEST="$DIGEST"`.
+2. Re-publish the launcher to R2 (see "Hosting `launcher.sh` on R2" below).
+3. Publish the digest as a separate object so contributors can verify
+   independently (one-byte-at-a-time tampering on the launcher would still
+   fail this cross-check):
+
+   ```
+   echo "$DIGEST" > /tmp/image-digest.txt
+   wrangler r2 object put prove-identityescrow-org/ceremony/image-digest.txt \
+     --file /tmp/image-digest.txt \
+     --content-type "text/plain; charset=utf-8"
+   ```
+
+4. Send the digest in the coordinator's round DM template so contributors
+   have a third channel to verify against.
 
 **Make the package public**
 
