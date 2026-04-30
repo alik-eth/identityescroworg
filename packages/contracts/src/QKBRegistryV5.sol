@@ -380,8 +380,14 @@ contract QKBRegistryV5 is IQKBRegistry {
         bytes32 commitment  = bytes32(sig.identityCommitment);
         bytes32 nullifierBytes = bytes32(sig.nullifier);
 
-        bytes32 storedCommit = identityCommitments[fingerprint];
-        if (storedCommit == bytes32(0)) {
+        // Discriminator: identityWallets[fp] == address(0) iff fingerprint
+        // is unclaimed. We pivot on the wallet binding, not the commitment,
+        // so a (cosmologically improbable but not zero-probability) Poseidon₂
+        // output of zero cannot misroute a legitimate repeat-claim back into
+        // the first-claim branch. address(0) is structurally unreachable as
+        // a legitimate msg.sender (no private key), so the sentinel is sound
+        // for all valid registrations. Per codex review on d12822d (P2 fix).
+        if (identityWallets[fingerprint] == address(0)) {
             // ----- First claim path -----
             // Wallet uniqueness: this wallet must not already hold ANY
             // identity (V5.1 invariant 5). Without this gate one wallet
@@ -405,6 +411,7 @@ contract QKBRegistryV5 is IQKBRegistry {
             // Commitment must match the originally-stored value. The wallet
             // proves consistent (subjectSerial, walletSecret) → same Poseidon₂
             // commitment.
+            bytes32 storedCommit = identityCommitments[fingerprint];
             if (storedCommit != commitment) revert CommitmentMismatch();
 
             // Per-(identity, ctx) anti-Sybil (V5.1 invariant 3, monotonic).
