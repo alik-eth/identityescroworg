@@ -2,8 +2,8 @@
 pragma solidity 0.8.24;
 
 import {Test} from "forge-std/Test.sol";
-import {QKBRegistryV5, IGroth16VerifierV5} from "../src/QKBRegistryV5.sol";
-import {Groth16VerifierV5} from "../src/Groth16VerifierV5.sol";
+import {QKBRegistryV5, IGroth16VerifierV5_1} from "../src/QKBRegistryV5.sol";
+import {Groth16VerifierV5_1Placeholder} from "../src/Groth16VerifierV5_1Placeholder.sol";
 import {P256Verify} from "../src/libs/P256Verify.sol";
 import {Poseidon} from "../src/libs/Poseidon.sol";
 
@@ -20,7 +20,7 @@ import {Poseidon} from "../src/libs/Poseidon.sol";
 ///     full-state-assertion tests in §6.7.
 contract QKBRegistryV5RegisterTest is Test {
     QKBRegistryV5 internal registry;
-    Groth16VerifierV5 internal verifier;
+    Groth16VerifierV5_1Placeholder internal verifier;
 
     address internal admin = address(0xA1);
     address internal holder = address(0xB0B);
@@ -79,9 +79,9 @@ contract QKBRegistryV5RegisterTest is Test {
         // Warp to a realistic timestamp so Gate 5's freshness window is
         // exercised against meaningful arithmetic (block.timestamp - 1 ≫ 0).
         vm.warp(2_000_000_000); // ~2033-05-18, well past current
-        verifier = new Groth16VerifierV5();
+        verifier = new Groth16VerifierV5_1Placeholder();
         registry = new QKBRegistryV5(
-            IGroth16VerifierV5(address(verifier)),
+            IGroth16VerifierV5_1(address(verifier)),
             admin,
             initialTrustRoot,
             initialPolicyRoot
@@ -224,23 +224,36 @@ contract QKBRegistryV5RegisterTest is Test {
         // hash into two BN254 field elements). This matches what Gate 2a
         // will compute on-chain.
         (uint256 saHi, uint256 saLo) = _hashHiLo(BASELINE_SIGNED_ATTRS);
+        // V5.1 baseline: register-mode no-ops bind rotationOldCommitment
+        // to identityCommitment AND rotationNewWallet to msgSender. Default
+        // identityCommitment / identityFingerprint are arbitrary non-zero
+        // sentinels — sufficient for Gate 1-4 tests; V5.1 register tests in
+        // QKBRegistryV5_1.t.sol exercise the new mappings explicitly.
+        uint256 baselineFp     = uint256(keccak256(abi.encodePacked("v51-test-fp", sender)));
+        uint256 baselineCommit = uint256(keccak256(abi.encodePacked("v51-test-commit", sender)));
         return QKBRegistryV5.PublicSignals({
-            msgSender:         uint256(uint160(sender)),
+            msgSender:             uint256(uint160(sender)),
             // block.timestamp - 1 second so the binding is recent (well
             // within MAX_BINDING_AGE = 1 hour) but not future-dated.
-            timestamp:         block.timestamp - 1,
-            nullifier:         uint256(0xDEADBEEF),
-            ctxHashHi:         0,
-            ctxHashLo:         0,
-            bindingHashHi:     0,
-            bindingHashLo:     0,
-            signedAttrsHashHi: saHi,
-            signedAttrsHashLo: saLo,
-            leafTbsHashHi:     0,
-            leafTbsHashLo:     0,
-            policyLeafHash:    BASELINE_POLICY_LEAF_HASH,
-            leafSpkiCommit:    baselineLeafSpkiCommit,
-            intSpkiCommit:     baselineIntSpkiCommit
+            timestamp:             block.timestamp - 1,
+            nullifier:             uint256(0xDEADBEEF),
+            ctxHashHi:             0,
+            ctxHashLo:             0,
+            bindingHashHi:         0,
+            bindingHashLo:         0,
+            signedAttrsHashHi:     saHi,
+            signedAttrsHashLo:     saLo,
+            leafTbsHashHi:         0,
+            leafTbsHashLo:         0,
+            policyLeafHash:        BASELINE_POLICY_LEAF_HASH,
+            leafSpkiCommit:        baselineLeafSpkiCommit,
+            intSpkiCommit:         baselineIntSpkiCommit,
+            // V5.1 wallet-bound amendment fields.
+            identityFingerprint:   baselineFp,
+            identityCommitment:    baselineCommit,
+            rotationMode:          0,                 // register mode
+            rotationOldCommitment: baselineCommit,    // no-op bind
+            rotationNewWallet:     uint256(uint160(sender))  // no-op bind
         });
     }
 
@@ -291,8 +304,10 @@ contract QKBRegistryV5RegisterTest is Test {
         QKBRegistryV5.Groth16Proof memory proof = _baselineProof();
         QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
 
-        // The 14-signal input array packed by register() per V5 spec §0.1.
-        uint256[14] memory expectedInput = [
+        // The 19-signal input array packed by register() per V5.1 spec /
+        // orchestration §1.1. Indices [0..13] preserve V5 semantics; [14..18]
+        // are V5.1 wallet-bound amendment additions.
+        uint256[19] memory expectedInput = [
             sig.msgSender,
             sig.timestamp,
             sig.nullifier,
@@ -306,10 +321,15 @@ contract QKBRegistryV5RegisterTest is Test {
             sig.leafTbsHashLo,
             sig.policyLeafHash,
             sig.leafSpkiCommit,
-            sig.intSpkiCommit
+            sig.intSpkiCommit,
+            sig.identityFingerprint,
+            sig.identityCommitment,
+            sig.rotationMode,
+            sig.rotationOldCommitment,
+            sig.rotationNewWallet
         ];
         bytes memory expectedCall = abi.encodeCall(
-            IGroth16VerifierV5.verifyProof,
+            IGroth16VerifierV5_1.verifyProof,
             (proof.a, proof.b, proof.c, expectedInput)
         );
         vm.expectCall(address(verifier), expectedCall);
@@ -324,7 +344,7 @@ contract QKBRegistryV5RegisterTest is Test {
         // Mock the verifier to reject any verifyProof call.
         vm.mockCall(
             address(verifier),
-            abi.encodeWithSelector(IGroth16VerifierV5.verifyProof.selector),
+            abi.encodeWithSelector(IGroth16VerifierV5_1.verifyProof.selector),
             abi.encode(false)
         );
 
@@ -351,50 +371,64 @@ contract QKBRegistryV5RegisterTest is Test {
     ///   [3]=ctxHi [4]=ctxLo [5]=bindHi [6]=bindLo
     ///   [7]=saHi [8]=saLo [9]=leafTbsHi [10]=leafTbsLo
     ///   [11]=policyLeafHash [12]=leafSpkiCommit [13]=intSpkiCommit
+    ///   [14]=identityFingerprint [15]=identityCommitment
+    ///   [16]=rotationMode [17]=rotationOldCommitment [18]=rotationNewWallet
     /// We construct unique values per slot and assert via vm.expectCall
     /// that the exact array reaches the verifier — index drift would show
     /// up as a calldata mismatch on the expectCall.
     function test_register_publicSignalLayout_matchesSpec_v5_section_0_1() public {
         QKBRegistryV5.Groth16Proof memory proof = _baselineProof();
-        // Sentinels 1001..1013 in slots [1..13] (slot [0] = uint160(holder))
-        // so any index drift in the packing surfaces as a value mismatch
-        // in expectCall's ABI-equality check. We expect register() to
-        // revert at Gate 2a (BadSignedAttrsHi) because the sentinels don't
-        // match the on-chain-derived values — but Gate 1 runs first, so
-        // vm.expectCall still records the verifier call before the revert.
+        // Sentinels 1001..1018 in slots [1..15] + [17..18] (slot [0] =
+        // uint160(holder); slot [16] = 0 to satisfy the V5.1 register-mode
+        // gate). Any index drift in the packing surfaces as a value
+        // mismatch in expectCall's ABI-equality check. We expect register()
+        // to revert at Gate 2a (BadSignedAttrsHi) because the sentinels
+        // don't match the on-chain-derived values — but Gate 1 runs first,
+        // so vm.expectCall still records the verifier call before the revert.
         QKBRegistryV5.PublicSignals memory sig = QKBRegistryV5.PublicSignals({
-            msgSender:         uint256(uint160(holder)),
-            timestamp:         1001,
-            nullifier:         1002,
-            ctxHashHi:         1003,
-            ctxHashLo:         1004,
-            bindingHashHi:     1005,
-            bindingHashLo:     1006,
-            signedAttrsHashHi: 1007,
-            signedAttrsHashLo: 1008,
-            leafTbsHashHi:     1009,
-            leafTbsHashLo:     1010,
-            policyLeafHash:    1011,
-            leafSpkiCommit:    1012,
-            intSpkiCommit:     1013
+            msgSender:             uint256(uint160(holder)),
+            timestamp:             1001,
+            nullifier:             1002,
+            ctxHashHi:             1003,
+            ctxHashLo:             1004,
+            bindingHashHi:         1005,
+            bindingHashLo:         1006,
+            signedAttrsHashHi:     1007,
+            signedAttrsHashLo:     1008,
+            leafTbsHashHi:         1009,
+            leafTbsHashLo:         1010,
+            policyLeafHash:        1011,
+            leafSpkiCommit:        1012,
+            intSpkiCommit:         1013,
+            identityFingerprint:   1014,
+            identityCommitment:    1015,
+            rotationMode:          0,    // register-mode required at slot [16]
+            rotationOldCommitment: 1017,
+            rotationNewWallet:     1018
         });
 
-        uint256[14] memory expected = [
+        uint256[19] memory expected = [
             sig.msgSender, sig.timestamp, sig.nullifier,
             sig.ctxHashHi, sig.ctxHashLo,
             sig.bindingHashHi, sig.bindingHashLo,
             sig.signedAttrsHashHi, sig.signedAttrsHashLo,
             sig.leafTbsHashHi, sig.leafTbsHashLo,
             sig.policyLeafHash,
-            sig.leafSpkiCommit, sig.intSpkiCommit
+            sig.leafSpkiCommit, sig.intSpkiCommit,
+            sig.identityFingerprint, sig.identityCommitment,
+            sig.rotationMode, sig.rotationOldCommitment, sig.rotationNewWallet
         ];
-        // Sanity: slot [0] = uint160(holder); slots [1..13] = 1001..1013.
+        // Sanity: slot [0] = uint160(holder); slots [1..15] = 1001..1015;
+        // [16] = 0 (register-mode); [17..18] = 1017..1018.
         assertEq(expected[0], uint256(uint160(holder)), "expected[0] = msgSender");
-        for (uint256 i = 1; i < 14; i++) {
-            assertEq(expected[i], 1000 + i, "expected sequence [1..13]");
+        for (uint256 i = 1; i < 16; i++) {
+            assertEq(expected[i], 1000 + i, "expected sequence [1..15]");
         }
+        assertEq(expected[16], 0, "expected[16] = rotationMode = 0 (register)");
+        assertEq(expected[17], 1017, "expected[17] = rotationOldCommitment");
+        assertEq(expected[18], 1018, "expected[18] = rotationNewWallet");
         bytes memory expectedCall = abi.encodeCall(
-            IGroth16VerifierV5.verifyProof,
+            IGroth16VerifierV5_1.verifyProof,
             (proof.a, proof.b, proof.c, expected)
         );
         vm.expectCall(address(verifier), expectedCall);
@@ -664,15 +698,18 @@ contract QKBRegistryV5RegisterTest is Test {
 
     /* ===== Gate 5 — replay (per-holder + per-nullifier) ===== */
 
-    function test_register_revertsAlreadyRegistered_whenSameWallet() public {
+    function test_register_revertsCtxAlreadyUsed_whenSameWalletSameCtx() public {
         QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
         _callRegister(_baselineProof(), sig); // first registration succeeds
 
-        // Second attempt with the same wallet — even with a different
-        // nullifier — must revert AlreadyRegistered. nullifierOf[holder]
-        // is now non-zero.
+        // V5.1: second attempt by the SAME wallet against the SAME ctx
+        // hits the repeat-claim path (identityCommitments[fp] != 0), where
+        // usedCtx[fp][ctxKey] is already true → CtxAlreadyUsed.
+        // (The V5 AlreadyRegistered semantic — "wallet already has a
+        //  nullifier" — moved to the first-claim branch only; same-wallet
+        //  re-registration is now discriminated by ctx.)
         sig.nullifier = uint256(0xFEED);
-        vm.expectRevert(QKBRegistryV5.AlreadyRegistered.selector);
+        vm.expectRevert(QKBRegistryV5.CtxAlreadyUsed.selector);
         _callRegister(_baselineProof(), sig);
     }
 

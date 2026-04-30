@@ -2,24 +2,24 @@
 pragma solidity 0.8.24;
 
 import {Test} from "forge-std/Test.sol";
-import {QKBRegistryV5, IGroth16VerifierV5} from "../src/QKBRegistryV5.sol";
-import {Groth16VerifierV5} from "../src/Groth16VerifierV5.sol";
+import {QKBRegistryV5, IGroth16VerifierV5_1} from "../src/QKBRegistryV5.sol";
+import {Groth16VerifierV5_1Placeholder} from "../src/Groth16VerifierV5_1Placeholder.sol";
 
 /// @notice §6.1 skeleton tests — constructor, IQKBRegistry view fns, admin
 /// surface. The full 5-gate register() body and its negative tests land
 /// in §6.2..§6.7 with their own commits.
 contract QKBRegistryV5SkeletonTest is Test {
     QKBRegistryV5 internal registry;
-    Groth16VerifierV5 internal verifier;
+    Groth16VerifierV5_1Placeholder internal verifier;
 
     address internal admin = address(0xA1);
     bytes32 internal initialTrustRoot  = bytes32(uint256(0xA));
     bytes32 internal initialPolicyRoot = bytes32(uint256(0xB));
 
     function setUp() public {
-        verifier = new Groth16VerifierV5();
+        verifier = new Groth16VerifierV5_1Placeholder();
         registry = new QKBRegistryV5(
-            IGroth16VerifierV5(address(verifier)),
+            IGroth16VerifierV5_1(address(verifier)),
             admin,
             initialTrustRoot,
             initialPolicyRoot
@@ -48,13 +48,13 @@ contract QKBRegistryV5SkeletonTest is Test {
 
     function test_constructor_revertsOnZeroVerifier() public {
         vm.expectRevert(QKBRegistryV5.ZeroAddress.selector);
-        new QKBRegistryV5(IGroth16VerifierV5(address(0)), admin, initialTrustRoot, initialPolicyRoot);
+        new QKBRegistryV5(IGroth16VerifierV5_1(address(0)), admin, initialTrustRoot, initialPolicyRoot);
     }
 
     function test_constructor_revertsOnZeroAdmin() public {
         vm.expectRevert(QKBRegistryV5.ZeroAddress.selector);
         new QKBRegistryV5(
-            IGroth16VerifierV5(address(verifier)),
+            IGroth16VerifierV5_1(address(verifier)),
             address(0),
             initialTrustRoot,
             initialPolicyRoot

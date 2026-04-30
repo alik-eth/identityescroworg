@@ -3,8 +3,8 @@ pragma solidity 0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {IdentityEscrowNFT, IQKBRegistry} from "../src/IdentityEscrowNFT.sol";
-import {QKBRegistryV5, IGroth16VerifierV5} from "../src/QKBRegistryV5.sol";
-import {Groth16VerifierV5} from "../src/Groth16VerifierV5.sol";
+import {QKBRegistryV5, IGroth16VerifierV5_1} from "../src/QKBRegistryV5.sol";
+import {Groth16VerifierV5_1Placeholder} from "../src/Groth16VerifierV5_1Placeholder.sol";
 
 /// @notice §7 IdentityEscrowNFT × V5 compatibility test.
 ///
@@ -23,16 +23,16 @@ import {Groth16VerifierV5} from "../src/Groth16VerifierV5.sol";
 contract IdentityEscrowNFTV5CompatibilityTest is Test {
     IdentityEscrowNFT internal nft;
     QKBRegistryV5 internal registry;
-    Groth16VerifierV5 internal verifier;
+    Groth16VerifierV5_1Placeholder internal verifier;
 
     address internal admin = address(0xA1);
     uint64 internal constant DEADLINE = 2_500_000_000;
 
     function setUp() public {
         vm.warp(2_000_000_000); // sane block.timestamp ≪ DEADLINE
-        verifier = new Groth16VerifierV5();
+        verifier = new Groth16VerifierV5_1Placeholder();
         registry = new QKBRegistryV5(
-            IGroth16VerifierV5(address(verifier)),
+            IGroth16VerifierV5_1(address(verifier)),
             admin,
             bytes32(0),
             bytes32(0)

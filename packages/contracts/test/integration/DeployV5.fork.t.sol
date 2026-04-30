@@ -2,8 +2,8 @@
 pragma solidity 0.8.24;
 
 import { Test, console2 } from "forge-std/Test.sol";
-import { Groth16VerifierV5 } from "../../src/Groth16VerifierV5.sol";
-import { QKBRegistryV5, IGroth16VerifierV5 } from "../../src/QKBRegistryV5.sol";
+import { Groth16VerifierV5_1Placeholder } from "../../src/Groth16VerifierV5_1Placeholder.sol";
+import { QKBRegistryV5, IGroth16VerifierV5_1 } from "../../src/QKBRegistryV5.sol";
 import { IdentityEscrowNFT } from "../../src/IdentityEscrowNFT.sol";
 
 /// @notice CI mirror of `script/DeployV5.s.sol` — replays the same
@@ -44,13 +44,13 @@ contract DeployV5ForkTest is Test {
 
     /// Replays the DeployV5.s.sol constructor sequence and asserts wiring.
     function _deployAndAssert() internal returns (
-        Groth16VerifierV5 verifier,
+        Groth16VerifierV5_1Placeholder verifier,
         QKBRegistryV5 registry,
         IdentityEscrowNFT nft
     ) {
-        verifier = new Groth16VerifierV5();
+        verifier = new Groth16VerifierV5_1Placeholder();
         registry = new QKBRegistryV5(
-            IGroth16VerifierV5(address(verifier)),
+            IGroth16VerifierV5_1(address(verifier)),
             DEV_ADMIN,
             DEV_TRUST,
             DEV_POLICY

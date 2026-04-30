@@ -2,8 +2,8 @@
 pragma solidity 0.8.24;
 
 import {Script, console2} from "forge-std/Script.sol";
-import {Groth16VerifierV5} from "../src/Groth16VerifierV5.sol";
-import {QKBRegistryV5, IGroth16VerifierV5} from "../src/QKBRegistryV5.sol";
+import {Groth16VerifierV5_1Placeholder} from "../src/Groth16VerifierV5_1Placeholder.sol";
+import {QKBRegistryV5, IGroth16VerifierV5_1} from "../src/QKBRegistryV5.sol";
 import {IdentityEscrowNFT} from "../src/IdentityEscrowNFT.sol";
 
 /// @notice V5 deploy script for Base Sepolia + Base mainnet.
@@ -57,10 +57,11 @@ contract DeployV5 is Script {
         } catch {}
 
         // Optional pre-deployed Groth16 verifier. If absent, we deploy
-        // the §5 stub which always returns true — this is a dev-only path
-        // that lets us smoke the deploy on Anvil/Sepolia without waiting
-        // for the ceremony. The CLI must explicitly pass GROTH16_VERIFIER_ADDR
-        // for any production deploy; the script logs which path was taken.
+        // the V5.1 PLACEHOLDER (always-true, 19-input shape) — dev-only
+        // path that lets us smoke the deploy on Anvil/Sepolia without
+        // waiting for the V5.1 stub ceremony. The CLI must explicitly
+        // pass GROTH16_VERIFIER_ADDR for any production deploy; the
+        // script logs which path was taken.
         address verifierAddr;
         try vm.envAddress("GROTH16_VERIFIER_ADDR") returns (address a) {
             verifierAddr = a;
@@ -70,15 +71,15 @@ contract DeployV5 is Script {
 
         vm.startBroadcast(deployerKey);
 
-        IGroth16VerifierV5 verifier;
+        IGroth16VerifierV5_1 verifier;
         if (verifierAddr == address(0)) {
-            console2.log("WARNING: deploying STUB Groth16VerifierV5 (always-true). DO NOT use for production.");
-            verifier = IGroth16VerifierV5(address(new Groth16VerifierV5()));
+            console2.log("WARNING: deploying V5.1 PLACEHOLDER verifier (always-true). DO NOT use for production.");
+            verifier = IGroth16VerifierV5_1(address(new Groth16VerifierV5_1Placeholder()));
         } else {
-            console2.log("Using pre-deployed Groth16VerifierV5 at:", verifierAddr);
-            verifier = IGroth16VerifierV5(verifierAddr);
+            console2.log("Using pre-deployed Groth16VerifierV5_1 at:", verifierAddr);
+            verifier = IGroth16VerifierV5_1(verifierAddr);
         }
-        console2.log("Groth16VerifierV5:", address(verifier));
+        console2.log("Groth16VerifierV5_1:", address(verifier));
 
         QKBRegistryV5 registry = new QKBRegistryV5(
             verifier,

@@ -7,16 +7,17 @@ import {PoseidonBytecode} from "./libs/PoseidonBytecode.sol";
 import {P256Verify} from "./libs/P256Verify.sol";
 import {PoseidonMerkle} from "./libs/PoseidonMerkle.sol";
 
-/// @notice The Groth16 verifier interface — exposed so the registry can
-///         bind to either the §5 stub OR the real ceremony output without
-///         a source change. snarkjs auto-generated verifiers already match
-///         this signature.
-interface IGroth16VerifierV5 {
+/// @notice The V5.1 Groth16 verifier interface — exposed so the registry can
+///         bind to the placeholder, the §8 stub, OR the post-Phase-B real
+///         ceremony output without a source change. snarkjs auto-generated
+///         verifiers match this signature when the circuit emits 19 public
+///         signals (V5.1 layout per orchestration §1.1).
+interface IGroth16VerifierV5_1 {
     function verifyProof(
         uint256[2] calldata a,
         uint256[2][2] calldata b,
         uint256[2] calldata c,
-        uint256[14] calldata input
+        uint256[19] calldata input
     ) external view returns (bool);
 }
 
@@ -46,7 +47,7 @@ contract QKBRegistryV5 is IQKBRegistry {
     /* ---------- immutables ---------- */
 
     /// Groth16 verifier (stub now, real ceremony output post-§14).
-    IGroth16VerifierV5 public immutable groth16Verifier;
+    IGroth16VerifierV5_1 public immutable groth16Verifier;
 
     /// Deployed Poseidon contract addresses, used by P256Verify.spkiCommit
     /// and PoseidonMerkle.verify staticcalls inside register().
@@ -123,7 +124,7 @@ contract QKBRegistryV5 is IQKBRegistry {
     /* ---------- constructor ---------- */
 
     constructor(
-        IGroth16VerifierV5 _verifier,
+        IGroth16VerifierV5_1 _verifier,
         address _admin,
         bytes32 _initialTrustedListRoot,
         bytes32 _initialPolicyRoot
@@ -172,22 +173,30 @@ contract QKBRegistryV5 is IQKBRegistry {
 
     /* ---------- register() — frozen ABI per orchestration §0.3 ---------- */
 
-    /// 14 BN254 field-element public signals — order is FROZEN.
+    /// 19 BN254 field-element public signals — order is FROZEN per
+    /// orchestration §1.1. Indices [0..13] preserve V5 semantics; [14..18]
+    /// are V5.1 wallet-bound-amendment additions.
     struct PublicSignals {
-        uint256 msgSender;          // [0]  ≤ 2^160
-        uint256 timestamp;          // [1]  ≤ 2^64
-        uint256 nullifier;          // [2]  Poseidon₂ output
-        uint256 ctxHashHi;          // [3]
-        uint256 ctxHashLo;          // [4]
-        uint256 bindingHashHi;      // [5]
-        uint256 bindingHashLo;      // [6]
-        uint256 signedAttrsHashHi;  // [7]
-        uint256 signedAttrsHashLo;  // [8]
-        uint256 leafTbsHashHi;      // [9]
-        uint256 leafTbsHashLo;      // [10]
-        uint256 policyLeafHash;     // [11]
-        uint256 leafSpkiCommit;     // [12]
-        uint256 intSpkiCommit;      // [13]
+        uint256 msgSender;            // [0]  ≤ 2^160
+        uint256 timestamp;            // [1]  ≤ 2^64
+        uint256 nullifier;            // [2]  Poseidon₂(walletSecret, ctxHash) — V5.1
+        uint256 ctxHashHi;            // [3]
+        uint256 ctxHashLo;            // [4]
+        uint256 bindingHashHi;        // [5]
+        uint256 bindingHashLo;        // [6]
+        uint256 signedAttrsHashHi;    // [7]
+        uint256 signedAttrsHashLo;    // [8]
+        uint256 leafTbsHashHi;        // [9]
+        uint256 leafTbsHashLo;        // [10]
+        uint256 policyLeafHash;       // [11]
+        uint256 leafSpkiCommit;       // [12]
+        uint256 intSpkiCommit;        // [13]
+        // V5.1 wallet-bound amendment — orchestration §1.1
+        uint256 identityFingerprint;  // [14] Poseidon₂(subjectSerialPacked, FINGERPRINT_DOMAIN)
+        uint256 identityCommitment;   // [15] Poseidon₂(subjectSerialPacked, walletSecret)
+        uint256 rotationMode;         // [16] 0 = register, 1 = rotateWallet
+        uint256 rotationOldCommitment;// [17] register-mode no-op (= identityCommitment); rotate-mode prior
+        uint256 rotationNewWallet;    // [18] register-mode no-op (= msgSender); rotate-mode new wallet
     }
 
     struct Groth16Proof {
@@ -216,6 +225,18 @@ contract QKBRegistryV5 is IQKBRegistry {
     // once the nullifier became per-(walletSecret, ctxHash) and the per-
     // (identity, ctx) uniqueness moved into the new usedCtx gate.
 
+    /* ---------- V5.1 errors ---------- */
+    error WrongMode();             // Gate 6: rotationMode != 0 in register() entry point.
+    error CommitmentMismatch();    // Gate 6: repeat-claim commitment ≠ stored commitment.
+    error WalletNotBound();        // Gate 6: repeat-claim msg.sender ≠ identityWallets[fp] (stale-bind).
+    error CtxAlreadyUsed();        // Gate 7: usedCtx[fp][ctxKey] already true.
+    // V5.1 register-mode no-op invariants: the proof's slots [17]/[18] under
+    // rotationMode==0 must equal identityCommitment / msgSender respectively.
+    // The fold-in circuit's ForceEqualIfEnabled gates already enforce these
+    // (per orchestration §1.1 + spec §"Rotation circuit ceremony") — contract
+    // does not duplicate the check. If circuits-eng's stub regression catches
+    // a circuit-side miss, we add explicit on-chain gates here.
+
     /// @notice 5-gate registration. Gates land incrementally:
     ///   Gate 1 (this commit, §6.2): Groth16 verify call.
     ///   Gate 2a (§6.3): bind public-input commits to calldata.
@@ -242,25 +263,17 @@ contract QKBRegistryV5 is IQKBRegistry {
     ) external {
         // No deferred params remaining; all 11 calldata fields are live.
 
+        /* ===== Gate 0 (V5.1): mode gate ===== */
+        // Reject rotation-mode proofs at the register() entry point.
+        // rotateWallet() is the dual entry point and enforces mode == 1.
+        // The fold-in circuit emits the mode bit at slot [16].
+        if (sig.rotationMode != 0) revert WrongMode();
+
         /* ===== Gate 1 (§6.2): Groth16 verify ===== */
-        // Pack the 14-signal public-input array. Order MUST match V5 spec
-        // §0.1 exactly; auto-generated snarkjs verifiers consume `uint[14]`.
-        uint256[14] memory input = [
-            sig.msgSender,
-            sig.timestamp,
-            sig.nullifier,
-            sig.ctxHashHi,
-            sig.ctxHashLo,
-            sig.bindingHashHi,
-            sig.bindingHashLo,
-            sig.signedAttrsHashHi,
-            sig.signedAttrsHashLo,
-            sig.leafTbsHashHi,
-            sig.leafTbsHashLo,
-            sig.policyLeafHash,
-            sig.leafSpkiCommit,
-            sig.intSpkiCommit
-        ];
+        // Pack the 19-signal public-input array. Order MUST match V5.1 spec
+        // / orchestration §1.1 exactly; the auto-generated snarkjs verifier
+        // consumes `uint[19]` for the wallet-bound amendment.
+        uint256[19] memory input = _packPublicSignals(sig);
         if (!groth16Verifier.verifyProof(proof.a, proof.b, proof.c, input)) {
             revert BadProof();
         }
@@ -358,22 +371,82 @@ contract QKBRegistryV5 is IQKBRegistry {
         // wallet because the proof's msgSender wouldn't match.
         if (sig.msgSender != uint256(uint160(msg.sender))) revert BadSender();
 
-        // Replay (per-holder): one binding per wallet. Re-registration
-        // requires a fresh proof anyway, but this guards against the
-        // "submit the same proof twice" scenario explicitly.
-        //
-        // V5.1 NOTE: Task 2 splits this into first-claim vs. repeat-claim
-        // branches keyed on `identityCommitments[fingerprint] == 0`. For now
-        // (Task 1), the V5 single-branch behavior is preserved so existing
-        // tests still pass.
-        if (nullifierOf[msg.sender] != bytes32(0)) revert AlreadyRegistered();
-
+        /* ===== Gate 6/7 (V5.1): identity escrow + per-(identity, ctx) anti-Sybil ===== */
+        // ctxKey: the 32-byte SHA-256(ctxBytes) reassembled from the hi/lo
+        // halves at slots [3..4]. Per V5.1 contract review #2 — natural
+        // bit-shift reassembly, no keccak round-trip needed.
+        bytes32 ctxKey = bytes32((uint256(sig.ctxHashHi) << 128) | uint256(sig.ctxHashLo));
+        bytes32 fingerprint = bytes32(sig.identityFingerprint);
+        bytes32 commitment  = bytes32(sig.identityCommitment);
         bytes32 nullifierBytes = bytes32(sig.nullifier);
 
-        // Write-out: persist the binding and emit the event.
-        // V5.1: registrantOf write removed — anti-Sybil moves to usedCtx
-        // in Task 2's register() rewrite.
-        nullifierOf[msg.sender] = nullifierBytes;
+        bytes32 storedCommit = identityCommitments[fingerprint];
+        if (storedCommit == bytes32(0)) {
+            // ----- First claim path -----
+            // Wallet uniqueness: this wallet must not already hold ANY
+            // identity (V5.1 invariant 5). Without this gate one wallet
+            // could open multiple identityCommitments by registering with
+            // different fingerprints — explicitly NOT supported.
+            if (nullifierOf[msg.sender] != bytes32(0)) revert AlreadyRegistered();
+
+            // Bind: identity → commitment + wallet, plus mark this ctx used.
+            identityCommitments[fingerprint] = commitment;
+            identityWallets[fingerprint]     = msg.sender;
+            usedCtx[fingerprint][ctxKey]     = true;
+
+            // V5.1 invariant 4: nullifierOf is write-once on first-claim only.
+            nullifierOf[msg.sender] = nullifierBytes;
+        } else {
+            // ----- Repeat-claim path -----
+            // Stale-bind FIRST (V5.1 invariant 2): only the wallet currently
+            // bound to this fingerprint may register fresh ctxs.
+            if (identityWallets[fingerprint] != msg.sender) revert WalletNotBound();
+
+            // Commitment must match the originally-stored value. The wallet
+            // proves consistent (subjectSerial, walletSecret) → same Poseidon₂
+            // commitment.
+            if (storedCommit != commitment) revert CommitmentMismatch();
+
+            // Per-(identity, ctx) anti-Sybil (V5.1 invariant 3, monotonic).
+            if (usedCtx[fingerprint][ctxKey]) revert CtxAlreadyUsed();
+            usedCtx[fingerprint][ctxKey] = true;
+
+            // DO NOT touch nullifierOf — write-once on first-claim per
+            // invariant 4. The V5.1 nullifier is per-(walletSecret, ctxHash)
+            // so it changes per ctx; downstream Verified-modifier consumers
+            // only need "non-zero iff registered ≥ once", which the original
+            // first-claim value satisfies.
+        }
+
         emit Registered(msg.sender, nullifierBytes, sig.timestamp);
+    }
+
+    /// @dev Pack PublicSignals into the 19-element array the verifier
+    ///      consumes. Extracted into a helper so `register()` and
+    ///      `rotateWallet()` (Task 3) share the same source-of-truth
+    ///      ordering — drift would mean the on-chain pack disagreed with
+    ///      the circuit's emitted public-input layout.
+    function _packPublicSignals(PublicSignals calldata sig)
+        internal pure returns (uint256[19] memory input)
+    {
+        input[0]  = sig.msgSender;
+        input[1]  = sig.timestamp;
+        input[2]  = sig.nullifier;
+        input[3]  = sig.ctxHashHi;
+        input[4]  = sig.ctxHashLo;
+        input[5]  = sig.bindingHashHi;
+        input[6]  = sig.bindingHashLo;
+        input[7]  = sig.signedAttrsHashHi;
+        input[8]  = sig.signedAttrsHashLo;
+        input[9]  = sig.leafTbsHashHi;
+        input[10] = sig.leafTbsHashLo;
+        input[11] = sig.policyLeafHash;
+        input[12] = sig.leafSpkiCommit;
+        input[13] = sig.intSpkiCommit;
+        input[14] = sig.identityFingerprint;
+        input[15] = sig.identityCommitment;
+        input[16] = sig.rotationMode;
+        input[17] = sig.rotationOldCommitment;
+        input[18] = sig.rotationNewWallet;
     }
 }
