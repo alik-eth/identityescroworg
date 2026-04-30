@@ -1,10 +1,10 @@
 # Issuer-Blind Nullifier — V5 Privacy Amendment
 
-> **Status:** Draft v0.2 — design-pass approved by team-lead 2026-04-30; pending independent contracts-eng review + user-review gate.
+> **Status:** Draft v0.4 — incorporating contracts-eng v0.2 review + team-lead's final-pass corrections; pending team-lead final read + user-review gate.
 > **Date:** 2026-04-30.
 > **Amends:** §6.6 of `2026-04-29-v5-architecture-design.md` and **supersedes** `2026-04-18-person-nullifier-amendment.md` by reference (the 2026-04-23 ETSI-namespace clarification carries forward).
 > **Sequencing:** Lands BEFORE §11 ceremony kickoff. Post-ceremony adoption costs +1-2 weeks of contributor coordination.
-> **Owner:** circuits-eng (drafter), contracts-eng (independent contract review, dispatched in parallel).
+> **Owner:** circuits-eng (drafter), contracts-eng (independent contract review at `/data/Develop/qkb-wt-v5/arch-contracts/docs/superpowers/specs/2026-04-30-issuer-blind-nullifier-contract-review.md` — review v0.2 endorses this spec).
 >
 > **Revision history:**
 > - v0.1 (2026-04-30 ~12:00 UTC): initial draft.
@@ -14,6 +14,17 @@
 >   (3) reaffirmed V5 ships no `identityReset()`; added explicit note re: `IdentityEscrowNFT` non-transferability (lost wallet = lost artifact, no regression); promoted `usedCtx`-persistence-across-resets to a load-bearing invariant V6 must honor.
 >   Added missing **§Recovery scenarios** table (every QES-rotate × wallet-rotate × wallet-loss combination → outcome).
 >   Added sequence diagrams for `register()` and `rotateWallet()`.
+> - v0.3 (2026-04-30 ~15:00 UTC): Codex-review-driven ABI-consistency pass. Three stale `// 16 fields` / `14 → 16` references updated to 19; `PublicSignalsV51` TypeScript interface expanded to all 5 new fields with index annotations; `register()` Solidity sketch now includes full V5 calldata (leafSpki/intSpki/signedAttrs/P256 sigs/Merkle proofs) with explicit pointer to V5 architecture spec §"Five-gate verification".
+> - v0.4 (2026-04-30 ~17:00 UTC): incorporated contracts-eng v0.2 review (commit `13ec37d` on `feat/v5arch-contracts`) + team-lead's final-pass corrections + Codex review pass (cross-section consistency) + user-directive-clarification (NFT is decoupled). **Reset posture confirmed: V5 ships no `identityReset()` (locked, contracts-eng-confirmed).** Substantive changes:
+>   (1) **Drop `registrantOf` mapping** — anti-Sybil fully migrated to `usedCtx`; saves 22.1K gas per first-claim register; no callers post-amendment.
+>   (2) **`ctxKey` derivation simplified** from `keccak256(abi.encode(hi,lo))` to `bytes32((uint256(hi)<<128) | lo)` — natural reassembly of SHA-256 hi/lo halves; saves keccak op + abi.encode allocation.
+>   (3) **Public-signal binding clarification** for `rotationOldCommitment`/`rotationNewWallet` no-ops under register mode — in-circuit `ForceEqualIfEnabled` (lines in §Rotation circuit ceremony) already enforces; explicit cross-reference added; redundant on-chain gates dropped.
+>   (4) **Drop `nullifierOf[msg.sender] == 0` gate** — incompatible with repeat-claim (same wallet, new ctx). `nullifierOf[wallet]` becomes write-once-on-first-claim view for `IQKBRegistry` compat; anti-Sybil enforced entirely by `usedCtx[fp][ctxKey]`. Sub-flag from contracts-eng §1: caught a real reverting-on-second-ctx bug in v0.3.
+>   (5) **Stale-bind invariant** added explicitly to §Soundness: `identityWallets[fp] == msg.sender` MUST be checked before `usedCtx[fp][ctxKey]` on the repeat-claim path.
+>   (6) **Privacy linkability sub-property** clarified: "issuer-blind ≠ unlinkable across user's own registrations" — fingerprint persists in `usedCtx[fp][*]` and is observable; correlatable across an attacker who already has the fingerprint. V6 Pedersen-set-membership candidate.
+>   (7) **Codex Finding 2 fix — `IdentityEscrowNFT` is NOT non-transferable** (factual correction). The actual contract at `packages/contracts/src/IdentityEscrowNFT.sol` extends OpenZeppelin's `ERC721` without overriding `_update`, so transfers work via standard `transferFrom`/`safeTransferFrom`. The "no regression because NFT is non-transferable" argument was therefore unsound as written. Reframed: V5 already binds verified-status to wallet privkey via `nullifierOf[wallet]`; lose wallet privkey ⇒ can't re-prove verified-status; that V5 invariant survives V5.1 unchanged. NFT artifact transferability is orthogonal.
+>   (8) **NFT decoupling** [user directive 2026-04-30]: the QKB layer does NOT manage NFT state. `rotateWallet()` migrates `identityWallets[fp]`, `identityCommitments[fp]`, and `nullifierOf[wallet]` only. If a user has minted an `IdentityEscrowNFT`, they are responsible for transferring it to the new wallet via standard ERC-721 (currently transferable). No `adminTransfer` cross-contract call; no `nonReentrant` modifier needed (no external calls in `rotateWallet`). Supersedes lead's Q4 `adminTransfer` design — user clarification: "nft is optional. if this works without nft its fine."
+>   Plus: α option documented as "consider for V6 if redesigned".
 
 ## Motivation — the gap in the current V5 design
 
@@ -63,7 +74,7 @@ The two goals are in tension: deterministic-from-identity gives (2) for free but
 
 **Trade-offs the user accepts:**
 
-1. **EOA path** (default): user trusts their EOA wallet vendor's signing implementation to be RFC-6979 deterministic. Wallet loss is identity loss unless `rotateWallet()` was called pre-loss. The IdentityEscrowNFT minted to the wallet is non-transferable (per V4 design, unchanged), so wallet loss is artifact loss too — no regression.
+1. **EOA path** (default): user trusts their EOA wallet vendor's signing implementation to be RFC-6979 deterministic. Wallet loss is identity loss unless `rotateWallet()` was called pre-loss — i.e. verified-status (per `nullifierOf[wallet]`) cannot be re-proved without the wallet privkey, and V5 has no QKB-layer recovery primitive for that case. This trade-off is unchanged from V5. The `IdentityEscrowNFT` artifact is a separate, optional layer (decoupled from this amendment) and is currently a transferable ERC-721 — users can move it to a backup wallet via standard `transferFrom` independently of QKB.
 2. **SCW path**: user accepts a memory burden — the chosen passphrase is the *only* secret that protects the identity-commitment on-chain. **Losing the passphrase is unrecoverable in V5: even possessing a valid QES does not let you recompute `walletSecret`.** This is fundamentally weaker UX than the EOA path and the spec recommends EOA for the V5 alpha.
 
 ## Construction
@@ -212,7 +223,7 @@ Properties:
 Compatibility caveats — **critical user-facing warnings**:
 
 - 🚨 **Lost passphrase = lost identity, permanently, in V5.** No `identityReset()` ships in V5 (see §"identityReset() — V5 decision"). A valid QES does not recover access — the QES proves identity ownership but the *passphrase* protects the commitment escrow. The two are decoupled by design (this is exactly what gives issuer-blindness).
-- 🚨 **Lost passphrase = lost IdentityEscrowNFT.** Per V4 design (unchanged), the IdentityEscrowNFT is non-transferable. Losing the wallet means losing the artifact. SCW passphrase loss is functionally equivalent to wallet loss.
+- 🚨 **Lost passphrase = lost verified-status.** With `walletSecret` unrecoverable, the user cannot produce a register-mode proof that opens the on-chain `identityCommitments[fp]` — they're locked out of their own QKB identity. `IdentityEscrowNFT` is a separate optional artifact and remains transferable independently of QKB; if minted before the loss, the user can still transfer the NFT via standard ERC-721, but the `Verified` modifier and any `IQKBRegistry.isVerified()` consumer will return false against any new wallet (since `nullifierOf[newWallet] == 0`).
 - Some users will pick weak passphrases despite warnings — Argon2id parameters (m=64MiB, t=3, p=1) tuned to make brute-force expensive but not impossible against publicly-visible commitments. Web SDK enforces a minimum entropy threshold (≥80 bits estimated by zxcvbn) and refuses weaker.
 - Recommend hardware-key derivation (e.g., signing a fixed message with a YubiKey or Ledger) as an alternative entropy source for sophisticated users — the protocol accepts any 32-byte input as `walletSecret`, so the SDK can offer multiple derivation modes.
 
@@ -230,19 +241,22 @@ The construction does **not** support a user moving their identity from EOA to S
 
 ```solidity
 contract QKBRegistryV5 {
-    // Existing (keep unchanged):
-    mapping(address => bytes32) public nullifierOf;
-    mapping(bytes32 => address) public registrantOf;
+    // Retained from V5 (semantics narrowed — see §Soundness):
+    mapping(address => bytes32) public nullifierOf;     // wallet → first-claim nullifier (write-once)
 
     // NEW:
     mapping(bytes32 => bytes32) public identityCommitments;       // fingerprint → commitment (escrow)
     mapping(bytes32 => address) public identityWallets;           // fingerprint → bound wallet
-    mapping(bytes32 => mapping(bytes32 => bool)) public usedCtx;  // fingerprint → ctxHashFull → used
-    // ctxHashFull = keccak256(abi.encode(ctxHashHi, ctxHashLo)) — single 32-byte key for the mapping
+    mapping(bytes32 => mapping(bytes32 => bool)) public usedCtx;  // fingerprint → ctxKey → used
+
+    // DROPPED:
+    // mapping(bytes32 => address) public registrantOf;  // anti-Sybil migrated to usedCtx; no callers
 }
 ```
 
-`usedCtx` is the new global anti-Sybil gate. It's keyed on the *byte-domain* SHA-256 of ctxBytes (which the contract sees in publicSignals[3..4]), not the field-domain Poseidon ctxHash inside the circuit. This keeps storage keys pinned to a hash the contract can directly verify.
+**`registrantOf` dropped** [v0.4]: V5's `registrantOf[nul] = msg.sender` provided per-nullifier anti-Sybil, but with `nullifier = Poseidon₂(walletSecret, ctxHash)` varying per ctx, that mapping is no longer the right shape — V5.1 enforces "one registration per (identity, ctx)" via `usedCtx[fp][ctxKey]`, which subsumes `registrantOf`'s role. Saves 22.1K gas per first-claim register. No external consumers (verified via grep across `packages/contracts/`, `packages/contracts-sdk/`, `packages/sdk/`).
+
+**`usedCtx` keying** [v0.4]: Simplified from v0.2's `keccak256(abi.encode(ctxHashHi, ctxHashLo))` to `bytes32((uint256(ctxHashHi) << 128) | uint256(ctxHashLo))` — natural reassembly of the two 128-bit halves of SHA-256(ctxBytes) into the full 32-byte digest. Saves the keccak op + the abi.encode allocation (~36-50 gas). The reassembled value is *exactly* the byte-domain SHA-256 of ctxBytes that the proof commits to via slots [3..4], so the `usedCtx` key is byte-identical to the public ctxHash representation — no domain-separation lost.
 
 ### `register()` flow
 
@@ -274,29 +288,36 @@ function register(
     bytes32 fp     = bytes32(sig.identityFingerprint);
     bytes32 commit = bytes32(sig.identityCommitment);
     bytes32 nul    = bytes32(sig.nullifier);
-    bytes32 ctxKey = keccak256(abi.encode(sig.ctxHashHi, sig.ctxHashLo));
+    // ctxKey reassembles the SHA-256(ctxBytes) hi/lo halves byte-identically [v0.4 simplification]
+    bytes32 ctxKey = bytes32((uint256(sig.ctxHashHi) << 128) | uint256(sig.ctxHashLo));
 
     // ===== NEW Gate 6: identity commitment escrow =====
     bytes32 storedCommit = identityCommitments[fp];
     if (storedCommit == bytes32(0)) {
-        // First claim for this identity. Bind commitment + wallet.
+        // First claim for this identity. Bind commitment + wallet + first-claim nullifier.
         identityCommitments[fp] = commit;
         identityWallets[fp]     = msg.sender;
+        nullifierOf[msg.sender] = nul;            // write-once-on-first-claim view (IQKBRegistry compat)
     } else {
-        // Repeat claim. Both must match.
-        require(storedCommit == commit,           "commitment drift");
+        // Repeat claim — same wallet, same identity, new ctx.
+        require(storedCommit == commit,            "commitment drift");
         require(identityWallets[fp] == msg.sender, "wallet mismatch — use rotateWallet()");
+        // nullifierOf[msg.sender] already populated from first-claim — DO NOT overwrite.
+        // The current proof's nullifier (per-ctx) IS emitted in the Registered event for indexers.
     }
 
-    // ===== NEW Gate 7: per-(identity, ctx) anti-Sybil =====
+    // ===== NEW Gate 7: per-(identity, ctx) anti-Sybil — load-bearing =====
     require(!usedCtx[fp][ctxKey], "already registered for this ctx");
     usedCtx[fp][ctxKey] = true;
 
-    // ===== Existing gates (unchanged) =====
-    require(nullifierOf[msg.sender] == bytes32(0), "wallet already registered");
-    require(registrantOf[nul] == address(0),       "nullifier already used");
-    nullifierOf[msg.sender] = nul;
-    registrantOf[nul]       = msg.sender;
+    // NOTE [v0.4]: V5's `nullifierOf[msg.sender] == 0` and `registrantOf[nul] == 0` gates
+    // are DROPPED. They are incompatible with the repeat-claim path: a wallet that
+    // successfully registered against ctx A would always revert on ctx B because
+    // nullifierOf[msg.sender] is non-zero. Anti-Sybil is now exclusively enforced by
+    // usedCtx[fp][ctxKey]. The first-claim nullifier is preserved in nullifierOf for
+    // IdentityEscrowNFT.isVerified() / Verified-modifier consumers (write-once view).
+
+    emit Registered(msg.sender, fp, nul, ctxKey);
 }
 ```
 
@@ -410,7 +431,7 @@ The mode-flag approach lets a single proof + single verifier handle both flows. 
 
 **Public-signal layout under fold-in**: 16 main signals + 3 rotation-mode signals = **19 frozen public signals total**. Updated in §"Public-signal layout" below.
 
-(Spec'ing α as a fallback in case constraint-cost analysis post-`compile:v5` shows the no-op gates don't cleanly fold — escape hatch only; not the planned path.)
+(Spec'ing α as a fallback in case constraint-cost analysis post-`compile:v5` shows the no-op gates don't cleanly fold — escape hatch only; not the planned path. **For V6 reset architecture** [v0.4]: α may be worth revisiting if a separate `identityReset` circuit is introduced — its constraints are likely independent enough from the main register flow that a dedicated verifier earns its keep. Out of scope for V5.1.)
 
 #### Contract `rotateWallet()`
 
@@ -422,36 +443,35 @@ function rotateWallet(
     PublicSignalsV51 calldata sig    // 19 fields; rotationMode == 1 enforced
 ) external {
     bytes32 fp = bytes32(sig.identityFingerprint);
-    require(sig.rotationMode == 1, "must be rotation mode");
-    require(identityWallets[fp] == msg.sender,                    "only current wallet can rotate");
-    require(identityCommitments[fp] == bytes32(sig.rotationOldCommitment), "stale oldCommitment");
+    require(sig.rotationMode == 1,                                          "must be rotation mode");
+    require(identityWallets[fp] == msg.sender,                              "only current wallet can rotate");
+    require(identityCommitments[fp] == bytes32(sig.rotationOldCommitment),  "stale oldCommitment");
     address newWallet = address(uint160(sig.rotationNewWallet));
-    require(newWallet != address(0) && newWallet != msg.sender,   "invalid newWallet");
-    require(verifier.verifyProof(proof, sig.toArray()),           "invalid rotation proof");
+    require(newWallet != address(0) && newWallet != msg.sender,             "invalid newWallet");
+    require(verifier.verifyProof(proof, sig.toArray()),                     "invalid rotation proof");
 
     bytes32 newCommit = bytes32(sig.identityCommitment);
+
+    // ===== State updates =====
     identityCommitments[fp] = newCommit;
     identityWallets[fp]     = newWallet;
-
-    // Migrate nullifierOf so IdentityEscrowNFT ownership lookups continue to work
-    // for users who rotate. Without this, every rotation orphans the user's NFT.
-    bytes32 nul = nullifierOf[msg.sender];
-    if (nul != bytes32(0)) {
-        nullifierOf[newWallet] = nul;
-        delete nullifierOf[msg.sender];
-        // registrantOf[nul] still points to msg.sender — update it:
-        registrantOf[nul] = newWallet;
-    }
+    nullifierOf[newWallet]  = nullifierOf[msg.sender];   // migrate first-claim nullifier (Verified-modifier + IQKBRegistry consumers)
+    delete nullifierOf[msg.sender];
 
     emit WalletRotated(fp, msg.sender, newWallet);
 }
 ```
 
+**NFT decoupling note** [v0.4, user directive]: `rotateWallet()` does NOT touch `IdentityEscrowNFT`. The NFT is an optional, decoupled artifact — currently a standard transferable ERC-721 (per `packages/contracts/src/IdentityEscrowNFT.sol`, no `_update` override). If the user has minted an NFT to their old wallet and wants to keep it associated with the new wallet, they call `transferFrom(oldWallet, newWallet, tokenId)` directly on the NFT contract — independently of QKB. The QKB protocol layer is concerned only with the verified-status escrow (`identityCommitments`, `identityWallets`, `usedCtx`, `nullifierOf`); NFT artifact lifecycle is the user's responsibility.
+
+This explicitly supersedes earlier drafts that proposed a registry-driven `IdentityEscrowNFT.adminTransfer()` cross-contract call. Per user directive 2026-04-30: *"nft is optional. if this works without nft its fine."*
+
 **Critical invariants enforced here:**
 
 1. The `usedCtx[fingerprint][*]` mapping **MUST persist** across rotation — anti-Sybil load-bearing across all wallet/identity-state transitions, present and future.
-2. `nullifierOf` migrates to keep `IdentityEscrowNFT` lookups consistent. `registrantOf` updated to track the new owner. Without these two lines, the NFT is orphaned (the wallet that "owns" the NFT no longer maps to a nullifier).
+2. `nullifierOf` migrates atomically with the wallet binding so `IQKBRegistry.isVerified(newWallet)` returns true post-rotation — without this, the `Verified` modifier and any consumer of `IQKBRegistry.nullifierOf()` see a broken view of the user's identity.
 3. The verifier check is the SAME `verifier.verifyProof()` used in `register()` — single audit surface, single ceremony output.
+4. **No external calls** in `rotateWallet()`. No `nonReentrant` modifier needed; reentrancy surface is empty by construction. Net rotation gas estimate: ~430-470K (per contracts-eng review §1) drops by the ~36-38K `adminTransfer` cross-contract call to **~395-435K**.
 
 #### Sequence diagrams
 
@@ -475,10 +495,10 @@ register(proof, sig) ───────────────────�
                                                        → store commit + wallet
                                                   ⑥ usedCtx[fp][ctxKey] = false?
                                                        └─ YES → set true
-                                                  ⑦ nullifierOf[msg.sender] = nullifier
-                                                  ⑧ registrantOf[nullifier] = msg.sender
+                                                  ⑦ nullifierOf[msg.sender] = nullifier  (write-once-on-first-claim)
+                                                  ⑧ emit Registered(msgSender, fp, nul, ctxKey)
                           ◄────────────────────── tx success
-                          mint IdentityEscrowNFT
+                          (optional) mint IdentityEscrowNFT — decoupled, user-initiated
 ```
 
 **`register()` — repeat claim against a NEW ctx:**
@@ -523,7 +543,7 @@ rotateWallet(proof,sig) ──────────────────�
                                                                     ② msg.sender == identityWallets[fp]
                                                                     ③ stored == rotationOldCommitment
                                                                     ④ store new commit + new wallet
-                                                                    ⑤ migrate nullifierOf + registrantOf
+                                                                    ⑤ migrate nullifierOf (single-slot, write-once)
                                                                     ⑥ emit WalletRotated
                           ◄────────────────────────────────────────── tx success
 ```
@@ -540,7 +560,7 @@ Comprehensive matrix of QES-rotation × wallet-state × user-action outcomes. **
 | 4 | Valid, **renewed** (same `subjectSerial`) | Same wallet, working | `register(ctxC)` from new cert | ✅ `subjectSerial` unchanged → same fp → same commit (walletSecret unchanged) → mint OK. The whole point of the design. |
 | 5 | Valid, current | Wallet **rotated** pre-action | `register(ctxC)` from new wallet (no `rotateWallet` called) | ❌ Reverts "wallet mismatch — use rotateWallet()". |
 | 6 | Valid, current | User runs `rotateWallet(W_old → W_new)` while both wallets accessible | Then `register(ctxC)` from W_new | ✅ Both commitment and identityWallets[fp] updated atomically; nullifierOf migrated; new ctx claim succeeds. |
-| 7 | Valid, current | **Wallet lost, no prior rotateWallet** | Cannot register | ❌ Identity locked. No reset in V5. NFT also lost (non-transferable). User must wait for V6 reset path. |
+| 7 | Valid, current | **Wallet lost, no prior rotateWallet** | Cannot register | ❌ QKB identity locked (no QKB-layer recovery in V5). The `IdentityEscrowNFT` artifact (if minted) was a transferable ERC-721 and may have been moved to a backup wallet pre-loss; that's a user-managed concern decoupled from QKB. User must wait for V6 reset path to recover QKB verified-status. |
 | 8 | Valid, current | EOA path; wallet vendor changed firmware to non-deterministic ECDSA | `register(any)` | ❌ HKDF input changes → walletSecret changes → commitment mismatch → reverts. Web SDK should detect and warn pre-tx. |
 | 9 | Valid, current | SCW path; user **forgot passphrase** | `register(any)` | ❌ Cannot derive walletSecret → cannot prove commitment opening → reverts. Even with valid QES, no recovery in V5. (See §SCW-path threat-model.) |
 | 10 | **QES expired, not renewed** | Working wallet | `register(any)` | ❌ EIP-7212 leaf-sig verify fails on chain (cert chain check). User must obtain a new QES (issuer issues fresh cert with same `subjectSerial`). |
@@ -566,11 +586,11 @@ Rationale:
 2. **Bad recovery is worse than no recovery.** A naive reset opens DoS via stolen-QES ping-pong; a sophisticated reset (social recovery, time-locked) is significant additional design and contract work that we don't have time for in V5. The leading two-phase-commit-with-cancellation alternative has the wrong threat model — it assumes users monitor on-chain events for their own identity, which they won't.
 3. **`rotateWallet()` covers the most common legitimate case.** As long as the user has BOTH wallets at the time of rotation, no reset is needed. The "hard" case is total wallet loss + no rotation pre-arranged.
 4. **`usedCtx` flags persist forever — load-bearing invariant.** Even with a future reset added in V6, anti-Sybil is preserved. **V6 reset implementations MUST NOT clear `usedCtx[fp][*]`**; this is an explicit contract-level invariant carried forward.
-5. **`IdentityEscrowNFT` non-transferability is consistent.** Per V4 design (carried unchanged into V5), `IdentityEscrowNFT` is non-transferable. Losing the wallet means losing the artifact regardless of the QKB layer's reset capability. So "no reset → losing wallet = losing identity" is *no regression* against the existing V5 model — it's the same trade-off, made explicit.
+5. **No regression vs current V5 wallet-loss semantics.** [Reframed in v0.4 — Codex Finding 2 corrected the prior "non-transferability" claim.] The actual `IdentityEscrowNFT` is a standard transferable ERC-721, but that's *orthogonal* to QKB verified-status. V5 today already binds `Verified`-modifier eligibility to wallet privkey via `nullifierOf[wallet]` — a user who loses their wallet privkey cannot re-prove verified-status in V5 without re-registering against a new wallet. V5.1 preserves that invariant. The NFT artifact lifecycle is independent and user-managed (transferable to backup wallets via standard ERC-721 if the user planned for loss). So "no reset → losing wallet privkey = losing QKB verified-status" is *no regression* against the existing V5 model — it's the same trade-off, made explicit.
 
 User-facing copy (web onboarding, registration confirmation page):
 
-> *Your QKB identity is bound to this wallet. **Back it up.** If you lose this wallet without first calling `rotateWallet()` to delegate to a backup wallet, your QKB identity is permanently lost — even if you still have your QES. The IdentityEscrowNFT is non-transferable, so losing the wallet is also losing the artifact. V6 (planned for later 2026) will add a social-recovery option for users who want stronger recoverability.*
+> *Your QKB verified-status is bound to this wallet. **Back it up.** If you lose this wallet without first calling `rotateWallet()` to delegate to a backup wallet, your QKB verified-status is permanently lost in V5 — even if you still have your QES. (The optional `IdentityEscrowNFT` artifact is a standard transferable ERC-721; if you've minted one, transfer it to a backup wallet now using your wallet's standard transfer flow.) V6 (planned for later 2026) will add a social-recovery option for users who want stronger recoverability.*
 
 User-facing copy (rotateWallet UI):
 
@@ -622,7 +642,7 @@ Phase B ceremony itself is unaffected by this amendment — pot23 ptau is a prop
 |---|---|---|
 | "Is user X registered with QKB at all?" | Yes (compute V5 nullifier for any plausible ctx; check on-chain) | Yes (compute `identityFingerprint`; check `identityCommitments`) |
 | "Which contexts has user X registered against?" | **Yes** (enumerate ctx guesses, recompute nullifier, check on-chain) | **No** — needs `walletSecret` |
-| "Which wallet did user X use?" | Yes — `registrantOf[nullifier]` returns msg.sender | Yes — `identityWallets[fp]` returns wallet directly |
+| "Which wallet did user X use?" | Yes — `nullifierOf` write-once + chain-tx history | Yes — `identityWallets[fp]` returns wallet directly |
 | "What's the size of the QKB user base?" | Yes — count on-chain registrations | Yes — count `identityCommitments` entries |
 
 The win is **registration-to-context unlinkability** — the issuer can't tell which apps a user is using without compromising the user's wallet. The wallet-to-identity binding remains visible (intentional — fully hiding it requires Pedersen membership, deferred to V6).
@@ -649,17 +669,37 @@ The win is **registration-to-context unlinkability** — the issuer can't tell w
 - `rotateWallet()` requires the OLD wallet's signature → fresh wallet cannot rotate without compromising old wallet.
 - After legitimate rotation, `usedCtx[fp][ctxKey]` still true → still cannot re-register against same ctx. ✓
 
+### Privacy linkability — explicit limitation [v0.4]
+
+**Issuer-blindness ≠ unlinkability across a user's own registrations.**
+
+The amendment hides the *issuer's ability to compute nullifiers* for a target user, but it does NOT hide the linkability of one user's registrations across multiple ctxs to anyone who already has the user's `identityFingerprint`. Specifically:
+
+- `usedCtx[fp][ctxKey]` is publicly readable. An observer who knows a user's fingerprint can enumerate all ctxs that user has registered against by checking the mapping.
+- An observer who has the user's QES cert can compute `identityFingerprint = Poseidon₂(subjectSerialPacked, FINGERPRINT_DOMAIN)` directly (no secret needed). The issuer falls into this category by definition. Anyone who scrapes the user's QES (e.g. via a Diia API integration where the user authenticates) also does.
+- Once the fingerprint is known, the observer can correlate ALL of the user's QKB registrations — observing the *count* of contexts and the *specific* on-chain ctxKeys (which are SHA-256 of ctxBytes; an observer who can guess plausible ctxBytes can identify them).
+
+**This is a real privacy leak that the amendment does NOT close.** It is materially smaller than the V5 baseline leak (where the issuer could enumerate registrations even *without* possessing the user's fingerprint, just by computing nullifier candidates), but it's not zero.
+
+V6 candidate fix: Pedersen-commitment-based set membership for `usedCtx`, where the contract stores commitments to (fp, ctx) pairs without exposing fp directly. Out of scope here; ~+2 weeks of circuit work + deeper contract refactor.
+
 ## Soundness invariants
 
-The amendment introduces three new invariants the contract + circuit jointly enforce:
+The amendment introduces four new invariants the contract + circuit jointly enforce:
 
 1. **(Identity-commitment uniqueness)** For any fingerprint `fp`, the on-chain `identityCommitments[fp]` matches the unique commitment derived from `(subjectSerialPacked, walletSecret)` for the user's wallet.
 
-2. **(Wallet-to-identity binding)** For any fingerprint `fp`, `identityWallets[fp] == msg.sender` is a precondition for `register()`. Rotation requires a ZK proof of consistent identity across old + new wallet.
+2. **(Wallet-to-identity binding)** For any fingerprint `fp`, `identityWallets[fp] == msg.sender` is a precondition for `register()` AND `rotateWallet()`. **Stale-bind invariant [v0.4]:** on the repeat-claim register path, this check MUST execute BEFORE the `usedCtx[fp][ctxKey]` test/set. Otherwise a fresh wallet could submit a proof committing to someone else's fingerprint, marking that fingerprint's `usedCtx` slot as consumed without proving identity ownership — bricking legitimate use of the (target's) ctxKey forever. Order: verifier check → `identityWallets[fp] == msg.sender` → `!usedCtx[fp][ctxKey]` → set `usedCtx`.
 
-3. **(Per-ctx Sybil)** For any (fingerprint, ctxKey) pair, `usedCtx[fp][ctxKey]` becomes true on first successful registration and never resets — even across `rotateWallet()` and (future) `identityReset()`.
+3. **(Per-ctx Sybil)** For any (fingerprint, ctxKey) pair, `usedCtx[fp][ctxKey]` becomes true on first successful registration and never resets — even across `rotateWallet()` and (future) `identityReset()`. **Load-bearing invariant V6 reset implementations MUST honor.**
 
-These supersede the V5 invariant "(NUL-1) `nullifierOf[msg.sender] == 0`" as the primary anti-Sybil mechanism. The `nullifierOf` mapping is retained for backward-compat with `IdentityEscrowNFT.sol` and `Verified` modifier consumers, but its uniqueness is now redundant with `usedCtx`.
+4. **(`nullifierOf` write-once-on-first-claim) [v0.4]** For any wallet, `nullifierOf[wallet]` is written only on the first-claim path of `register()` (when `identityCommitments[fp] == 0`). Repeat-claim paths do NOT overwrite. This:
+   - Preserves `IQKBRegistry.isVerified(wallet)` semantics for `Verified`-modifier consumers (boolean: has registered ≥1 ctx).
+   - Preserves `IdentityEscrowNFT.mint()`'s "one mint per nullifier" gate (since `tokenIdByNullifier[firstClaimNullifier]` becomes the unique mint slot).
+   - Drops the V5 `require(nullifierOf[msg.sender] == 0, "wallet already registered")` gate, which is incompatible with multi-ctx registration.
+   - Migrates atomically with `rotateWallet()` so post-rotation `nullifierOf[newWallet]` returns the same first-claim nullifier.
+
+These four supersede the V5 invariant "(NUL-1) `nullifierOf[msg.sender] == 0`" as the primary anti-Sybil mechanism. `nullifierOf` is retained as a write-once view for `IdentityEscrowNFT.sol` and `Verified`-modifier consumers; uniqueness on its own is no longer the gate (handled by `usedCtx`). `registrantOf` is **dropped entirely** (no callers post-amendment).
 
 ## Witness-builder API impact (`@qkb/circuits` src/build-witness-v5.ts)
 
@@ -734,11 +774,13 @@ Circuits-eng recommendation: opt-in. Don't add UX friction for the 95% EOA major
 
 Contracts-eng angle: zero contract impact (passphrase derivation is purely off-chain). Web-eng owns this UX call.
 
-### Q4: `nullifierOf` migration on `rotateWallet()` — yes or no?
+### Q4: `nullifierOf` migration on `rotateWallet()` — RESOLVED [v0.4]
 
-Spec **lands as yes** (see contract code above: `nullifierOf[newWallet] = nullifierOf[oldWallet]; delete nullifierOf[oldWallet]; registrantOf[nul] = newWallet;`). Without it, `IdentityEscrowNFT` ownership lookups break for users who rotate.
+Spec **lands as yes for `nullifierOf` migration** (single-slot write-once view; `nullifierOf[newWallet] = nullifierOf[oldWallet]; delete nullifierOf[oldWallet]`). Without it, `IQKBRegistry.isVerified(newWallet)` returns false post-rotation and `Verified`-modifier consumers break.
 
-Contracts-eng review angle: gas cost of the migration block (~3 SSTOREs); attack surface (does migration introduce any front-run vector? answer: no, msg.sender authorization is checked first). Confirm or push back.
+`registrantOf` is **dropped entirely** in v0.4; no migration needed (no callers post-amendment).
+
+**`IdentityEscrowNFT` adminTransfer cross-coupling is DROPPED** [user directive 2026-04-30: *"nft is optional. if this works without nft its fine."*]. The QKB layer does not manage NFT state. If a user wants to keep their NFT associated with the new wallet post-rotation, they call standard ERC-721 `transferFrom` independently. Saves ~36-38K gas per rotation; eliminates `nonReentrant` modifier requirement; eliminates audit surface from cross-contract coupling. Lead's earlier Q4 proposal (`adminTransfer` single-call + `nonReentrant`) is superseded.
 
 ### Q5: `WalletRotated` event privacy
 
