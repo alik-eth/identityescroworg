@@ -259,16 +259,18 @@ function _packHash(uint256 hi, uint256 lo) internal pure returns (bytes32) {
 | policy merklePath + bits | 520 |
 | **Total calldata** | **~2.2-2.4 KB** |
 
-Estimated gas (Base mainnet):
+Empirical gas (Forge revm, real-tuple snapshot post-§8 stub ceremony, `7ff73f2`):
 
-- Groth16 verify: ~250K
-- 2× p256Verify (EIP-7212): ~7K total
+- Groth16VerifierV5Stub.verifyProof: **~328K**
+- 2× p256Verify (EIP-7212, mocked in test): ~7K total
 - 1× sha256(signedAttrs): ~5K
-- 2× spkiCommit (Poseidon₆ ×2 + Poseidon₂ per call): ~60K total. Reused for trust-list Merkle leaf — no double cost.
-- 2× 16-deep Poseidon Merkle (trust + policy): ~60K
+- 2× spkiCommit (4× Poseidon₆ T7 + 2× Poseidon₂ T3): **~628K** (T7 = 139,729 gas/call, T3 = 34,407 gas/call; per-call cost is ~10-50× higher than the v1 estimate's "~3K-per-Poseidon" assumption)
+- 2× 16-deep Poseidon Merkle (trust + policy, 32× Poseidon₂ T3): **~966K**
 - Storage writes (`nullifierOf` + `registrantOf`): ~44K
-- Misc ops: ~15K
-- **Total: ~440-490K gas** ≈ $0.20-0.45 USD on Base. Higher than v2 estimate because `spkiCommit` is full Poseidon-on-EVM, not a cheap byte-hash. Acceptance budget bumps from 500K to 600K.
+- Misc ops + calldata + sha256 + EIP-7212 framing: ~40K
+- **Total: ~2.0M gas** ≈ $0.10-0.20 USD on Base mainnet (gas at ~0.005 gwei). **Acceptance budget revised 600K → 2.5M** with the empirical measurement; one-time-per-user registry cost; user impact is negligible.
+
+The original "~440-490K" estimate underestimated EVM Poseidon by ~10-50× per call. The implementation choice (full Poseidon-over-EVM via PoseidonT3/T7 bytecode-deployed contracts) is correct for the soundness model — no shortcut exists that preserves the SpkiCommit + Merkle equality semantics without paying the true Poseidon cost. Five resolution paths were evaluated (option 2: inline-assembly Poseidon ~50% reduction high audit cost; option 3: Merkle depth 16→8 saves 480K caps lists at 256; option 4: Merkle in-circuit saves 960K consumes most envelope headroom; option 5: EIP-5988 precompile not yet on Base); founder selected **option 1: accept higher budget + spec amend** on premature-optimization grounds — actual user impact is $0.15/register, registry is one-time per user, and other paths trade meaningful audit/constraint surface for unnoticeable gas savings.
 
 ## Circuit — `QKBPresentationV5.circom`
 
@@ -279,19 +281,19 @@ Estimated gas (Base mainnet):
 | `BindingParseV2CoreFast` | ~1.05M | Walks canonical QKB/2.0 binding bytes (single-pass Decoder amortization, MAX_BCANON=1024); locates `@context`, `timestamp`, `ctx`, and the `policy.leafHash` field (the field-domain `policyLeafHash` per QKB/2.0 §3); exposes them as constrained signals |
 | `Sha256Var(MAX_BCANON)` + `Sha256CanonPad` | ~880K | Produces `bindingHash` (= SHA-256 of canonical binding bytes); 16 SHA blocks at 1024 B + per-byte block-index mux for variable-length |
 | `Sha256Var(MAX_SA)` + `Sha256CanonPad` | ~1.28M | Produces `signedAttrsHash` (= SHA-256 of CAdES signedAttrs DER); 24 SHA blocks at 1536 B (real Diia 1388 B); largest single SHA in the circuit |
-| `Sha256Var(MAX_LEAF_TBS)` + `Sha256CanonPad` | ~880K | Produces `leafTbsHash` (= SHA-256 of leaf cert TBSCertificate); 16 SHA blocks at 1024 B |
+| `Sha256Var(MAX_LEAF_TBS)` + `Sha256CanonPad` | ~1.21M | Produces `leafTbsHash` (= SHA-256 of leaf cert TBSCertificate); 22 SHA blocks at 1408 B (real Diia leaf TBS measured 1203 B post-impl 2026-04-30; the pre-measurement "700-900 bytes" estimate was from a synthetic test fixture, not the admin-ecdsa real-Diia leaf) |
 | `Sha256Var(MAX_CTX)` + `Sha256CanonPad` | ~280K | Produces public-domain `ctxHash` (= SHA-256 of ctxBytes for hi/lo public signals; nullifier path uses Poseidon-domain ctxHash separately via NullifierDerive); 4 SHA blocks at 256 B |
 | `SignedAttrsParser(MAX_SA)` | ~180K | Walks signedAttrs DER, locates `messageDigest` SignedAttribute, equality-constrains it to `bindingHash` (closes the CAdES binding); O(MAX_SA) byte-window scan |
 | `X509SubjectSerial(MAX_CERT)` | ~100K | Locates OID 2.5.4.5; extracts `PNOUA-…` identifier |
 | `NullifierDerive` | ~5K | Poseidon₅ + Poseidon₂ |
 | Poseidon SPKI commits ×4 | ~8K | `Poseidon(6)` over X/Y limbs + `Poseidon(2)` to combine, for both certs |
 | `Bytes32ToHiLo` ×4 | ~4K | Decomposes each 256-bit SHA-256 hash output (ctxHash, bindingHash, signedAttrsHash, leafTbsHash) into 2 × 128-bit field elements (M11-hardened with `<p` checks). `policyLeafHash` is already field-domain — no decomposition needed. |
-| `Secp256k1PkMatch` | ~50K | Binds proof to `msg.sender` |
+| `Secp256k1PkMatch` + `Keccak256(uncompressedPk)` | ~150K | Binds proof to `msg.sender`. `Secp256k1PkMatch` packs `parser.pkBytes ↔ pkX/pkY` 4×64-bit LE limbs (~50K); `Keccak256` over the 64-byte uncompressed pk produces a 32-byte digest whose low 160 bits are equality-constrained to the `msgSender` public signal (~100K, vendored from `@zk-email/keccak256-circom`). Without the keccak link, a stolen `.p7s` could be replayed under any wallet — `msgSender` would be unconstrained vs. the binding's `pkBytes`. |
 | `leafTbs ↔ leafCert` byte-consistency | ~100-300K | Asserts the leafCert bytes used by `X509SubjectSerial` match the leafTbs bytes hashed by `Sha256Var(MAX_LEAF_TBS)` |
 | Slack / glue | ~50K | |
 | **Total** | **~4.0M** (cap **4.5M**) | |
 
-**Constraint count delta vs. v1 spec:** +200K from signedAttrs hashing + parser + extra hi/lo decompositions, then +550K from raising `MAX_SA` 256→1536 once real Diia signedAttrs was measured at 1388 B (the pre-measurement assumption "50-150 bytes" treated CAdES-BES as canonical; the CAdES-X-L profile Diia actually emits is ~10× larger), then +700K from raising `MAX_BCANON` 768→1024 and the V2Core implementation reality (V2CoreLegacy measured 2.62M; V2CoreFast single-pass Decoder amortization brought it back to ~1.05M, a 2.49× shrink — see circuits-eng §6.0a), then +1.4M from correcting the per-`Sha256Var` cost estimate from the original ~250K-per-chain to the empirical ~880K-per-chain at MAX≈1024 B (variable-length wrapper plus per-byte block-index mux scales near-linearly in MAX). The circuit budget envelope is set at **4.5M constraints** with the empirical projection at **~4.0M** for ~12% headroom. Final zkey targets ~2.0-2.4 GB. Browser proving remains feasible (V4 chain proof was already ~600 MB and demonstrably ran in-browser; modern Chrome handles ~4 GB memory pressure for snarkjs Web Worker proving); prove time projects to 8-12 s. **Future optimization (V5.1 candidate, NOT in A1 scope):** moving any of the three large in-circuit SHA chains (binding / signedAttrs / leafTbs) off-circuit and replacing the public commitment with `PoseidonChunkHashVar` over the bytes saves ~880K-1.28M per chain at the cost of an ABI-level public-signal layout change, a new Solidity Poseidon-over-bytes primitive, and additional audit surface; deferred to a post-A1 sub-project once the V5 baseline ships and any browser-UX complaints actually materialize.
+**Constraint count delta vs. v1 spec:** +200K from signedAttrs hashing + parser + extra hi/lo decompositions, then +550K from raising `MAX_SA` 256→1536 once real Diia signedAttrs was measured at 1388 B (the pre-measurement assumption "50-150 bytes" treated CAdES-BES as canonical; the CAdES-X-L profile Diia actually emits is ~10× larger), then +700K from raising `MAX_BCANON` 768→1024 and the V2Core implementation reality (V2CoreLegacy measured 2.62M; V2CoreFast single-pass Decoder amortization brought it back to ~1.05M, a 2.49× shrink — see circuits-eng §6.0a), then +1.4M from correcting the per-`Sha256Var` cost estimate from the original ~250K-per-chain to the empirical ~880K-per-chain at MAX≈1024 B (variable-length wrapper plus per-byte block-index mux scales near-linearly in MAX), then +100K from §6.8 vendoring `@zk-email/keccak256-circom` inline (closes the `msg.sender` soundness gap V4's `Secp256k1PkMatch` left open — `msgSender` was otherwise unconstrained vs. `parser.pkBytes`, allowing `.p7s` replay under any wallet; the ~50K original budget for `Secp256k1PkMatch` alone assumed a binding scheme that didn't materialize), then +243K from raising `MAX_LEAF_TBS` 1024→1408 once admin-ecdsa real-Diia leaf TBS measured 1203 B post-impl 2026-04-30 (the pre-measurement "700-900 bytes" estimate was from a synthetic test fixture). Empirical post-§6.7 measurement is **3.57M** (circuits-eng `snarkjs r1cs info`); post-§6.9 with the MAX_LEAF_TBS bump is **3.88M**; §6.8 + §6.10 close-out projects the final at **~4.0-4.1M**. The circuit budget envelope is set at **4.5M constraints** with ~9-11% headroom. zkey size projects to ~2.4-2.5 GB at this constraint count (linear scaling from V4's 4.2 GB / 6.5M baseline), within the ≤2.5 GB acceptance gate but at the upper end. If empirical ceremony zkey exceeds 2.5 GB, the V5.1 SHA-off-circuit optimization (deferred below) becomes the path forward. Final zkey targets ~2.0-2.4 GB. Browser proving remains feasible (V4 chain proof was already ~600 MB and demonstrably ran in-browser; modern Chrome handles ~4 GB memory pressure for snarkjs Web Worker proving); prove time projects to 8-12 s. **Future optimization (V5.1 candidate, NOT in A1 scope):** moving any of the three large in-circuit SHA chains (binding / signedAttrs / leafTbs) off-circuit and replacing the public commitment with `PoseidonChunkHashVar` over the bytes saves ~880K-1.28M per chain at the cost of an ABI-level public-signal layout change, a new Solidity Poseidon-over-bytes primitive, and additional audit surface; deferred to a post-A1 sub-project once the V5 baseline ships and any browser-UX complaints actually materialize.
 
 ### Components removed
 
@@ -304,7 +306,7 @@ Estimated gas (Base mainnet):
 - `MAX_BCANON`: 1024 (real Diia QKB/2.0 admin-ecdsa binding measured 849 B post-impl; the pre-measurement estimate "200-400 byte typical" was wrong because it assumed a smaller QKB/1.0-style schema. 1024 leaves ~21% headroom).
 - `MAX_CERT`: 2048 (real Diia leaf cert ~1.2-1.6 KB).
 - `MAX_SA`: 1536 (real Diia admin-ecdsa signedAttrs measured 1388 B post-impl: ETSI EN 319 122 CAdES with `id-aa-ets-signerLocation` + `id-aa-signing-certificateV2` attributes mandates ~1300 B; the pre-measurement estimate "50-150 bytes" was wrong because it implicitly assumed CAdES-BES rather than the CAdES-X-L profile Diia actually emits. 1536 leaves ~10% headroom).
-- `MAX_LEAF_TBS`: 1024 (real Diia leaf TBS ~700-900 bytes).
+- `MAX_LEAF_TBS`: 1408 (real Diia leaf TBS measured 1203 bytes post-impl 2026-04-30; the pre-measurement "700-900 bytes" estimate was wrong, likely measured on a synthetic test fixture rather than the admin-ecdsa real-Diia leaf. 1408 = 22×64 SHA blocks; ~17% headroom over the padded floor of 1216 B, matches the convention used for `MAX_BCANON` and `MAX_SA`).
 
 ### Public signal layout (14 field elements)
 
@@ -608,7 +610,7 @@ A1 sub-project is complete when:
   - [ ] iOS in-app WebView (Telegram / Instagram / X) explicitly returns the rerouting UX, never the prove flow.
 - [ ] `QKBRegistryV5.register()` succeeds end-to-end on Base Sepolia for the founder address with a real Diia .p7s, executed from a desktop browser.
 - [ ] `IdentityEscrowNFT.mint()` succeeds for the founder address; `tokenURI(1)` decodes to a civic-monumental certificate SVG.
-- [ ] Total `register()` gas on Base Sepolia ≤ 600K (raised from 500K → 600K because `spkiCommit` is full Poseidon-on-EVM, not byte-Poseidon).
+- [ ] Total `register()` gas on Base Sepolia ≤ 2.5M (revised 600K → 2.5M post-§8 empirical measurement, `7ff73f2`; per-Poseidon cost is ~10-50× higher than v1 spec assumed; founder accepted higher budget on premature-optimization grounds since user impact is ~$0.15/register on Base mainnet).
 - [ ] Ceremony transparency artifacts committed to repo.
 - [ ] Desktop-browser end-to-end (no CLI used) validated for at least one full register + mint.
 - [ ] Soundness regression tests pass:
