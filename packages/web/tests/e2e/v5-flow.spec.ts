@@ -123,7 +123,7 @@ test.describe('/ua/registerV5 — V5 happy path (mock prover, undeployed registr
     await ctx.close();
   });
 
-  test('Step 2 surfaces a download button that emits binding.qkb2.bin', async ({
+  test('Step 2 surfaces a download button that emits binding.qkb2.json', async ({
     browser,
   }) => {
     const ctx = await browser.newContext({ userAgent: FLAGSHIP_UA });
@@ -165,20 +165,21 @@ test.describe('/ua/registerV5 — V5 happy path (mock prover, undeployed registr
     });
 
     // The download button is the user-facing handoff to the QTSP. The
-    // file MUST be named `binding.qkb2.bin` so the documented Diia
-    // workflow ("attach binding.qkb2.bin") matches what users see in
-    // their downloads folder.
+    // file MUST be named `binding.qkb2.json` so the documented Diia
+    // workflow ("attach binding.qkb2.json") matches what users see in
+    // their downloads folder, and so the file's MIME / extension
+    // honestly reflects its content (RFC 8785 canonical JSON).
     const downloadButton = page.getByTestId('v5-binding-download');
     await expect(downloadButton).toBeVisible();
     const [download] = await Promise.all([
       page.waitForEvent('download'),
       downloadButton.click(),
     ]);
-    expect(download.suggestedFilename()).toBe('binding.qkb2.bin');
+    expect(download.suggestedFilename()).toBe('binding.qkb2.json');
 
     // The bytes must be the same JCS-canonical bcanon the preview
-    // describes — non-zero, ≤ 1024 B, prefixed with the JSON object
-    // opener (`{`, 0x7b).
+    // describes — non-zero, ≤ 1024 B, valid UTF-8 JSON parseable by
+    // JSON.parse, opening with `{` (0x7b).
     const stream = await download.createReadStream();
     const chunks: Buffer[] = [];
     for await (const chunk of stream) chunks.push(Buffer.from(chunk));
@@ -186,6 +187,11 @@ test.describe('/ua/registerV5 — V5 happy path (mock prover, undeployed registr
     expect(buf.length).toBeGreaterThan(0);
     expect(buf.length).toBeLessThanOrEqual(1024);
     expect(buf[0]).toBe(0x7b); // opening `{`
+    // Round-trip parse: if this throws, the file is not valid JSON
+    // and the .json extension is a lie.
+    const parsed = JSON.parse(buf.toString('utf8'));
+    expect(typeof parsed).toBe('object');
+    expect(parsed).not.toBeNull();
 
     await ctx.close();
   });

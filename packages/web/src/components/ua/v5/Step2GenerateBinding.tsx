@@ -21,13 +21,16 @@ type BuildState =
 /**
  * Trigger a browser download of the JCS-canonical bcanon bytes so the
  * user can attach them to Diia (the only currently-supported QTSP) and
- * produce a CAdES-BES signature. The file is just the raw bytes — this
- * is what the V5 circuit's signed-attrs OID stream consumes verbatim,
- * and what Diia's signer hashes inside the messageDigest attribute.
+ * produce a CAdES-BES signature over them. The bytes are valid UTF-8
+ * JSON (RFC 8785, JSON Canonicalization Scheme) — deterministic key
+ * order, no whitespace — which is exactly what Diia's signer hashes
+ * inside the messageDigest attribute and what the V5 circuit's
+ * signed-attrs OID stream consumes verbatim.
  *
- * Filename `binding.qkb2.bin` matches the JSON-shape display fixture
- * (`binding.qkb2.json`) so users can pair them visually if they keep
- * a copy of the display fields.
+ * Filename `binding.qkb2.json` and `application/json` MIME match the
+ * fixture convention in `packages/sdk/fixtures/v5/admin-ecdsa/`. A
+ * curious user can open the file in any text editor and visually
+ * inspect the binding's core fields before signing.
  */
 function downloadBindingFile(bytes: Uint8Array): void {
   // Copy into a fresh ArrayBuffer so the Blob owns its own memory; the
@@ -35,11 +38,11 @@ function downloadBindingFile(bytes: Uint8Array): void {
   // breaks if we hand the Uint8Array directly.
   const owned = new Uint8Array(bytes.length);
   owned.set(bytes);
-  const blob = new Blob([owned], { type: 'application/octet-stream' });
+  const blob = new Blob([owned], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = 'binding.qkb2.bin';
+  a.download = 'binding.qkb2.json';
   a.style.display = 'none';
   document.body.appendChild(a);
   a.click();

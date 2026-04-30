@@ -60,8 +60,8 @@
       "title": "Generate your binding",
       "generate": "Generate binding",
       "recovering": "Awaiting wallet signature for pubkey recovery…",
-      "download": "Download binding (.bin)",
-      "downloadHint": "Attach this file to Diia (or your QTSP client) and produce a CAdES-BES signature over its bytes. The .p7s file you receive goes into Step 3.",
+      "download": "Download binding (.json)",
+      "downloadHint": "Canonical JSON (RFC 8785). Attach this file to Diia (or your QTSP client) and produce a CAdES-BES signature over its bytes. The .p7s file you receive goes into Step 3.",
       "advance": "Continue to Diia signing",
       "back": "Back"
     },
