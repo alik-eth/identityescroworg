@@ -31,6 +31,8 @@ import {
   buildWitnessV5,
   parseP7s,
   type CmsExtraction,
+  decodeEcdsaSigSequence,
+  bytes32ToHex,
 } from '@qkb/sdk';
 import { SnarkjsWorkerProver } from '@qkb/sdk/prover/snarkjsWorker';
 import { V5_PROVER_ARTIFACTS } from './circuitArtifacts';
@@ -225,22 +227,33 @@ async function runRealPath(
   const intSpkiHex = `0x${intSpki.toString('hex')}` as `0x${string}`;
   const signedAttrsHex = `0x${cms.signedAttrsDer.toString('hex')}` as `0x${string}`;
 
-  // ECDSA r/s extraction — `parseP7s` exposes the raw `leafSigR` field
-  // as the SigBytes inner OCTET STRING. The `register()` calldata wants
-  // (r, s) as two bytes32. For a real Diia signature the inner DER form
-  // is `SEQUENCE { INTEGER r, INTEGER s }` — we'd parse that here.
-  // Until the real-Diia integration lands (gated on a fixture + the
-  // contracts-side decoder spec), we forward the raw bytes via zeroing
-  // helpers and let the contract path Decoder handle it. Web-eng plan
-  // Task 9 amendment will tighten this to actual r/s splitting.
+  // ECDSA-Sig-Value SEQUENCE decoding for register() calldata:
+  //   leafSig — SignerInfo's signature over signedAttrs.
+  //   intSig  — leaf cert's signatureValue (CA's signature over leaf TBS).
+  // Both are SEQUENCE { INTEGER r, INTEGER s } DER blobs. parseP7s gives
+  // us the leaf SignerInfo signature as `cms.leafSigR`; the cert-side
+  // signature we extract via pkijs from `leafCertDer` here so parse-p7s
+  // stays surface-stable (drift-check guards its fingerprint vs
+  // arch-circuits upstream).
+  const leafSigSeq = cms.leafSigR ?? Buffer.alloc(0);
+  if (leafSigSeq.length === 0) {
+    throw new Error(
+      'V5 real-prover pipeline: parseP7s returned empty leaf SignerInfo signature',
+    );
+  }
+  const { r: leafR, s: leafS } = decodeEcdsaSigSequence(leafSigSeq);
+
+  const intSigSeq = extractCertSignatureSeq(cms.leafCertDer);
+  const { r: intR, s: intS } = decodeEcdsaSigSequence(intSigSeq);
+
   const registerArgs: RegisterArgsV5 = {
     proof,
     sig: publicSignals,
     leafSpki: leafSpkiHex,
     intSpki: intSpkiHex,
     signedAttrs: signedAttrsHex,
-    leafSig: [ZERO_BYTES32, ZERO_BYTES32] as const,
-    intSig: [ZERO_BYTES32, ZERO_BYTES32] as const,
+    leafSig: [bytes32ToHex(leafR), bytes32ToHex(leafS)] as const,
+    intSig: [bytes32ToHex(intR), bytes32ToHex(intS)] as const,
     trustMerklePath: path16,
     trustMerklePathBits: 0n,
     policyMerklePath: path16,
@@ -248,6 +261,25 @@ async function runRealPath(
   };
 
   return { publicSignals, proof, registerArgs };
+}
+
+/**
+ * Extract the leaf cert's signatureValue (the CA's ECDSA-Sig-Value
+ * SEQUENCE { INTEGER r, INTEGER s } over the leaf TBSCertificate) as
+ * raw DER bytes. pkijs's `Certificate.signatureValue` is a BIT STRING
+ * whose inner content IS the ECDSA-Sig-Value SEQUENCE; we just unwrap.
+ * register() consumes (r, s) split via decodeEcdsaSigSequence at the
+ * call site.
+ */
+function extractCertSignatureSeq(certDer: Buffer): Buffer {
+  const ab = new ArrayBuffer(certDer.length);
+  new Uint8Array(ab).set(certDer);
+  const asn = fromBER(ab);
+  if (asn.offset === -1) {
+    throw new Error('extractCertSignatureSeq: invalid BER');
+  }
+  const cert = new Certificate({ schema: asn.result });
+  return Buffer.from(new Uint8Array(cert.signatureValue.valueBlock.valueHexView));
 }
 
 /**

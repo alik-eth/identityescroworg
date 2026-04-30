@@ -282,6 +282,8 @@ export {
   decomposeTo643Limbs,
   parseP256Spki,
   spkiCommit,
+  decodeEcdsaSigSequence,
+  bytes32ToHex,
   MAX_CTX_PADDED,
   MAX_LEAF_TBS,
   MAX_POLICY_ID,
@@ -290,4 +292,5 @@ export {
   type V2CoreBindingOffsets,
   type WitnessV5,
   type ParsedSpki,
+  type EcdsaRS,
 } from './witness/v5.js';

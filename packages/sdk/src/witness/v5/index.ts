@@ -34,3 +34,9 @@ export {
   spkiCommit,
   type ParsedSpki,
 } from './spki-commit-ref';
+
+export {
+  decodeEcdsaSigSequence,
+  bytes32ToHex,
+  type EcdsaRS,
+} from './ecdsa-sig';

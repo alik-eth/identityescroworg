@@ -32,6 +32,7 @@ import { keccak_256 } from '@noble/hashes/sha3';
 import { describe, expect, it } from 'vitest';
 import { buildWitnessV5 } from './build-witness-v5';
 import { parseP7s } from './parse-p7s';
+import { decodeEcdsaSigSequence } from './ecdsa-sig';
 import { buildSynthCades } from './_test-helpers/build-synth-cades';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -68,6 +69,18 @@ describe('V5 witness builder — synthetic-CAdES round-trip', () => {
     expect(parsed.signedAttrsDer.toString('hex')).toBe(synth.signedAttrsDer.toString('hex'));
     expect(parsed.signedAttrsMdOffset).toBe(synth.signedAttrsMdOffset);
     expect(parsed.leafCertDer.toString('hex')).toBe(leafCertDer.toString('hex'));
+
+    // ECDSA-Sig-Value (r, s) decode — buildSynthCades plants a known
+    // placeholder SEQUENCE { INTEGER 1, INTEGER 1 } as the SignerInfo
+    // signature (the V5 circuit doesn't verify the signature; EIP-7212
+    // does that on chain). Round-trip the leafSig through
+    // decodeEcdsaSigSequence and confirm we get (1, 1) padded to 32 B.
+    expect(parsed.leafSigR).toBeDefined();
+    const { r, s } = decodeEcdsaSigSequence(parsed.leafSigR!);
+    expect(r.length).toBe(32);
+    expect(s.length).toBe(32);
+    expect(BigInt('0x' + r.toString('hex'))).toBe(1n);
+    expect(BigInt('0x' + s.toString('hex'))).toBe(1n);
 
     const witness = await buildWitnessV5({
       bindingBytes,

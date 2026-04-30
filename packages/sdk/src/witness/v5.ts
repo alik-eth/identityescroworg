@@ -18,6 +18,8 @@ export {
   decomposeTo643Limbs,
   parseP256Spki,
   spkiCommit,
+  decodeEcdsaSigSequence,
+  bytes32ToHex,
   MAX_BCANON,
   MAX_CERT,
   MAX_CTX,
@@ -33,4 +35,5 @@ export type {
   V2CoreBindingOffsets,
   WitnessV5,
   ParsedSpki,
+  EcdsaRS,
 } from './v5/index.js';
