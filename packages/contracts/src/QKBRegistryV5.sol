@@ -110,6 +110,19 @@ contract QKBRegistryV5 is IQKBRegistry {
     event PolicyRootRotated(bytes32 indexed previous, bytes32 indexed current, address admin);
     event AdminTransferred(address indexed previous, address indexed current);
 
+    /// @dev V5.1 wallet rotation event. Emitted by `rotateWallet()` after the
+    ///      identity binding is moved from `oldWallet` to `newWallet`.
+    ///      Indexed fields: fingerprint (primary lookup key), oldWallet,
+    ///      newWallet (both watched by indexers / wallet-rotation UX).
+    ///      `usedCtx[fingerprint][*]` flags persist across rotation per
+    ///      V5.1 invariant 3 — anti-Sybil unaffected.
+    event WalletRotated(
+        bytes32 indexed fingerprint,
+        address indexed oldWallet,
+        address indexed newWallet,
+        bytes32 newCommitment
+    );
+
     /* ---------- errors ---------- */
 
     error OnlyAdmin();
@@ -230,6 +243,9 @@ contract QKBRegistryV5 is IQKBRegistry {
     error CommitmentMismatch();    // Gate 6: repeat-claim commitment ≠ stored commitment.
     error WalletNotBound();        // Gate 6: repeat-claim msg.sender ≠ identityWallets[fp] (stale-bind).
     error CtxAlreadyUsed();        // Gate 7: usedCtx[fp][ctxKey] already true.
+    error UnknownIdentity();       // rotateWallet: identityCommitments[fp] == 0 (no prior register).
+    error InvalidNewWallet();      // rotateWallet: newWallet == 0 || == oldWallet || != msg.sender.
+    error InvalidRotationAuth();   // rotateWallet: ECDSA recovery from oldWalletAuthSig ≠ identityWallets[fp].
     // V5.1 register-mode no-op invariants: the proof's slots [17]/[18] under
     // rotationMode==0 must equal identityCommitment / msgSender respectively.
     // The fold-in circuit's ForceEqualIfEnabled gates already enforce these
@@ -426,6 +442,153 @@ contract QKBRegistryV5 is IQKBRegistry {
         }
 
         emit Registered(msg.sender, nullifierBytes, sig.timestamp);
+    }
+
+    /* ---------- rotateWallet() — V5.1 wallet rotation entry point ---------- */
+
+    /// @notice Rotate the wallet bound to an existing identity fingerprint.
+    ///         Caller is the NEW wallet; the OLD wallet authorizes the
+    ///         rotation by signing an EIP-191 message off-chain.
+    ///
+    /// @dev    Three-layer authorization (any one failure aborts atomically):
+    ///           1. Groth16 proof committing to (fingerprint, oldCommitment,
+    ///              newCommitment, newWallet) under rotationMode == 1.
+    ///              Proves the prover knows BOTH oldWalletSecret (opens
+    ///              oldCommitment) AND newWalletSecret (opens newCommitment)
+    ///              for the SAME subjectSerial — circuits-eng's rotation
+    ///              circuit enforces this via Poseidon₂ openings + the
+    ///              `ForceEqualIfEnabled` mode-flag gates.
+    ///           2. ECDSA signature from the old wallet over a domain-tagged
+    ///              hash binding (fingerprint, newWallet). Raises the bar
+    ///              against tx-only compromise: an attacker who tricks the
+    ///              user into signing a rotation tx (UI deception) doesn't
+    ///              automatically have a personal_sign of the rotation
+    ///              authorization payload.
+    ///           3. State invariants: identityCommitments[fp] == oldCommit,
+    ///              newWallet == msg.sender, newWallet != oldWallet,
+    ///              nullifierOf[newWallet] == 0 (V5.1 invariant 5 —
+    ///              wallet uniqueness across rotation).
+    ///
+    /// @dev    State updates atomically:
+    ///           - identityCommitments[fp] = newCommitment
+    ///           - identityWallets[fp]     = newWallet (= msg.sender)
+    ///           - nullifierOf migrates: newWallet inherits the FIRST-claim
+    ///             nullifier; oldWallet's slot is cleared (storage refund).
+    ///           - usedCtx[fp][*] is NEVER touched (V5.1 invariant 3 —
+    ///             monotonic; carries forward across rotation).
+    ///
+    /// @dev    NFT contract is NOT touched per user directive 2026-04-30
+    ///         ("nft is optional. if this works without nft its fine").
+    ///         Users transfer their IdentityEscrowNFT via standard ERC-721
+    ///         independently of this rotation.
+    ///
+    /// @param  proof              Groth16 proof for the rotation circuit.
+    /// @param  sig                19-field public signals; rotationMode==1.
+    /// @param  oldWalletAuthSig   65-byte ECDSA signature (r || s || v) from
+    ///                            the old wallet over the EIP-191 personal-
+    ///                            message hash of
+    ///                            `keccak256("qkb-rotate-auth-v1" || fp || newWallet)`.
+    function rotateWallet(
+        Groth16Proof   calldata proof,
+        PublicSignals  calldata sig,
+        bytes          calldata oldWalletAuthSig
+    ) external {
+        // ----- Mode gate -----
+        if (sig.rotationMode != 1) revert WrongMode();
+
+        // ----- Groth16 verify (mode-flag enforced inside circuit too) -----
+        uint256[19] memory input = _packPublicSignals(sig);
+        if (!groth16Verifier.verifyProof(proof.a, proof.b, proof.c, input)) {
+            revert BadProof();
+        }
+
+        // ----- Unpack rotation fields -----
+        bytes32 fingerprint   = bytes32(sig.identityFingerprint);
+        bytes32 newCommitment = bytes32(sig.identityCommitment);
+        bytes32 oldCommitment = bytes32(sig.rotationOldCommitment);
+        address newWallet     = address(uint160(sig.rotationNewWallet));
+
+        // ----- Validate rotation invariants -----
+        // Identity must be claimed (this is NOT a first-claim path).
+        address oldWallet = identityWallets[fingerprint];
+        if (oldWallet == address(0))                  revert UnknownIdentity();
+        // Stored commitment must match the proof's `rotationOldCommitment`.
+        if (identityCommitments[fingerprint] != oldCommitment) revert CommitmentMismatch();
+        // newWallet must be the caller, non-zero, and distinct from oldWallet.
+        if (newWallet != msg.sender)                  revert InvalidNewWallet();
+        if (newWallet == oldWallet)                   revert InvalidNewWallet();
+        // V5.1 invariant 5: newWallet must not already hold ANY identity.
+        // Guards against a wallet collapse where rotation could merge two
+        // identities into one wallet, breaking the per-wallet uniqueness
+        // that IdentityEscrowNFT.isVerified() consumers rely on.
+        if (nullifierOf[newWallet] != bytes32(0))     revert AlreadyRegistered();
+
+        // ----- Verify old-wallet authorization signature (ECDSA recover) -----
+        // Domain tag binds this signature to the rotation use case + this
+        // exact registry deployment, preventing replay across:
+        //   - other QKB / DApp signing flows ("qkb-rotate-auth-v1" tag)
+        //   - other chains where the same registry source might deploy
+        //     (block.chainid)
+        //   - other registry instances on the same chain, e.g. an upgrade
+        //     redeploy or per-country registry (address(this))
+        //   - other (fingerprint, newWallet) rotations (fingerprint, newWallet)
+        // Per codex review on Task 3 ([P2] cross-deployment-replay).
+        bytes32 authPayload = keccak256(
+            abi.encodePacked(
+                "qkb-rotate-auth-v1",
+                block.chainid,
+                address(this),
+                fingerprint,
+                newWallet
+            )
+        );
+        bytes32 ethSignedHash = keccak256(
+            abi.encodePacked("\x19Ethereum Signed Message:\n32", authPayload)
+        );
+        address recovered = _recoverSigner(ethSignedHash, oldWalletAuthSig);
+        if (recovered != oldWallet) revert InvalidRotationAuth();
+
+        // ----- Atomic state update -----
+        identityCommitments[fingerprint] = newCommitment;
+        identityWallets[fingerprint]     = newWallet;
+
+        // nullifierOf migration (recommended in spec Q4): preserves the
+        // first-claim nullifier value on the new wallet so IQKBRegistry
+        // consumers (IdentityEscrowNFT, Verified-modifier) keep returning
+        // a non-zero value for the active wallet. Old wallet's slot
+        // cleared (refund).
+        nullifierOf[newWallet] = nullifierOf[oldWallet];
+        delete nullifierOf[oldWallet];
+
+        // V5.1 invariant 3: usedCtx[fp][*] persists. Anti-Sybil intact.
+
+        emit WalletRotated(fingerprint, oldWallet, newWallet, newCommitment);
+    }
+
+    /// @dev Recover an ECDSA signer address from a 65-byte (r || s || v)
+    ///      signature over `hash`. Reverts (returns address(0) effectively)
+    ///      on s-malleability or wrong length; the caller's downstream
+    ///      `recovered != oldWallet` check turns those into
+    ///      `InvalidRotationAuth`. Mirrors the OpenZeppelin ECDSA pattern
+    ///      without pulling the full lib in — we only need this one path.
+    function _recoverSigner(bytes32 hash, bytes calldata signature)
+        internal pure returns (address)
+    {
+        if (signature.length != 65) return address(0);
+        bytes32 r;
+        bytes32 s;
+        uint8   v;
+        assembly {
+            r := calldataload(signature.offset)
+            s := calldataload(add(signature.offset, 0x20))
+            v := byte(0, calldataload(add(signature.offset, 0x40)))
+        }
+        // EIP-2 / SEC 1: reject high-s to prevent malleability.
+        if (uint256(s) > 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0) {
+            return address(0);
+        }
+        if (v != 27 && v != 28) return address(0);
+        return ecrecover(hash, v, r, s);
     }
 
     /// @dev Pack PublicSignals into the 19-element array the verifier

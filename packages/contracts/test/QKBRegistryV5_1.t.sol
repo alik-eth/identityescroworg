@@ -293,6 +293,300 @@ contract QKBRegistryV5_1RegisterTest is Test {
         registry.register(_proof(), sig, leafSpki, intSpki, BASELINE_SIGNED_ATTRS, ls, is_, trustPath, 0, policyPath, 0);
     }
 
+    /* ============ V5.1 rotateWallet() — Task 3 ============ */
+
+    /// Test fixtures for rotation: vm.addr-derived alice/bob keys so we can
+    /// vm.sign their EIP-191 messages. These shadow the storage-only alice
+    /// (0xA11CE) / bob (0xB0B) for rotation tests that need actual signing.
+    uint256 internal constant ALICE_PK = uint256(0xA11CE);
+    uint256 internal constant BOB_PK   = uint256(0xB0B);
+    uint256 internal constant CAROL_PK = uint256(0xCA401);
+
+    function _aliceAddr() internal pure returns (address) { return vm.addr(ALICE_PK); }
+    function _bobAddr()   internal pure returns (address) { return vm.addr(BOB_PK);   }
+    function _carolAddr() internal pure returns (address) { return vm.addr(CAROL_PK); }
+
+    function _rotateAuthSig(uint256 pk, bytes32 fingerprint, address newWallet)
+        internal view returns (bytes memory)
+    {
+        // Domain bind: "qkb-rotate-auth-v1" || chainid || registry || fp || newWallet
+        // (matches QKBRegistryV5._verifyRotationAuth payload — codex P2 fix).
+        bytes32 authPayload = keccak256(
+            abi.encodePacked(
+                "qkb-rotate-auth-v1",
+                block.chainid,
+                address(registry),
+                fingerprint,
+                newWallet
+            )
+        );
+        bytes32 ethSignedHash = keccak256(
+            abi.encodePacked("\x19Ethereum Signed Message:\n32", authPayload)
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, ethSignedHash);
+        return abi.encodePacked(r, s, v);
+    }
+
+    /// Rotation-mode public signals. Mirrors _signals but with
+    /// rotationMode=1, rotationOldCommitment=oldCommit (≠ identityCommitment),
+    /// rotationNewWallet=newWallet (≠ msgSender).
+    function _rotationSignals(
+        address sender,
+        uint256 fingerprint,
+        uint256 newCommitment,
+        uint256 oldCommitment,
+        address newWallet
+    ) internal view returns (QKBRegistryV5.PublicSignals memory) {
+        (uint256 saHi, uint256 saLo) = _hashHiLo(BASELINE_SIGNED_ATTRS);
+        return QKBRegistryV5.PublicSignals({
+            msgSender:             uint256(uint160(sender)),
+            timestamp:             block.timestamp - 1,
+            nullifier:             0,                          // unused under rotation mode
+            ctxHashHi:             0,
+            ctxHashLo:             0,
+            bindingHashHi:         0,
+            bindingHashLo:         0,
+            signedAttrsHashHi:     saHi,
+            signedAttrsHashLo:     saLo,
+            leafTbsHashHi:         0,
+            leafTbsHashLo:         0,
+            policyLeafHash:        BASELINE_POLICY_LEAF_HASH,
+            leafSpkiCommit:        baselineLeafSpkiCommit,
+            intSpkiCommit:         baselineIntSpkiCommit,
+            identityFingerprint:   fingerprint,
+            identityCommitment:    newCommitment,
+            rotationMode:          1,
+            rotationOldCommitment: oldCommitment,
+            rotationNewWallet:     uint256(uint160(newWallet))
+        });
+    }
+
+    /// First-claim alice (with vm.addr-derived key) — used by rotation tests
+    /// that need a real signing key on the old wallet.
+    function _claimWithKey(uint256 pk, uint256 fingerprint, uint256 commitment, uint256 nullifier) internal {
+        QKBRegistryV5.PublicSignals memory sig = _signals(
+            vm.addr(pk), fingerprint, commitment, /*ctxLo*/ 1, nullifier, /*mode*/ 0
+        );
+        _callRegisterAs(vm.addr(pk), sig);
+    }
+
+    function test_rotateWallet_v51_happyPath() public {
+        // alice claims FP_ALICE with COMMIT_ALICE.
+        _claimWithKey(ALICE_PK, FP_ALICE, COMMIT_ALICE, 0xA1);
+
+        address aliceAddr = _aliceAddr();
+        address bobAddr   = _bobAddr();
+
+        // alice signs the rotation authorization for (FP_ALICE → bob).
+        bytes memory authSig = _rotateAuthSig(ALICE_PK, bytes32(FP_ALICE), bobAddr);
+
+        // New commitment = COMMIT_BOB (different from COMMIT_ALICE — proves
+        // newWalletSecret ≠ oldWalletSecret in the rotation circuit).
+        QKBRegistryV5.PublicSignals memory sig = _rotationSignals(
+            bobAddr, FP_ALICE, COMMIT_BOB, COMMIT_ALICE, bobAddr
+        );
+
+        // Track gas via gasleft() bracket — the gas-report assertion below
+        // is a sanity ceiling; the actual tight number lands once
+        // circuits-eng's V5.1 stub verifier replaces the placeholder.
+        vm.prank(bobAddr);
+        uint256 g0 = gasleft();
+        registry.rotateWallet(_proof(), sig, authSig);
+        uint256 used = g0 - gasleft();
+        emit log_named_uint("rotateWallet gas (placeholder verifier)", used);
+
+        // State invariants post-rotation.
+        assertEq(registry.identityCommitments(bytes32(FP_ALICE)), bytes32(COMMIT_BOB), "commitment updated");
+        assertEq(registry.identityWallets(bytes32(FP_ALICE)),     bobAddr,             "wallet updated");
+        assertEq(registry.nullifierOf(bobAddr),   bytes32(uint256(0xA1)), "nullifierOf migrated to new wallet");
+        assertEq(registry.nullifierOf(aliceAddr), bytes32(0),             "nullifierOf cleared on old wallet");
+        assertTrue(registry.isVerified(bobAddr),    "isVerified true on new wallet");
+        assertFalse(registry.isVerified(aliceAddr), "isVerified false on old wallet");
+
+        // V5.1 invariant 3: usedCtx is monotonic — pre-rotation ctxs persist.
+        bytes32 ctxKey1 = bytes32(uint256(1));
+        assertTrue(registry.usedCtx(bytes32(FP_ALICE), ctxKey1), "usedCtx persists across rotation");
+
+        // Spec ceiling for rotateWallet: ≤ 600K (per amendment §"Rotation
+        // circuit ceremony"). With placeholder verifier the cost is
+        // dominated by ECDSA recovery + 4 SSTOREs + one event; well under
+        // ceiling. Real V5.1 stub verifier will add ~340K Groth16 pairing
+        // (still well within 2.5M global ceiling, cushion under 600K
+        // rotation-specific ceiling shrinks but stays positive).
+        assertLt(used, 600_000, "rotateWallet exceeded 600K gas (placeholder)");
+    }
+
+    function test_rotateWallet_v51_revertsWrongMode_whenMode0() public {
+        _claimWithKey(ALICE_PK, FP_ALICE, COMMIT_ALICE, 0xA1);
+        address bobAddr = _bobAddr();
+        bytes memory authSig = _rotateAuthSig(ALICE_PK, bytes32(FP_ALICE), bobAddr);
+
+        // Build rotation-shaped signals but with rotationMode=0 — should
+        // revert at Gate 0 (WrongMode) before any other gate fires.
+        QKBRegistryV5.PublicSignals memory sig = _rotationSignals(
+            bobAddr, FP_ALICE, COMMIT_BOB, COMMIT_ALICE, bobAddr
+        );
+        sig.rotationMode = 0;
+
+        vm.prank(bobAddr);
+        vm.expectRevert(QKBRegistryV5.WrongMode.selector);
+        registry.rotateWallet(_proof(), sig, authSig);
+    }
+
+    function test_rotateWallet_v51_revertsUnknownIdentity_whenFingerprintNotClaimed() public {
+        // No prior register — FP_ALICE never claimed.
+        address bobAddr = _bobAddr();
+        bytes memory authSig = _rotateAuthSig(ALICE_PK, bytes32(FP_ALICE), bobAddr);
+
+        QKBRegistryV5.PublicSignals memory sig = _rotationSignals(
+            bobAddr, FP_ALICE, COMMIT_BOB, COMMIT_ALICE, bobAddr
+        );
+
+        vm.prank(bobAddr);
+        vm.expectRevert(QKBRegistryV5.UnknownIdentity.selector);
+        registry.rotateWallet(_proof(), sig, authSig);
+    }
+
+    function test_rotateWallet_v51_revertsCommitmentMismatch() public {
+        _claimWithKey(ALICE_PK, FP_ALICE, COMMIT_ALICE, 0xA1);
+        address bobAddr = _bobAddr();
+        bytes memory authSig = _rotateAuthSig(ALICE_PK, bytes32(FP_ALICE), bobAddr);
+
+        // rotationOldCommitment ≠ stored commitment.
+        QKBRegistryV5.PublicSignals memory sig = _rotationSignals(
+            bobAddr, FP_ALICE, COMMIT_BOB, /*oldCommit*/ uint256(0xDEAD), bobAddr
+        );
+
+        vm.prank(bobAddr);
+        vm.expectRevert(QKBRegistryV5.CommitmentMismatch.selector);
+        registry.rotateWallet(_proof(), sig, authSig);
+    }
+
+    function test_rotateWallet_v51_revertsInvalidNewWallet_whenSenderNotNewWallet() public {
+        _claimWithKey(ALICE_PK, FP_ALICE, COMMIT_ALICE, 0xA1);
+        address bobAddr = _bobAddr();
+        address carolAddr = _carolAddr();
+        bytes memory authSig = _rotateAuthSig(ALICE_PK, bytes32(FP_ALICE), bobAddr);
+
+        // Proof commits to newWallet=bob but tx sender is carol.
+        QKBRegistryV5.PublicSignals memory sig = _rotationSignals(
+            bobAddr, FP_ALICE, COMMIT_BOB, COMMIT_ALICE, bobAddr
+        );
+
+        vm.prank(carolAddr);
+        vm.expectRevert(QKBRegistryV5.InvalidNewWallet.selector);
+        registry.rotateWallet(_proof(), sig, authSig);
+    }
+
+    function test_rotateWallet_v51_revertsInvalidNewWallet_whenNewEqualsOld() public {
+        _claimWithKey(ALICE_PK, FP_ALICE, COMMIT_ALICE, 0xA1);
+        address aliceAddr = _aliceAddr();
+        bytes memory authSig = _rotateAuthSig(ALICE_PK, bytes32(FP_ALICE), aliceAddr);
+
+        // Proof claims rotation alice→alice (no-op rotation forbidden).
+        QKBRegistryV5.PublicSignals memory sig = _rotationSignals(
+            aliceAddr, FP_ALICE, COMMIT_ALICE, COMMIT_ALICE, aliceAddr
+        );
+
+        vm.prank(aliceAddr);
+        vm.expectRevert(QKBRegistryV5.InvalidNewWallet.selector);
+        registry.rotateWallet(_proof(), sig, authSig);
+    }
+
+    function test_rotateWallet_v51_revertsAlreadyRegistered_whenNewWalletHoldsIdentity() public {
+        // alice claims FP_ALICE; carol claims FP_BOB (different identity).
+        _claimWithKey(ALICE_PK, FP_ALICE, COMMIT_ALICE, 0xA1);
+        _claimWithKey(CAROL_PK, FP_BOB,   COMMIT_BOB,   0xCA);
+
+        address carolAddr = _carolAddr();
+        // alice tries to rotate FP_ALICE → carol, but carol already holds FP_BOB.
+        bytes memory authSig = _rotateAuthSig(ALICE_PK, bytes32(FP_ALICE), carolAddr);
+        QKBRegistryV5.PublicSignals memory sig = _rotationSignals(
+            carolAddr, FP_ALICE, COMMIT_BOB, COMMIT_ALICE, carolAddr
+        );
+
+        vm.prank(carolAddr);
+        vm.expectRevert(QKBRegistryV5.AlreadyRegistered.selector);
+        registry.rotateWallet(_proof(), sig, authSig);
+    }
+
+    function test_rotateWallet_v51_revertsInvalidRotationAuth_whenSigByWrongKey() public {
+        _claimWithKey(ALICE_PK, FP_ALICE, COMMIT_ALICE, 0xA1);
+        address bobAddr = _bobAddr();
+
+        // Sign with BOB's key (not the bound oldWallet alice's). Recover
+        // returns bob's address; identityWallets[FP_ALICE] is alice's →
+        // mismatch → InvalidRotationAuth.
+        bytes memory badSig = _rotateAuthSig(BOB_PK, bytes32(FP_ALICE), bobAddr);
+
+        QKBRegistryV5.PublicSignals memory sig = _rotationSignals(
+            bobAddr, FP_ALICE, COMMIT_BOB, COMMIT_ALICE, bobAddr
+        );
+
+        vm.prank(bobAddr);
+        vm.expectRevert(QKBRegistryV5.InvalidRotationAuth.selector);
+        registry.rotateWallet(_proof(), sig, badSig);
+    }
+
+    function test_rotateWallet_v51_revertsInvalidRotationAuth_whenSigOverWrongPayload() public {
+        _claimWithKey(ALICE_PK, FP_ALICE, COMMIT_ALICE, 0xA1);
+        address bobAddr   = _bobAddr();
+        address carolAddr = _carolAddr();
+
+        // alice signs authorization for rotation FP_ALICE → carol, but the
+        // proof says newWallet = bob. Reconstructed authPayload uses bob,
+        // so recovery returns the wrong signer → mismatch.
+        bytes memory wrongPayloadSig = _rotateAuthSig(ALICE_PK, bytes32(FP_ALICE), carolAddr);
+
+        QKBRegistryV5.PublicSignals memory sig = _rotationSignals(
+            bobAddr, FP_ALICE, COMMIT_BOB, COMMIT_ALICE, bobAddr
+        );
+
+        vm.prank(bobAddr);
+        vm.expectRevert(QKBRegistryV5.InvalidRotationAuth.selector);
+        registry.rotateWallet(_proof(), sig, wrongPayloadSig);
+    }
+
+    function test_rotateWallet_v51_usedCtxPersists_acrossRotation() public {
+        // alice claims FP_ALICE for ctx 1.
+        _claimWithKey(ALICE_PK, FP_ALICE, COMMIT_ALICE, 0xA1);
+        address aliceAddr = _aliceAddr();
+        address bobAddr   = _bobAddr();
+
+        // alice rotates → bob.
+        bytes memory authSig = _rotateAuthSig(ALICE_PK, bytes32(FP_ALICE), bobAddr);
+        QKBRegistryV5.PublicSignals memory rotSig = _rotationSignals(
+            bobAddr, FP_ALICE, COMMIT_BOB, COMMIT_ALICE, bobAddr
+        );
+        vm.prank(bobAddr);
+        registry.rotateWallet(_proof(), rotSig, authSig);
+
+        // bob (the new bound wallet) tries to register against ctx 1 again.
+        // V5.1 invariant 3: usedCtx[FP_ALICE][1] is still true.
+        QKBRegistryV5.PublicSignals memory regSig = _signals(
+            bobAddr, FP_ALICE, COMMIT_BOB, /*ctxLo*/ 1, /*nullifier*/ 0xB1, /*mode*/ 0
+        );
+        bytes32[2] memory ls;
+        bytes32[2] memory is_;
+        vm.prank(bobAddr);
+        vm.expectRevert(QKBRegistryV5.CtxAlreadyUsed.selector);
+        registry.register(_proof(), regSig, leafSpki, intSpki, BASELINE_SIGNED_ATTRS, ls, is_, trustPath, 0, policyPath, 0);
+
+        // But a NEW ctx (ctxLo=2) succeeds for bob — confirms identity
+        // binding survived the rotation cleanly.
+        QKBRegistryV5.PublicSignals memory regSig2 = _signals(
+            bobAddr, FP_ALICE, COMMIT_BOB, /*ctxLo*/ 2, /*nullifier*/ 0xB2, /*mode*/ 0
+        );
+        vm.prank(bobAddr);
+        registry.register(_proof(), regSig2, leafSpki, intSpki, BASELINE_SIGNED_ATTRS, ls, is_, trustPath, 0, policyPath, 0);
+
+        // Old wallet's nullifierOf was cleared by the rotation. Confirm.
+        assertEq(registry.nullifierOf(aliceAddr), bytes32(0), "old wallet nullifierOf cleared");
+        // bob's nullifierOf preserved as the FIRST-claim alice nullifier
+        // (write-once invariant 4 carried across rotation via migration).
+        assertEq(registry.nullifierOf(bobAddr), bytes32(uint256(0xA1)), "bob inherited alice's first-claim nullifier");
+    }
+
     /* ============ Fixture helpers (mirrors register-test pattern) ============ */
 
     function _readEmptySubtreeRoots() internal view returns (bytes32[16] memory out) {
