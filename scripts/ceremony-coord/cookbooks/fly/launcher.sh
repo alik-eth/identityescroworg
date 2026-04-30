@@ -52,6 +52,14 @@ fi
 
 DEFAULT_REGION="fra"
 
+# Fly region codes — sourced from https://fly.io/docs/reference/regions/.
+# Update if Fly adds new regions. Used for input validation; a typo here
+# would silently pass to flyctl and only fail mid-deploy with an unclear
+# error.
+FLY_REGIONS="ams arn atl bog bom bos cdg den dfw ewr eze fra gdl gig gru \
+hkg iad jnb lax lhr mad mia nrt ord otp phx qro scl sea sin sjc syd waw \
+yul yyz"
+
 # ── state (used by cleanup trap) ─────────────────────────────────────────────
 APP=""
 CLEANUP_DONE=0
@@ -221,7 +229,15 @@ ask "App name" APP "${DEFAULT_APP}"
 [[ "$APP" =~ ^[a-zA-Z0-9][a-zA-Z0-9-]{1,}[a-zA-Z0-9]$ ]] \
   || die "App name must be ≥3 chars, letters/numbers/hyphens only."
 
-ask "Region" FLY_REGION "${DEFAULT_REGION}"
+ask "Region (3-letter Fly region code, e.g. fra, iad, ord)" FLY_REGION "${DEFAULT_REGION}"
+# Check membership in the whitelist. Wrap both the haystack and needle in
+# spaces so substring match works (avoids "fra" matching "fram" if such a
+# region ever exists).
+# shellcheck disable=SC2153  # FLY_REGION is set indirectly by `ask` via `read`.
+case " ${FLY_REGIONS} " in
+  *" ${FLY_REGION} "*) : ;;
+  *) die "Unknown Fly region '${FLY_REGION}'. See https://fly.io/docs/reference/regions/ for the full list." ;;
+esac
 
 tty_out ""
 tty_out "--- Round details (paste from the coordinator's DM) ---"
