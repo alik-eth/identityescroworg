@@ -28,6 +28,7 @@ import {
   isSmartContractWallet,
   type GetCodeClient,
   type SignMessageClient,
+  type SignableMessage,
 } from '../../src/lib/walletSecret';
 
 // Deterministic mock for argon2-browser. The mock is NOT
@@ -87,23 +88,43 @@ vi.mock('argon2-browser', () => {
 /* ------------------------------------------------------------------ */
 
 /**
- * Build a SignMessageClient that hashes the message with SHA-256 and
- * returns the bytes as a 65-byte ECDSA-shaped `0x…` string. This
- * gives us deterministic outputs we can recompute in the test
- * assertions, while exercising the same code path as a real wallet's
- * RFC-6979 deterministic signer.
+ * Resolve a `SignableMessage` to a raw byte array — the same way a
+ * real wallet would before EIP-191 wrapping. Strings are UTF-8
+ * encoded; `{ raw: Uint8Array }` is unwrapped; `{ raw: 0x... }` is
+ * hex-decoded.
+ */
+function signableToBytes(message: SignableMessage): Uint8Array {
+  const enc = new TextEncoder();
+  if (typeof message === 'string') return enc.encode(message);
+  const raw = message.raw;
+  if (raw instanceof Uint8Array) return raw;
+  // hex `0x...` form
+  const hex = raw.startsWith('0x') ? raw.slice(2) : raw;
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
+}
+
+/**
+ * Build a SignMessageClient that hashes the resolved message bytes
+ * with SHA-256 and returns the bytes as a 65-byte ECDSA-shaped `0x…`
+ * string. This gives us deterministic outputs we can recompute in
+ * the test assertions, while exercising the same code path as a
+ * real wallet's RFC-6979 deterministic signer over raw bytes.
  */
 function makeDeterministicSigner(salt: string): SignMessageClient {
   const enc = new TextEncoder();
   return {
     signMessage: async ({ message }) => {
-      // Concatenate (salt, message) and SHA-256; pad to 65 bytes so
-      // the hex matches the shape of a real ECDSA signature (r || s || v).
-      const bytes = new Uint8Array(
-        enc.encode(salt).length + enc.encode(message).length,
-      );
+      // Concatenate (salt, message-bytes) and SHA-256; pad to 65
+      // bytes so the hex matches the shape of a real ECDSA signature
+      // (r || s || v).
+      const msgBytes = signableToBytes(message);
+      const bytes = new Uint8Array(enc.encode(salt).length + msgBytes.length);
       bytes.set(enc.encode(salt), 0);
-      bytes.set(enc.encode(message), enc.encode(salt).length);
+      bytes.set(msgBytes, enc.encode(salt).length);
       const digest = sha256(bytes);
       const out = new Uint8Array(65);
       for (let i = 0; i < 65; i++) {
@@ -156,11 +177,13 @@ describe('deriveWalletSecretEoa', () => {
     expect(sB).not.toEqual(sA);
   });
 
-  it('asks the wallet to sign EXACTLY "qkb-personal-secret-v1" + subjectSerialPacked.hex', async () => {
-    // Spec-locked message format. Any drift means a wallet that
-    // re-derives later (rotation) will produce a different secret
-    // and the user gets locked out — so this is byte-exact.
-    let observed: string | undefined;
+  it('asks the wallet to sign RAW BYTES = utf8("qkb-personal-secret-v1") || subjectSerialPackedBytes', async () => {
+    // Spec-locked message format (orchestration §1.2 + web plan
+    // Task 1 Step 1). The wallet MUST be asked to sign raw bytes,
+    // NOT a UTF-8 string of hex chars — viem's signMessage hashes
+    // the two differently, and any drift would silently break a
+    // future rotation that re-derives via the locked formula.
+    let observed: SignableMessage | undefined;
     const client: SignMessageClient = {
       signMessage: async ({ message }) => {
         observed = message;
@@ -168,17 +191,26 @@ describe('deriveWalletSecretEoa', () => {
       },
     };
     await deriveWalletSecretEoa(client, SUBJECT_A);
-    const expectedHex = Array.from(SUBJECT_A, (b) =>
-      b.toString(16).padStart(2, '0'),
-    ).join('');
-    expect(observed).toBe('qkb-personal-secret-v1' + expectedHex);
+    // Must be the raw-bytes envelope, not a string.
+    expect(typeof observed).toBe('object');
+    expect(observed).toMatchObject({ raw: expect.any(Uint8Array) });
+    // The raw bytes are exactly utf8(prefix) || SUBJECT_A — byte-
+    // exact, so a future "let's just include the address" or "let's
+    // hex-encode" refactor fails immediately.
+    const enc = new TextEncoder();
+    const expected = new Uint8Array(
+      enc.encode('qkb-personal-secret-v1').length + SUBJECT_A.length,
+    );
+    expected.set(enc.encode('qkb-personal-secret-v1'), 0);
+    expected.set(SUBJECT_A, enc.encode('qkb-personal-secret-v1').length);
+    expect((observed as { raw: Uint8Array }).raw).toEqual(expected);
   });
 
-  it('reproduces the HKDF formula from orchestration §1.2 exactly', async () => {
-    // The function is a thin wrapper over @noble/hashes/hkdf; we
-    // recompute the expected output from the same primitives and
-    // assert byte-equality, so any future "let's just normalise the
-    // salt/info" refactor immediately fails this assertion.
+  it('reproduces the HKDF formula from orchestration §1.2 exactly + clears top 2 bits', async () => {
+    // The function is a thin wrapper over @noble/hashes/hkdf with
+    // a BN254-fit truncation step. We recompute the expected output
+    // from the same primitives and assert byte-equality so any
+    // future refactor immediately fails this assertion.
     const sigHex = '0x' + 'cd'.repeat(65);
     const client: SignMessageClient = {
       signMessage: async () => sigHex as `0x${string}`,
@@ -191,8 +223,26 @@ describe('deriveWalletSecretEoa', () => {
       SUBJECT_A,
       32,
     );
+    // BN254 fit: clear the top 2 bits of byte 0 (big-endian high
+    // byte). Matches @qkb/circuits §6.4 truncation convention.
+    expected[0] = (expected[0] as number) & 0x3f;
     const got = await deriveWalletSecretEoa(client, SUBJECT_A);
     expect(got).toEqual(expected);
+  });
+
+  it('output[0] always has its top 2 bits cleared (BN254 range fit)', async () => {
+    // The HKDF top-2 bits are uniformly random, so a non-truncated
+    // implementation would produce ~75% of outputs with at least
+    // one of the top 2 bits set. We sample 8 distinct subjectSerials
+    // through the deterministic mock signer and assert all outputs
+    // satisfy the bound — catches a regression that drops the
+    // truncation step.
+    const client = makeDeterministicSigner('walletA');
+    for (let i = 0; i < 8; i++) {
+      const subj = new Uint8Array(32).fill(0x10 + i);
+      const out = await deriveWalletSecretEoa(client, subj);
+      expect(out[0]! & 0xc0).toBe(0);
+    }
   });
 
   it('rejects an empty subjectSerialPacked', async () => {

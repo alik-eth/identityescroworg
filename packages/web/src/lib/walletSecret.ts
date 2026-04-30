@@ -4,13 +4,14 @@
 // Two derivation paths share the same 32-byte output shape:
 //
 //   EOA path (default for V5.1 alpha):
+//     messageBytes = utf8("qkb-personal-secret-v1") || subjectSerialPackedBytes
+//     sig          = personal_sign(walletPriv, messageBytes)   // RAW BYTES
 //     walletSecret = HKDF-SHA256(
-//       ikm:  personal_sign(walletPriv,
-//                           "qkb-personal-secret-v1" || subjectSerialPacked.hex),
+//       ikm:  sig.bytes,
 //       salt: "qkb-walletsecret-v1",
-//       info: subjectSerialPacked.bytes,
+//       info: subjectSerialPackedBytes,
 //       L:    32 bytes
-//     )
+//     ) with top-2 bits of output[0] cleared (BN254 fit)
 //
 //   SCW path (opt-in, advanced):
 //     walletSecret = Argon2id(
@@ -19,9 +20,20 @@
 //       m:          64 MiB, t: 3, p: 1, output: 32 bytes
 //     )
 //
-// Field reduction (mod p_bn254) happens downstream at witness-build
-// time per spec §"Range-check on walletSecret"; this module returns
-// the raw 32-byte HKDF / Argon2id output.
+// The "raw bytes" detail is load-bearing: viem's
+// `signMessage({ message: hexString })` UTF-8-encodes the hex chars
+// before EIP-191 wrapping, so signing the *string* `"…<hex>"` and
+// signing the *bytes* `<binary>` produce DIFFERENT signatures for the
+// same conceptual input. The plan locked the raw-bytes form;
+// drifting back to a string would silently lock out any user whose
+// rotation later uses the canonical bytes form to re-derive.
+//
+// BN254 field fit: HKDF emits 256 random bits but the circuit's
+// witness range-check (Num2Bits(254)) refuses values ≥ 2^254. We
+// clear the top 2 bits in big-endian byte 0 so output ∈ [0, 2^254),
+// which strictly fits. Some 254-bit values still exceed p_bn254 ≈
+// 2^254; the spec accepts this ~2^-254 sampling bias as standard
+// HKDF→field practice (matches @qkb/circuits §6.4).
 //
 // Determinism contract: same wallet (or passphrase) + same
 // subjectSerialPacked must produce the same 32 bytes across calls.
@@ -57,9 +69,18 @@ export const WALLET_SECRET_BYTES = 32;
  * Minimal walletClient surface we depend on. Compatible with viem's
  * `WalletClient`. We accept the slimmest possible shape so unit tests
  * can pass a hand-rolled stub instead of a full viem client.
+ *
+ * The `message` accepts either a string (UTF-8 encoded) or a `{ raw }`
+ * envelope carrying raw bytes. V5.1 walletSecret derivation uses the
+ * raw-bytes form so the on-chain construction is independent of any
+ * particular hex-encoding convention.
  */
+export type SignableMessage =
+  | string
+  | { raw: Uint8Array | `0x${string}` };
+
 export interface SignMessageClient {
-  signMessage(args: { message: string }): Promise<`0x${string}`>;
+  signMessage(args: { message: SignableMessage }): Promise<`0x${string}`>;
 }
 
 /**
@@ -88,11 +109,6 @@ function hexToBytes(hex: string): Uint8Array {
   return out;
 }
 
-/** Hex-encode a Uint8Array (lowercase, no 0x prefix). */
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-}
-
 /** UTF-8 encode a string into bytes. */
 const utf8 = new TextEncoder();
 
@@ -114,12 +130,19 @@ function concatBytes(...parts: Uint8Array[]): Uint8Array {
 
 /**
  * EOA path: derive a 32-byte walletSecret by signing a deterministic
- * message with the wallet, then HKDF-SHA256 over the signature.
+ * message (raw bytes!) with the wallet, then HKDF-SHA256 over the
+ * signature with the top-2 bits cleared to fit BN254.
  *
- * The signing message includes the subject-serial hex so a single
+ * The signing message binds the subjectSerial bytes so a single
  * wallet that registers two distinct identities (e.g. before and
  * after a Diia certificate re-issue) produces two distinct secrets —
  * the registration is bound to (wallet × identity), not just wallet.
+ *
+ * The message is signed as RAW BYTES (`{ raw: messageBytes }`), not
+ * as a UTF-8 string of hex chars. Spec-locked (orchestration §1.2 +
+ * web plan Task 1 Step 1): drift to string form would produce a
+ * different signature for the same bytes and silently break any
+ * future rotation that re-derives via the locked formula.
  *
  * Determinism depends on the wallet using RFC-6979 deterministic
  * ECDSA. MetaMask, Rabby, Frame, Coinbase Wallet, and Ledger Nano
@@ -134,16 +157,26 @@ export async function deriveWalletSecretEoa(
   if (subjectSerialPacked.length === 0) {
     throw new Error('deriveWalletSecretEoa: subjectSerialPacked is empty');
   }
-  const message = SIGN_MESSAGE_PREFIX + bytesToHex(subjectSerialPacked);
-  const sigHex = await client.signMessage({ message });
+  // Raw byte concatenation — the EIP-191 wrapper hashes these bytes
+  // directly, no hex transcoding in between.
+  const messageBytes = concatBytes(
+    utf8.encode(SIGN_MESSAGE_PREFIX),
+    subjectSerialPacked,
+  );
+  const sigHex = await client.signMessage({ message: { raw: messageBytes } });
   const ikm = hexToBytes(sigHex);
-  return hkdf(
+  const out = hkdf(
     sha256,
     ikm,
     utf8.encode(HKDF_SALT),
     subjectSerialPacked,
     WALLET_SECRET_BYTES,
   );
+  // BN254 fit: clear the top 2 bits of the big-endian high byte, so
+  // out ∈ [0, 2^254). Matches the @qkb/circuits §6.4 truncation
+  // convention so wallet-side and circuit-side agree byte-for-byte.
+  out[0] = (out[0] as number) & 0x3f;
+  return out;
 }
 
 /**
