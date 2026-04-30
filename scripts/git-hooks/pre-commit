@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# Pre-commit: run `codex review` on the staged diff and block on [P1] findings.
+# Enable: git config core.hooksPath scripts/git-hooks
+# Bypass: git commit --no-verify   OR   SKIP_CODEX_REVIEW=1 git commit ...
+
+set -euo pipefail
+
+git diff --cached --quiet --exit-code && exit 0
+
+git_dir=$(git rev-parse --git-dir)
+[ -f "$git_dir/MERGE_HEAD" ] && exit 0
+[ -d "$git_dir/rebase-merge" ] && exit 0
+[ -d "$git_dir/rebase-apply" ] && exit 0
+[ -f "$git_dir/CHERRY_PICK_HEAD" ] && exit 0
+[ -f "$git_dir/REVERT_HEAD" ] && exit 0
+
+if [ "${SKIP_CODEX_REVIEW:-0}" = "1" ]; then
+  echo "[pre-commit] SKIP_CODEX_REVIEW=1 — skipping codex review." >&2
+  exit 0
+fi
+
+if ! command -v codex >/dev/null 2>&1; then
+  echo "[pre-commit] codex CLI not found on PATH — skipping review." >&2
+  exit 0
+fi
+
+echo "[pre-commit] codex review on staged changes…" >&2
+
+diff=$(git diff --cached)
+prompt=$(cat <<'EOF'
+You are reviewing a staged git diff for a pre-commit gate.
+
+Severity tags:
+  P1 — must block the commit: security holes, secret leakage, data loss,
+       clearly broken logic, regressions in core invariants.
+  P2 — should fix soon but does not block.
+  P3 — nit / style.
+
+Output rules (REQUIRED, the pre-commit parser depends on them):
+
+  1. Emit each finding as ONE line in EXACTLY this format:
+         - [P1] <short title> — <path>:<line-or-range>
+     (substitute P2 / P3 as appropriate). The dash bullet, square-bracketed
+     tag, em-dash separator, and `path:line` anchor are all mandatory.
+
+  2. Do NOT write the literal tokens "[P1]", "[P2]", "[P3]" anywhere
+     except as the leading tag of such a finding line. In particular, do
+     not mention them in narrative prose, summaries, or section headers.
+
+  3. Be conservative with P1. Do not raise stylistic issues, missing docs,
+     opinionated refactors, or speculative concerns at P1.
+
+  4. If the diff is fine, say so in prose and emit zero finding lines.
+
+Diff follows:
+
+EOF
+)
+
+review=$(printf '%s\n%s\n' "$prompt" "$diff" | codex review - 2>&1) || {
+  echo "[pre-commit] codex review failed to run:" >&2
+  echo "$review" >&2
+  echo "" >&2
+  echo "Bypass with: git commit --no-verify  (or SKIP_CODEX_REVIEW=1)" >&2
+  exit 1
+}
+
+echo "$review" >&2
+
+# `codex review` echoes session metadata + the user prompt before its actual
+# response. Restrict the severity check to the response section, which begins
+# after the first standalone `codex` marker line.
+findings=$(printf '%s\n' "$review" | awk 'flag {print; next} /^codex$/ {flag=1}')
+
+# A real P1 finding co-occurs with a path:line anchor on the same line. The
+# prompt mandates `- [P1] <title> — <path>:<line>`, but we also accept minor
+# format drift (numbered lists, missing dash) as long as both `[P1]` and a
+# `:<digit>` anchor appear on the same line. This rules out prose mentions.
+if printf '%s' "$findings" | grep -qE '\[P1\][^[:cntrl:]]*:[0-9]'; then
+  echo "" >&2
+  echo "[pre-commit] [P1] findings detected — commit blocked." >&2
+  echo "Fix the issues, or bypass with: git commit --no-verify" >&2
+  exit 1
+fi
+
+echo "[pre-commit] codex review clean." >&2
+exit 0
