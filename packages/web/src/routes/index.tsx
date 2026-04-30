@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { MintButton } from '../components/MintButton';
 import { DocumentFooter } from '../components/DocumentFooter';
@@ -140,6 +141,22 @@ export function IndexScreen() {
               )}
             </p>
           </section>
+
+          <p
+            className="text-fine italic text-base mt-16"
+            style={{ color: 'var(--ink)' }}
+            data-testid="landing-ceremony-link"
+          >
+            <span aria-hidden="true" style={{ color: 'var(--seal)', marginRight: '0.5em' }}>
+              ·
+            </span>
+            <Link to="/ceremony" style={{ color: 'var(--sovereign)' }}>
+              {t(
+                'landing.ceremonyLink',
+                'Help with the trusted setup ceremony →',
+              )}
+            </Link>
+          </p>
         </div>
       </div>
       <DocumentFooter />

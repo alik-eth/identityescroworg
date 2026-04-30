@@ -5,6 +5,7 @@
     "subline": "Powered by Diia QES + Groth16. Your identity bytes never enter this browser.",
     "useCli": "Use the CLI instead →",
     "viewCertificate": "View your certificate →",
+    "ceremonyLink": "Help with the trusted setup ceremony →",
     "privacy": {
       "heading": "Identity, escrowed.",
       "onLedgerLabel": "What is on the ledger",
