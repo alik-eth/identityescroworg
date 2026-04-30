@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# Pre-commit: run `codex review` on the staged diff and block on [P1] findings.
-# Enable: git config core.hooksPath scripts/git-hooks
-# Bypass: git commit --no-verify   OR   SKIP_CODEX_REVIEW=1 git commit ...
+# Pre-commit: run `codex review` on the staged diff and block on [P1] findings
+# or a missing/BLOCK verdict.
+# Enable:    git config core.hooksPath scripts/git-hooks
+# Bypass:    git commit --no-verify   OR   SKIP_CODEX_REVIEW=1 git commit ...
+# Fail-open: CODEX_FAIL_OPEN=1 git commit ...   (allow when codex did not emit
+#            a verdict, e.g. transient API outage; default is fail-closed)
 
 set -euo pipefail
 
@@ -52,6 +55,13 @@ Output rules (REQUIRED, the pre-commit parser depends on them):
 
   4. If the diff is fine, say so in prose and emit zero finding lines.
 
+  5. END YOUR RESPONSE with a final line that is EXACTLY one of:
+         VERDICT: PASS
+         VERDICT: BLOCK
+     Use BLOCK iff there is at least one P1 finding. Use PASS otherwise.
+     Do NOT use the literal "VERDICT:" anywhere else in your response.
+     Nothing may follow the verdict line.
+
 Diff follows:
 
 EOF
@@ -61,27 +71,62 @@ review=$(printf '%s\n%s\n' "$prompt" "$diff" | codex review - 2>&1) || {
   echo "[pre-commit] codex review failed to run:" >&2
   echo "$review" >&2
   echo "" >&2
-  echo "Bypass with: git commit --no-verify  (or SKIP_CODEX_REVIEW=1)" >&2
+  if [ "${CODEX_FAIL_OPEN:-0}" = "1" ]; then
+    echo "[pre-commit] CODEX_FAIL_OPEN=1 — allowing commit through." >&2
+    exit 0
+  fi
+  echo "Retry the commit, set CODEX_FAIL_OPEN=1 for this commit, or" >&2
+  echo "bypass with: git commit --no-verify (or SKIP_CODEX_REVIEW=1)" >&2
   exit 1
 }
 
 echo "$review" >&2
 
 # `codex review` echoes session metadata + the user prompt before its actual
-# response. Restrict the severity check to the response section, which begins
-# after the first standalone `codex` marker line.
+# response. Restrict checks to the response section, which begins after the
+# first standalone `codex` marker line.
 findings=$(printf '%s\n' "$review" | awk 'flag {print; next} /^codex$/ {flag=1}')
 
-# A real P1 finding co-occurs with a path:line anchor on the same line. The
-# prompt mandates `- [P1] <title> — <path>:<line>`, but we also accept minor
-# format drift (numbered lists, missing dash) as long as both `[P1]` and a
-# `:<digit>` anchor appear on the same line. This rules out prose mentions.
+# Backstop: a real P1 finding co-occurs with a `:<line>` anchor on the same
+# line. Block immediately if we see one, even if the verdict disagrees.
 if printf '%s' "$findings" | grep -qE '\[P1\][^[:cntrl:]]*:[0-9]'; then
   echo "" >&2
-  echo "[pre-commit] [P1] findings detected — commit blocked." >&2
+  echo "[pre-commit] [P1] finding detected — commit blocked." >&2
   echo "Fix the issues, or bypass with: git commit --no-verify" >&2
   exit 1
 fi
 
-echo "[pre-commit] codex review clean." >&2
-exit 0
+# Verdict contract: codex must end its response with `VERDICT: PASS` or
+# `VERDICT: BLOCK`. Missing verdict means codex did not complete (transient
+# error, interrupted stream, rate limit) — fail closed by default.
+#
+# `|| true` on every stage of the pipeline is REQUIRED: under `set -euo
+# pipefail`, an empty grep match would abort the script during the
+# assignment, skipping the missing-verdict branch entirely.
+verdict_line=$(printf '%s\n' "$findings" | grep -E '^VERDICT:[[:space:]]*(PASS|BLOCK)[[:space:]]*$' | tail -n1 || true)
+verdict=$(printf '%s' "$verdict_line" | awk '{print $2}' || true)
+
+case "$verdict" in
+  PASS)
+    echo "[pre-commit] codex review: VERDICT PASS." >&2
+    exit 0
+    ;;
+  BLOCK)
+    echo "" >&2
+    echo "[pre-commit] codex review: VERDICT BLOCK — commit blocked." >&2
+    echo "Fix the issues above, or bypass with: git commit --no-verify" >&2
+    exit 1
+    ;;
+  "")
+    echo "" >&2
+    echo "[pre-commit] codex review did not return a verdict." >&2
+    echo "Likely cause: API outage, interrupted stream, or rate limit." >&2
+    if [ "${CODEX_FAIL_OPEN:-0}" = "1" ]; then
+      echo "[pre-commit] CODEX_FAIL_OPEN=1 set — allowing commit through." >&2
+      exit 0
+    fi
+    echo "Retry the commit, set CODEX_FAIL_OPEN=1 for this commit, or" >&2
+    echo "bypass with: git commit --no-verify (or SKIP_CODEX_REVIEW=1)" >&2
+    exit 1
+    ;;
+esac
