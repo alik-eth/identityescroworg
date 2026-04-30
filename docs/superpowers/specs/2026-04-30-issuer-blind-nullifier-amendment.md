@@ -246,26 +246,34 @@ contract QKBRegistryV5 {
 
 ### `register()` flow
 
+The full V5.1 `register()` ABI inherits all existing V5 calldata (EIP-7212 sigs, trust-list / policy-root Merkle proofs) and grows the public-signals struct from 14 → 19 fields. The sketch below shows the full signature + only the **new gates** explicitly; existing V5 gates (msgSender bind, timestamp freshness, Groth16, EIP-7212 ×2, trustedListRoot Merkle, policyRoot Merkle) are elided as `// ... unchanged ...` for readability — they are *required* and must remain as specified in the V5 architecture spec §"Five-gate verification".
+
 ```solidity
 function register(
     Proof calldata proof,
-    PublicSignals calldata sig,        // 16 fields now
-    P256Sig calldata leafSig,
-    P256Sig calldata intSig,
-    bytes32[] calldata trustListPath,
+    PublicSignalsV51 calldata sig,        // 19 fields (was 14 in V5; +5 per §"Public-signal layout")
+    bytes calldata leafSpki,              // V5: DER-encoded leaf SPKI for SpkiCommit recompute
+    bytes calldata intSpki,               // V5: DER-encoded intermediate SPKI for SpkiCommit recompute
+    bytes calldata signedAttrs,           // V5: CAdES signedAttrs DER for EIP-7212 leaf-sig recovery
+    P256Sig calldata leafSig,             // V5: leaf ECDSA-P256 over signedAttrs
+    P256Sig calldata intSig,              // V5: intermediate ECDSA-P256 over leafTBS
+    bytes32[] calldata trustListPath,     // V5: Merkle proof for SpkiCommit(intSpki) ∈ trustedListRoot
     uint256[] calldata trustListIdx,
-    bytes32[] calldata policyPath,
+    bytes32[] calldata policyPath,        // V5: Merkle proof for policyLeafHash ∈ policyRoot
     uint256[] calldata policyIdx
 ) external {
-    // ===== Existing gates (unchanged from V5) =====
-    require(msg.sender == addressFromUint(sig.msgSender), "msgSender mismatch");
-    require(block.timestamp - sig.timestamp <= MAX_BINDING_AGE, "binding too old");
-    require(verifier.verifyProof(proof, sig.toArray()), "invalid proof");
-    // ... EIP-7212 calls, trust-list Merkle, policy-root Merkle (unchanged)
+    // ===== V5 gates 1-5 (UNCHANGED, must execute exactly as in V5 spec) =====
+    require(sig.rotationMode == 0,                                           "must be register mode");
+    require(msg.sender == addressFromUint(sig.msgSender),                    "msgSender mismatch");
+    require(block.timestamp - sig.timestamp <= MAX_BINDING_AGE,              "binding too old");
+    require(verifier.verifyProof(proof, sig.toArray()),                      "invalid proof");
+    // P256Verify.verify(...) × 2 (leaf-over-signedAttrs, intermediate-over-leafTBS)  -- unchanged
+    // PoseidonMerkle.verify(SpkiCommit(intSpki), trustListPath, trustListIdx, trustedListRoot) -- unchanged
+    // PoseidonMerkle.verify(sig.policyLeafHash, policyPath, policyIdx, policyRoot) -- unchanged
 
-    bytes32 fp = bytes32(sig.identityFingerprint);
+    bytes32 fp     = bytes32(sig.identityFingerprint);
     bytes32 commit = bytes32(sig.identityCommitment);
-    bytes32 nul = bytes32(sig.nullifier);
+    bytes32 nul    = bytes32(sig.nullifier);
     bytes32 ctxKey = keccak256(abi.encode(sig.ctxHashHi, sig.ctxHashLo));
 
     // ===== NEW Gate 6: identity commitment escrow =====
@@ -673,15 +681,23 @@ The web SDK is responsible for:
 3. Reducing mod `p_bn254`.
 4. Threading into witness builder.
 
-New output fields in the public-signals output:
+New output fields in the public-signals output (5 total — 2 escrow + 3 rotation-mode flag/payload):
 
 ```typescript
 interface PublicSignalsV51 {
-  // ... existing 14 ...
-  identityFingerprint: bigint;   // signal[14]
-  identityCommitment:  bigint;   // signal[15]
+  // ... existing 14 from V5 (msgSender, timestamp, nullifier, ctxHash{Hi,Lo},
+  //                         bindingHash{Hi,Lo}, signedAttrsHash{Hi,Lo},
+  //                         leafTbsHash{Hi,Lo}, policyLeafHash,
+  //                         leafSpkiCommit, intSpkiCommit) ...
+  identityFingerprint:    bigint;   // signal[14] — Poseidon₂(subjectSerialPacked, FINGERPRINT_DOMAIN)
+  identityCommitment:     bigint;   // signal[15] — Poseidon₂(subjectSerialPacked, walletSecret)
+  rotationMode:           bigint;   // signal[16] — 0 = register, 1 = rotate (boolean)
+  rotationOldCommitment:  bigint;   // signal[17] — under rotate mode, the prior commitment; under register mode, == identityCommitment (no-op)
+  rotationNewWallet:      bigint;   // signal[18] — under rotate mode, the new wallet addr; under register mode, == msgSender (no-op)
 }
 ```
+
+For register-mode witness building, the SDK populates `rotationMode = 0n`, `rotationOldCommitment = identityCommitment`, `rotationNewWallet = BigInt(msgSender)`. For rotate-mode, the SDK populates from chain state (current `identityCommitments[fp]` becomes `rotationOldCommitment`) and the user's chosen new wallet.
 
 `build-witness-v5.ts` adds a `derivePackedSubjectSerial()` helper that computes `Poseidon₅(serialLimbs[0..3], serialLen)` off-circuit, used to compute the two new public signals locally for sanity checks before proving.
 
@@ -693,10 +709,11 @@ V5 is **not yet deployed** (Sepolia stub only; no mainnet). The amendment is the
 
 ABI / type drift to broadcast:
 
-- `IQKBRegistryV5.PublicSignals` struct grows from 14 → 16 fields.
-- `register()` ABI: `PublicSignals calldata` re-encoding (calldata layout shifts by 64 bytes).
-- `rotateWallet()` is new (no precedent).
+- `IQKBRegistryV5.PublicSignals` struct grows from 14 → **19** fields (renamed `PublicSignalsV51` for clarity). 5 new fields: `identityFingerprint`, `identityCommitment`, `rotationMode`, `rotationOldCommitment`, `rotationNewWallet`.
+- `register()` ABI: `PublicSignalsV51 calldata` re-encoding (calldata layout shifts by 5 × 32 = **160 bytes** vs the 14-field struct).
+- `rotateWallet()` is new (no precedent). Reuses the SAME `PublicSignalsV51` struct + SAME Groth16 verifier as `register()` (per fold-in design).
 - `identityCommitments`, `identityWallets`, `usedCtx` mappings are new (no prior state).
+- The `Groth16VerifierV5_1.sol` contract supersedes `Groth16VerifierV5.sol` (different verification key — ceremony output for the V5.1 circuit).
 
 V4 (Phase-1 mainnet, `0x7F36aF783538Ae8f981053F2b0E45421a1BF4815`) is unaffected — different contract address, different verifier, no shared state.
 
