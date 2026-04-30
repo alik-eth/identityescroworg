@@ -333,16 +333,21 @@ if anything goes wrong with the scripts.
 
 ---
 
-## 9. For coordinators: publishing the GHCR image
+## 9. For the team-lead: publishing the image
 
 Contributors use the pre-built image `ghcr.io/identityescroworg/qkb-ceremony:v1`
-so they do not need Docker locally. This section documents how the coordinator
-builds and publishes that image. Contributors do not need to read this section.
+so they do not need Docker locally. This section documents how the team-lead
+builds and publishes that image. Contributors do not need to read this.
+
+The GHCR namespace `identityescroworg` is a placeholder pending the founder's
+branding decision (#21). Once the organisation name is confirmed, update the
+image tag in `launcher.sh` (line `GHCR_IMAGE=`), this README, and the
+Dockerfile `LABEL` in a single commit.
 
 **One-time setup**
 
-A GitHub Personal Access Token with `write:packages` scope is required.
-Create one at github.com/settings/tokens and store it securely.
+Create a GitHub Personal Access Token with `write:packages` scope at
+github.com/settings/tokens. Store it as `GITHUB_PAT` in your shell.
 
 **Build**
 
@@ -351,45 +356,47 @@ Run from the `scripts/ceremony-coord/cookbooks/fly/` directory:
 ```
 docker build \
   -t ghcr.io/identityescroworg/qkb-ceremony:v1 \
-  -t ghcr.io/identityescroworg/qkb-ceremony:latest \
   .
 ```
 
-Note: replace `identityescroworg` with the final GitHub organisation name once
-confirmed by the founder. The `v1` tag is pinned in `launcher.sh`; if the image
-is rebuilt (e.g., to update the snarkjs version), bump the tag in `launcher.sh`
-and this README in the same commit.
-
-**Login and push**
+**Push**
 
 ```
 echo $GITHUB_PAT | docker login ghcr.io -u <github-username> --password-stdin
 docker push ghcr.io/identityescroworg/qkb-ceremony:v1
+docker tag  ghcr.io/identityescroworg/qkb-ceremony:v1 \
+            ghcr.io/identityescroworg/qkb-ceremony:latest
 docker push ghcr.io/identityescroworg/qkb-ceremony:latest
 ```
 
 **Make the package public**
 
-By default, GitHub Container Registry packages inherit the visibility of the
-repository. For contributors to pull without authenticating:
+GitHub Container Registry packages are private by default. For contributors to
+pull without authenticating, set visibility to Public:
 
-1. Go to `github.com/orgs/identityescroworg/packages` (or
-   `github.com/<org>/qkb/pkgs/container/qkb-ceremony`).
-2. Under Package settings → Danger Zone → Change visibility → set to Public.
+1. Go to `github.com/orgs/identityescroworg/packages` → `qkb-ceremony`.
+2. Package settings → Danger Zone → Change visibility → Public.
 
 Once public, `flyctl deploy --image ghcr.io/identityescroworg/qkb-ceremony:v1`
-works for any contributor without additional authentication.
+works for any contributor with no additional auth step.
 
-**Hosting `fly-launch.sh`**
+**Hosting `launcher.sh` on R2**
 
-After confirming the script, upload it to R2 so the curl-pipe URL resolves:
+Upload the launcher so the curl-pipe URL resolves. This is wired into A2's
+R2 admin scripts — do it after R2 creds land. Manual command for reference:
 
 ```
 # From scripts/ceremony-coord/
 wrangler r2 object put prove-identityescrow-org/ceremony/fly-launch.sh \
   --file cookbooks/fly/launcher.sh \
-  --content-type "text/plain"
+  --content-type "text/plain; charset=utf-8"
 ```
 
-Or use the AWS-CLI-compatible S3 syntax against R2 if wrangler is not available.
 The object must be public-read at `prove.identityescrow.org/ceremony/fly-launch.sh`.
+
+**Future work: GitHub Actions automation**
+
+A workflow at `.github/workflows/fly-ceremony-image.yml` that triggers on a
+`v*` tag push and runs `docker build && docker push` would remove the manual
+push step. Out of scope for A2.7a — implement after the GitHub org name is
+confirmed and the repository is public.
