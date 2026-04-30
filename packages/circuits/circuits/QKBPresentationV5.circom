@@ -216,6 +216,15 @@ template QKBPresentationV5() {
     // wraps to a colliding value mod p with a different on-chain commitment.
     signal input walletSecret;
 
+    // V5.1 rotation-mode old-wallet-secret witness (private input). Required when
+    // rotationMode == 1 — the user proves knowledge of the OLD wallet's walletSecret
+    // by supplying the value that produces the prior commitment (verified by the
+    // ForceEqualIfEnabled gate below). Under rotationMode == 0 (register mode) this
+    // signal is unconstrained — the witness builder defaults it to `walletSecret`
+    // for fixture stability, but the value doesn't matter (its constraint is gated
+    // OFF). Per spec §"Rotation-mode constraints" v0.6.
+    signal input oldWalletSecret;
+
     // ===== Body wiring =====
     // Tasks 6.2-6.10 wire the constraints in order:
     //   6.2 — BindingParseV2CoreFast: expose timestamp + policyLeafHash      ← THIS COMMIT
@@ -439,6 +448,12 @@ template QKBPresentationV5() {
     component walletSecretBits = Num2Bits(254);
     walletSecretBits.in <== walletSecret;
 
+    // Same range check on the rotation-mode old-wallet-secret witness — prevents
+    // a malicious prover from supplying a value ≥ p that wraps mod p to satisfy
+    // the rotateOldCommitGate below for an unrelated commitment opening.
+    component oldWalletSecretBits = Num2Bits(254);
+    oldWalletSecretBits.in <== oldWalletSecret;
+
     component subjectPack = Poseidon(5);
     for (var i = 0; i < 4; i++) subjectPack.inputs[i] <== subjectSerial.subjectSerialLimbs[i];
     subjectPack.inputs[4] <== subjectSerialValueLength;
@@ -469,10 +484,30 @@ template QKBPresentationV5() {
 
     rotationMode * (rotationMode - 1) === 0;     // boolean range check
 
+    // Register-mode (rotationMode == 0): rotation slots 17/18 are no-op,
+    // pinned to identityCommitment / msgSender to prevent garbage in those slots.
     component oldCommitNoOp = ForceEqualIfEnabled();
     oldCommitNoOp.enabled <== 1 - rotationMode;
     oldCommitNoOp.in[0]   <== rotationOldCommitment;
     oldCommitNoOp.in[1]   <== identityCommitment;
+
+    // Rotate-mode (rotationMode == 1) SOUNDNESS: prove ownership of the OLD
+    // wallet by opening the prior on-chain commitment. The user must supply
+    // `oldWalletSecret` such that:
+    //   rotationOldCommitment === Poseidon₂(subjectPack, oldWalletSecret)
+    // Without this gate, a rotation proof carries NO binding to the prior
+    // wallet — anyone with the cert + the on-chain `identityCommitments[fp]`
+    // value could craft a valid proof, defeating the rotation auth model.
+    // Per spec v0.6 §"Rotation-mode constraints" + invariant #2 (Wallet-to-
+    // identity binding) + codex review pass 3 [P2] (2026-04-30).
+    component oldCommitOpen = Poseidon(2);
+    oldCommitOpen.inputs[0] <== subjectPack.out;
+    oldCommitOpen.inputs[1] <== oldWalletSecret;
+
+    component rotateOldCommitGate = ForceEqualIfEnabled();
+    rotateOldCommitGate.enabled <== rotationMode;     // active when mode == 1
+    rotateOldCommitGate.in[0]   <== oldCommitOpen.out;
+    rotateOldCommitGate.in[1]   <== rotationOldCommitment;
 
     component newWalletNoOp = ForceEqualIfEnabled();
     newWalletNoOp.enabled <== 1 - rotationMode;

@@ -243,6 +243,17 @@ export async function buildWitnessV5(
   }
   const walletSecretField = reduceTo254(input.walletSecret);
 
+  // V5.1 oldWalletSecret — required when rotationMode === 1 (proves prior-wallet
+  // ownership). Under register mode (default), defaults to walletSecret since
+  // the in-circuit gate is OFF; any in-range value works.
+  const oldWalletSecretBuf = input.oldWalletSecret ?? input.walletSecret;
+  if (oldWalletSecretBuf.length !== 32) {
+    throw new Error(
+      `oldWalletSecret must be 32 bytes (got ${oldWalletSecretBuf.length})`,
+    );
+  }
+  const oldWalletSecretField = reduceTo254(oldWalletSecretBuf);
+
   // subjectSerialPacked — shared across 3 downstream Poseidon₂ outputs.
   const subjectPack = await poseidon5([
     ...subjectSerialLimbs,
@@ -334,6 +345,15 @@ export async function buildWitnessV5(
     }
     return msgSender;
   })();
+  // Under rotation mode, oldWalletSecret is REQUIRED (input.oldWalletSecret
+  // must be supplied and produce a commitment that opens to rotationOldCommitment;
+  // the in-circuit ForceEqualIfEnabled gate will reject witnesses where
+  // Poseidon₂(subjectPack, oldWalletSecret) !== rotationOldCommitment).
+  if (rotationMode === 1 && input.oldWalletSecret === undefined) {
+    throw new Error(
+      'rotationMode=1 (rotateWallet) requires oldWalletSecret to prove old-wallet ownership',
+    );
+  }
 
   // -------- Witness assembly --------
   return {
@@ -417,6 +437,9 @@ export async function buildWitnessV5(
 
     // V5.1 — wallet-bound nullifier secret (private, range-checked in-circuit).
     walletSecret: walletSecretField.toString(),
+    // V5.1 — old-wallet-secret (private, only meaningfully constrained under
+    // rotationMode === 1; under register mode the in-circuit gate is OFF).
+    oldWalletSecret: oldWalletSecretField.toString(),
   };
 }
 

@@ -122,17 +122,29 @@ export interface BuildWitnessV5Input {
    *
    * Under rotation mode, the caller MUST also supply
    * `rotationOldCommitment` (the prior on-chain `identityCommitments[fp]`
-   * value being replaced) and `rotationNewWalletAddress` (the new wallet
-   * the rotation delegates to). Under register mode (default), these
-   * fields are computed by the builder to satisfy the in-circuit no-op
-   * constraints (`rotationOldCommitment === identityCommitment` and
-   * `rotationNewWallet === msgSender`).
+   * value being replaced), `rotationNewWalletAddress` (the new wallet
+   * the rotation delegates to), and `oldWalletSecret` (the prior wallet's
+   * 32-byte secret — proves ownership of the old commitment in-circuit).
+   *
+   * Under register mode (default), these fields are computed/defaulted
+   * by the builder to satisfy the in-circuit no-op constraints
+   * (`rotationOldCommitment === identityCommitment` and
+   * `rotationNewWallet === msgSender`); `oldWalletSecret` defaults to
+   * the same value as `walletSecret` (its constraint is gated OFF).
    */
   rotationMode?: 0 | 1;
   /** REQUIRED when `rotationMode === 1`. bigint or hex string. */
   rotationOldCommitment?: bigint | string;
   /** REQUIRED when `rotationMode === 1`. Ethereum address (≤2^160). */
   rotationNewWalletAddress?: bigint | string;
+  /**
+   * REQUIRED when `rotationMode === 1`. 32-byte buffer. The OLD wallet's
+   * walletSecret — proves ownership of the prior commitment via the
+   * in-circuit gate `rotationOldCommitment === Poseidon₂(subjectPack,
+   * oldWalletSecret)`. Defaults to `walletSecret` under register mode
+   * (the constraint is gated OFF; the value is unconstrained).
+   */
+  oldWalletSecret?: Buffer;
 }
 
 /**

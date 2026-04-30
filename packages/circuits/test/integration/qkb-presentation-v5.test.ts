@@ -452,6 +452,10 @@ async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
     // V5.1 — wallet-bound nullifier secret (private input, range-checked
     // in-circuit via Num2Bits(254)).
     walletSecret: walletSecretField,
+    // V5.1 — old-wallet-secret witness. Under register mode (rotationMode=0)
+    // this is unconstrained (gate OFF); use the same value as walletSecret for
+    // fixture stability. Range-checked in-circuit via Num2Bits(254).
+    oldWalletSecret: walletSecretField,
   };
 }
 
