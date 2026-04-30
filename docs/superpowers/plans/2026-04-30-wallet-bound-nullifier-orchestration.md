@@ -22,15 +22,17 @@ Frozen index order — unchanged indices keep their semantics; new indices are a
 | 2 | `nullifier` | `Poseidon(subjectSerial-derived-secret, ctxHash)` | **`Poseidon₂(walletSecret, ctxHash)`** |
 | 3 | `ctxHashHi` | unchanged | unchanged |
 | 4 | `ctxHashLo` | unchanged | unchanged |
-| 5 | `policyLeafHash` | unchanged | unchanged |
-| 6 | `policyRootHi` | unchanged | unchanged |
-| 7 | `policyRootLo` | unchanged | unchanged |
-| 8 | `trustRootHi` | unchanged | unchanged |
-| 9 | `trustRootLo` | unchanged | unchanged |
-| 10 | `bindingHi` | unchanged | unchanged |
-| 11 | `bindingLo` | unchanged | unchanged |
+| 5 | `bindingHashHi` | unchanged | unchanged |
+| 6 | `bindingHashLo` | unchanged | unchanged |
+| 7 | `signedAttrsHashHi` | unchanged | unchanged |
+| 8 | `signedAttrsHashLo` | unchanged | unchanged |
+| 9 | `leafTbsHashHi` | unchanged | unchanged |
+| 10 | `leafTbsHashLo` | unchanged | unchanged |
+| 11 | `policyLeafHash` | unchanged | unchanged |
 | 12 | `leafSpkiCommit` | unchanged | unchanged |
 | 13 | `intSpkiCommit` | unchanged | unchanged |
+
+(`policyRoot` and `trustedListRoot` are NOT public signals — they are storage values on `QKBRegistryV5`. The proof carries `policyLeafHash` + leaf/intermediate SPKI commits; the contract checks Merkle inclusion against the on-chain roots via calldata `policyPath/policyIdx` and trust-list paths.)
 | **14** | **`identityFingerprint`** | n/a | **`Poseidon₂(subjectSerialPacked, FINGERPRINT_DOMAIN)`** |
 | **15** | **`identityCommitment`** | n/a | **`Poseidon₂(subjectSerialPacked, walletSecret)`** |
 | **16** | **`rotationMode`** | n/a | **0 = register, 1 = rotateWallet** |
@@ -168,9 +170,9 @@ Workers can run in parallel after spec lock since the interface contracts (§1) 
 
 Before dispatching workers:
 
-### S1. Stub Groth16VerifierV5_1Stub.sol
+### S1. (was: stub verifier) — REASSIGNED to circuits-eng Task 4
 
-Location: `packages/contracts/src/Groth16VerifierV5_1Stub.sol`. Must accept the new 19-field public-signals shape. Existing `Groth16VerifierV5Stub.sol` stays for V5-only test paths during the transition.
+The stub `Groth16VerifierV5_1Stub.sol` is produced by circuits-eng's Task 4 (auto-generated from the stub zkey via `snarkjs zkey export solidityverifier`). Lead pumps to contracts-eng's worktree per §5. contracts-eng works Tasks 4-5 (interface + tests) using a placeholder typedef while waiting on the pump; resumes Task 2 register-integration after the pump lands.
 
 ### S2. Witness JSON schema fixture
 
