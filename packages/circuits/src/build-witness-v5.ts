@@ -1,13 +1,15 @@
-// V5 witness builder — production entry point.
+// V5.1 witness builder — production entry point.
 //
 // Consumes pre-extracted CMS / fixture artifacts (signedAttrs DER, leaf
-// cert DER, leaf/intermediate SPKIs, JCS-canonicalized binding bytes) and
-// emits a JSON witness that `snarkjs.wtns.calculate` can hand directly to
-// the V5 main circuit's witness-calculator wasm.
+// cert DER, leaf/intermediate SPKIs, JCS-canonicalized binding bytes,
+// wallet-bound secret) and emits a JSON witness that
+// `snarkjs.wtns.calculate` can hand directly to the V5.1 main circuit's
+// witness-calculator wasm.
 //
 // Output ordering matches QKBPresentationV5.circom's input declaration
-// order — the 14 public inputs (msgSender → intSpkiCommit, V5 spec §0.1)
-// followed by every private witness input the circuit consumes.
+// order — the 19 public inputs (msgSender → rotationNewWallet,
+// orchestration §1.1) followed by every private witness input the
+// circuit consumes (including the new V5.1 `walletSecret`).
 //
 // Cross-package contract:
 //   - web-eng's witness builder (browser-side) and this CLI MUST produce
@@ -15,8 +17,9 @@
 //     integration test in test/integration/build-witness-v5.test.ts
 //     asserts byte-identity against the existing `buildV5SmokeWitness`
 //     test helper — keep them in sync.
-//   - The 14-field public-signal layout is FROZEN per orchestration §2.1;
-//     adding/reordering fields here ≡ a cross-worker breaking change.
+//   - The 19-field public-signal layout is FROZEN per orchestration
+//     §1.1 (commit 7f5c517); adding/reordering fields here ≡ a
+//     cross-worker breaking change.
 
 import { Buffer } from 'node:buffer';
 // Browser-isomorphic hash primitives. @noble/hashes works identically in
@@ -40,6 +43,7 @@ import {
   poseidon5,
   poseidonChunkHashVar,
 } from './poseidon-chunk-hash';
+import { FINGERPRINT_DOMAIN, reduceTo254 } from './wallet-secret';
 // scripts/spki-commit-ref.ts hosts the canonical SpkiCommit TS reference
 // (parity-fixture-gated against the circom template + Solidity at §9.1).
 import {
@@ -197,7 +201,17 @@ export async function buildWitnessV5(
   const leafSpkiCommit = await spkiCommit(input.leafSpki);
   const intSpkiCommit = await spkiCommit(input.intSpki);
 
-  // -------- §6.6 — Subject serial → NullifierDerive --------
+  // -------- §6.6 — V5.1 wallet-bound nullifier construction --------
+  //
+  // Replaces V5's `NullifierDerive(subjectSerial-derived-secret, ctxHash)` with:
+  //   subjectPack         = Poseidon₅(subjectSerialLimbs[0..3], subjectSerialLen)
+  //   identityFingerprint = Poseidon₂(subjectPack, FINGERPRINT_DOMAIN)
+  //   identityCommitment  = Poseidon₂(subjectPack, walletSecret)
+  //   nullifier           = Poseidon₂(walletSecret, ctxHashField)
+  //
+  // walletSecret is provided by the caller as 32 bytes (HKDF-SHA256 for EOA,
+  // Argon2id for SCW — see `src/wallet-secret.ts`); we reduce it to a 254-bit
+  // field element to match the in-circuit Num2Bits(254) range check.
   const subjectSerial = findSubjectSerial(input.leafCertDer);
   const subjectSerialBytes = Buffer.from(
     input.leafCertDer.subarray(
@@ -220,11 +234,24 @@ export async function buildWitnessV5(
     return Buffer.from(hex, 'hex');
   })();
   const ctxHashField = await poseidonChunkHashVar(new Uint8Array(ctxBytes));
-  const secret = await poseidon5([
+
+  // V5.1 walletSecret reduction.
+  if (input.walletSecret.length !== 32) {
+    throw new Error(
+      `walletSecret must be 32 bytes (got ${input.walletSecret.length})`,
+    );
+  }
+  const walletSecretField = reduceTo254(input.walletSecret);
+
+  // subjectSerialPacked — shared across 3 downstream Poseidon₂ outputs.
+  const subjectPack = await poseidon5([
     ...subjectSerialLimbs,
     BigInt(subjectSerial.length),
   ]);
-  const nullifier = await poseidon2(secret, ctxHashField);
+
+  const identityFingerprint = await poseidon2(subjectPack, FINGERPRINT_DOMAIN);
+  const identityCommitment = await poseidon2(subjectPack, walletSecretField);
+  const nullifier = await poseidon2(walletSecretField, ctxHashField);
 
   // -------- §6.7 — Byte-domain SHA over ctx --------
   const ctxDigest = Buffer.from(sha256(ctxBytes));
@@ -274,9 +301,43 @@ export async function buildWitnessV5(
     return BigInt('0x' + hex);
   })();
 
+  // -------- V5.1 rotation-mode payload --------
+  // Defaults to register mode (rotationMode === 0). Under register mode the
+  // in-circuit `ForceEqualIfEnabled` gates pin slot 17 == identityCommitment
+  // and slot 18 == msgSender; we set those values here so the no-op constraint
+  // is trivially satisfied. Under rotateWallet mode (rotationMode === 1), the
+  // caller supplies the actual prior commitment + new wallet address.
+  const rotationMode = input.rotationMode ?? 0;
+  const rotationOldCommitment = ((): bigint => {
+    if (rotationMode === 1) {
+      if (input.rotationOldCommitment === undefined) {
+        throw new Error(
+          'rotationMode=1 (rotateWallet) requires rotationOldCommitment',
+        );
+      }
+      return typeof input.rotationOldCommitment === 'bigint'
+        ? input.rotationOldCommitment
+        : BigInt(input.rotationOldCommitment);
+    }
+    return identityCommitment;
+  })();
+  const rotationNewWallet = ((): bigint => {
+    if (rotationMode === 1) {
+      if (input.rotationNewWalletAddress === undefined) {
+        throw new Error(
+          'rotationMode=1 (rotateWallet) requires rotationNewWalletAddress',
+        );
+      }
+      return typeof input.rotationNewWalletAddress === 'bigint'
+        ? input.rotationNewWalletAddress
+        : BigInt(input.rotationNewWalletAddress);
+    }
+    return msgSender;
+  })();
+
   // -------- Witness assembly --------
   return {
-    // 14 public inputs (canonical V5 spec §0.1 order).
+    // 19 public inputs (canonical V5.1 order — orchestration §1.1, FROZEN).
     msgSender: msgSender.toString(),
     timestamp: tsValue,
     nullifier: nullifier.toString(),
@@ -291,6 +352,12 @@ export async function buildWitnessV5(
     policyLeafHash: policyLeafHash.toString(),
     leafSpkiCommit: leafSpkiCommit.toString(),
     intSpkiCommit: intSpkiCommit.toString(),
+    // V5.1 additions (slots 14-18).
+    identityFingerprint: identityFingerprint.toString(),
+    identityCommitment: identityCommitment.toString(),
+    rotationMode: rotationMode,
+    rotationOldCommitment: rotationOldCommitment.toString(),
+    rotationNewWallet: rotationNewWallet.toString(),
 
     // Binding parser inputs (§6.2).
     bindingBytes: rightPadZero(input.bindingBytes, MAX_BCANON),
@@ -347,6 +414,9 @@ export async function buildWitnessV5(
     // §6.8 — pkX/pkY limbs (Secp256k1PkMatch repacks parser.pkBytes into these).
     pkX: pkX.map((x) => x.toString()),
     pkY: pkY.map((y) => y.toString()),
+
+    // V5.1 — wallet-bound nullifier secret (private, range-checked in-circuit).
+    walletSecret: walletSecretField.toString(),
   };
 }
 
@@ -355,6 +425,12 @@ export { parseP7s } from './parse-p7s';
 export { extractBindingOffsets } from './binding-offsets';
 export { findTbsInCert, findSubjectSerial } from './leaf-cert-walk';
 export { pkCoordToLimbs, subjectSerialBytesToLimbs } from './limbs';
+export {
+  FINGERPRINT_DOMAIN,
+  BN254_SCALAR_FIELD,
+  reduceTo254,
+  packFieldToBytes32,
+} from './wallet-secret';
 export type {
   BuildWitnessV5Input,
   CmsExtraction,

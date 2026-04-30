@@ -18,6 +18,11 @@ import { buildWitnessV5 } from '../../src/build-witness-v5';
 
 const FIXTURE_DIR = resolve(__dirname, '..', '..', 'fixtures', 'integration', 'admin-ecdsa');
 
+// Deterministic test walletSecret. 32 bytes of 0x42. After reduceTo254 the
+// high 2 bits are masked, so the in-circuit Num2Bits(254) range check
+// trivially passes. Same byte pattern across all tests for fixture stability.
+const TEST_WALLET_SECRET = Buffer.alloc(32, 0x42);
+
 // Synthetic CAdES messageDigest Attribute prefix (17 bytes). MUST match
 // SignedAttrsParser.circom EXPECTED_PREFIX exactly.
 const MD_PREFIX = Buffer.from([
@@ -71,13 +76,20 @@ describe('buildWitnessV5 — production builder round-trip', function () {
       intSpki,
       signedAttrsDer: sa.bytes,
       signedAttrsMdOffset: sa.mdAttrOffset,
+      walletSecret: TEST_WALLET_SECRET,
     });
 
-    // Sanity on the 14 public signals — order MUST match V5 spec §0.1.
+    // Sanity on the 19 public signals — order MUST match orchestration §1.1.
     expect(witness.timestamp).to.equal(1777478400);
     expect(typeof witness.msgSender).to.equal('string');
     expect(typeof witness.nullifier).to.equal('string');
     expect((witness.policyLeafHash as string)).to.match(/^\d+$/);
+    // V5.1 additions (slots 14-18).
+    expect(typeof witness.identityFingerprint).to.equal('string');
+    expect(typeof witness.identityCommitment).to.equal('string');
+    expect(witness.rotationMode).to.equal(0); // default register mode
+    expect(witness.rotationOldCommitment).to.equal(witness.identityCommitment);
+    expect(witness.rotationNewWallet).to.equal(witness.msgSender);
 
     const w = await circuit.calculateWitness(witness, true);
     await circuit.checkConstraints(w);
@@ -103,6 +115,7 @@ describe('buildWitnessV5 — production builder round-trip', function () {
       intSpki,
       signedAttrsDer: sa.bytes,
       signedAttrsMdOffset: sa.mdAttrOffset,
+      walletSecret: TEST_WALLET_SECRET,
     });
 
     // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -126,6 +139,7 @@ describe('buildWitnessV5 — production builder round-trip', function () {
         intSpki: Buffer.alloc(91),
         signedAttrsDer: Buffer.alloc(0),
         signedAttrsMdOffset: 0,
+        walletSecret: TEST_WALLET_SECRET,
       });
     } catch {
       threw = true;

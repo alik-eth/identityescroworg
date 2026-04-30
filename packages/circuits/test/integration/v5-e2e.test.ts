@@ -81,6 +81,7 @@ describe('V5 §6.10 — real-Diia E2E round-trip via .p7s', function () {
       intSpki,
       signedAttrsDer: cms.signedAttrsDer,
       signedAttrsMdOffset: cms.signedAttrsMdOffset,
+      walletSecret: Buffer.alloc(32, 0x42),
     });
 
     // 3. Snarkjs witness calc + constraint check.
@@ -114,6 +115,7 @@ describe('V5 §6.10 — real-Diia E2E round-trip via .p7s', function () {
       intSpki,
       signedAttrsDer: tamperedSa,
       signedAttrsMdOffset: cades.signedAttrsMdOffset,
+      walletSecret: Buffer.alloc(32, 0x42),
     });
 
     let threw = false;

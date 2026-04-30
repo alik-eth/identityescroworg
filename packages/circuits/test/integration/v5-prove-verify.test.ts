@@ -55,6 +55,7 @@ const haveStubArtifacts =
         intSpki,
         signedAttrsDer: cms.signedAttrsDer,
         signedAttrsMdOffset: cms.signedAttrsMdOffset,
+        walletSecret: Buffer.alloc(32, 0x42),
       });
 
       console.log('[test] before fullProve, rss=', Math.round(process.memoryUsage().rss / 1e6), 'MB');
@@ -66,9 +67,15 @@ const haveStubArtifacts =
       console.log('[test] after  fullProve, rss=', Math.round(process.memoryUsage().rss / 1e6), 'MB');
 
       expect(Array.isArray(publicSignals)).to.equal(true);
-      expect(publicSignals.length).to.equal(14);
+      expect(publicSignals.length).to.equal(19);  // V5.1 — was 14 in V5
       expect(publicSignals[0]).to.equal(witness.msgSender);
       expect(publicSignals[1]).to.equal(String(witness.timestamp));
+      // V5.1 slots 14-18 (frozen layout per orchestration §1.1).
+      expect(publicSignals[14]).to.equal(witness.identityFingerprint);
+      expect(publicSignals[15]).to.equal(witness.identityCommitment);
+      expect(publicSignals[16]).to.equal('0');  // rotationMode = register
+      expect(publicSignals[17]).to.equal(witness.identityCommitment); // no-op
+      expect(publicSignals[18]).to.equal(witness.msgSender);          // no-op
 
       const vkey = JSON.parse(readFileSync(VKEY_PATH, 'utf8'));
       const ok: boolean = await snarkjs.groth16.verify(vkey, publicSignals, proof);

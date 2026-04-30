@@ -21,6 +21,12 @@ import {
   parseP256Spki,
   spkiCommit,
 } from '../../scripts/spki-commit-ref';
+import { FINGERPRINT_DOMAIN, reduceTo254 } from '../../src/wallet-secret';
+
+// V5.1 deterministic test wallet secret. Same byte pattern across all tests
+// for fixture stability. After reduceTo254 the high 2 bits are masked, so
+// the in-circuit Num2Bits(254) range check trivially passes.
+const TEST_WALLET_SECRET = Buffer.alloc(32, 0x42);
 
 // circomlibjs has no types; require-interop matches other tests in this package.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -314,11 +320,19 @@ async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
   // tbsLoc.offset + tbsLoc.length) inside leafDer).
   const subjectSerialValueOffsetInTbs = subjectSerial.offset - tbsLoc.offset;
   const ctxHashField = await poseidonChunkHashVarEmpty();
-  const expectedSecret = await poseidonHash([
+  // V5.1 wallet-bound nullifier construction (replaces V5's Poseidon₂(secret, ctxHash)):
+  //   subjectPack          = Poseidon₅(serialLimbs[0..3], serialLen)  (was: secret)
+  //   identityFingerprint  = Poseidon₂(subjectPack, FINGERPRINT_DOMAIN)
+  //   identityCommitment   = Poseidon₂(subjectPack, walletSecret)
+  //   nullifier            = Poseidon₂(walletSecret, ctxHashField)
+  const subjectPack = await poseidonHash([
     ...subjectSerialLimbs,
     BigInt(subjectSerial.length),
   ]);
-  const expectedNullifier = await poseidonHash([expectedSecret, ctxHashField]);
+  const walletSecretField = reduceTo254(TEST_WALLET_SECRET);
+  const expectedIdentityFingerprint = await poseidonHash([subjectPack, FINGERPRINT_DOMAIN]);
+  const expectedIdentityCommitment = await poseidonHash([subjectPack, walletSecretField]);
+  const expectedNullifier = await poseidonHash([walletSecretField, ctxHashField]);
 
   // §6.7 — Byte-domain SHA over parser.ctxBytes / parser.ctxLen. The
   // synthetic admin-ecdsa fixture pins ctxHexLen=0 → parser emits ctxLen=0
@@ -353,10 +367,10 @@ async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
   const expectedMsgSender = BigInt('0x' + addrHex.slice(2 + 24));
 
   return {
-    // 14 public inputs (canonical V5 spec §0.1 order).
+    // 19 public inputs (canonical V5.1 order — orchestration §1.1, FROZEN).
     msgSender: expectedMsgSender,                  // §6.8
     timestamp: fix.expected.timestamp,             // §6.2
-    nullifier: expectedNullifier,                  // §6.6
+    nullifier: expectedNullifier,                  // §6.6 (V5.1: walletSecret-based)
     ctxHashHi,                                     // §6.7
     ctxHashLo,                                     // §6.7
     bindingHashHi,                                  // §6.3
@@ -368,6 +382,12 @@ async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
     policyLeafHash,                                 // §6.2
     leafSpkiCommit,                                 // §6.5
     intSpkiCommit,                                  // §6.5
+    // V5.1 additions (slots 14-18).
+    identityFingerprint: expectedIdentityFingerprint,
+    identityCommitment: expectedIdentityCommitment,
+    rotationMode: 0n,                              // register-mode default
+    rotationOldCommitment: expectedIdentityCommitment, // no-op under register
+    rotationNewWallet: expectedMsgSender,              // no-op under register
 
     // Parser inputs (§6.2).
     bindingBytes: v2core.bytes,
@@ -428,6 +448,10 @@ async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
     // separately hashes parser.pkBytes[1..65] and binds to msgSender public).
     pkX: pkX.map((x) => x.toString()),
     pkY: pkY.map((y) => y.toString()),
+
+    // V5.1 — wallet-bound nullifier secret (private input, range-checked
+    // in-circuit via Num2Bits(254)).
+    walletSecret: walletSecretField,
   };
 }
 
@@ -479,16 +503,12 @@ describe('QKBPresentationV5 — §6.2-§6.9 (full body — parser + 4× SHA + 2�
     const w = await circuit.calculateWitness(input, true);
     await circuit.checkConstraints(w);
 
-    // Off-circuit recomputation must equal the witnessed public signal.
-    const limbs = [
-      0x36332D41554E4954n,
-      0x3537353630353732n,
-      0n,
-      0n,
-    ];
+    // V5.1 off-circuit recomputation must equal the witnessed public signal:
+    //   nullifier = Poseidon₂(walletSecret, ctxHash)   [V5.1, wallet-bound]
+    // (V5 was Poseidon₂(Poseidon₅(serialLimbs, len), ctxHash) — pre-amendment.)
     const ctxHash = await poseidonChunkHashVarEmpty();
-    const secret = await poseidonHash([...limbs, 16n]);
-    const expectedNullifier = await poseidonHash([secret, ctxHash]);
+    const walletSecretField = reduceTo254(TEST_WALLET_SECRET);
+    const expectedNullifier = await poseidonHash([walletSecretField, ctxHash]);
     expect(input.nullifier).to.equal(expectedNullifier);
   });
 

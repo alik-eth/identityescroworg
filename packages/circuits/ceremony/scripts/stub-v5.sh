@@ -121,6 +121,13 @@ const intCertDer   = readFileSync(resolve(dir, 'synth-intermediate.der'));
 const bindingDigest = createHash('sha256').update(bindingBytes).digest();
 const cades = buildSynthCades({ contentDigest: bindingDigest, leafCertDer, intCertDer });
 
+// V5.1 — deterministic stub walletSecret for fixture stability. Same byte
+// pattern (0x42 × 32) used in test/integration/build-witness-v5.test.ts +
+// qkb-presentation-v5.test.ts so stub-ceremony fixture maps to test-pinned
+// expected values. After mod-p reduction this lands well below the BN254
+// scalar field; in-circuit Num2Bits(254) trivially passes.
+const STUB_WALLET_SECRET = Buffer.alloc(32, 0x42);
+
 (async () => {
   const w = await buildWitnessV5({
     bindingBytes,
@@ -128,6 +135,7 @@ const cades = buildSynthCades({ contentDigest: bindingDigest, leafCertDer, intCe
     leafSpki, intSpki,
     signedAttrsDer: cades.signedAttrsDer,
     signedAttrsMdOffset: cades.signedAttrsMdOffset,
+    walletSecret: STUB_WALLET_SECRET,
   });
   writeFileSync('$INPUT_SAMPLE', JSON.stringify(w, null, 2));
   console.log('wrote sample input ->', '$INPUT_SAMPLE');

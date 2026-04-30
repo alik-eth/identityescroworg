@@ -1,10 +1,20 @@
-// Type definitions for the V5 witness-builder public API.
+// Type definitions for the V5.1 witness-builder public API.
 //
-// The 14-field public-signal layout is FROZEN per V5 spec §0.1 +
-// orchestration §2.1; any change here is a cross-worker breaking change
-// (snarkjs's `[outputs..., public_inputs...]` emission order is bound to
-// these names). Keep this file in lockstep with QKBPresentationV5.circom's
-// `component main { public [...] }` declaration.
+// The 19-field public-signal layout is FROZEN per orchestration §1.1
+// (commit 7f5c517 on main); any change here is a cross-worker breaking
+// change (snarkjs's `[outputs..., public_inputs...]` emission order is
+// bound to these names). Keep this file in lockstep with
+// QKBPresentationV5.circom's `component main { public [...] }` declaration.
+//
+// V5 → V5.1 deltas (per spec
+// `2026-04-30-wallet-bound-nullifier-amendment.md` v0.6, user-approved):
+//   - 5 new public-signal slots [14..18]: identityFingerprint,
+//     identityCommitment, rotationMode, rotationOldCommitment,
+//     rotationNewWallet.
+//   - 1 new private witness input: walletSecret (single field element,
+//     254-bit range-checked in-circuit).
+//   - nullifier construction changes: was Poseidon₂(secret-from-serial,
+//     ctxHashField); now Poseidon₂(walletSecret, ctxHashField).
 
 import type { Buffer } from 'node:buffer';
 
@@ -98,6 +108,31 @@ export interface BuildWitnessV5Input {
    * `signedAttrsMdOffset + 17`.
    */
   signedAttrsMdOffset: number;
+  /**
+   * V5.1 wallet-bound nullifier secret. 32 bytes, off-circuit-derived per
+   * orchestration §1.2 (HKDF-SHA256 for EOA, Argon2id for SCW). The witness
+   * builder reduces it to a 254-bit field element via `reduceTo254()` (see
+   * `src/wallet-secret.ts`) before injection into the circuit.
+   */
+  walletSecret: Buffer;
+  /**
+   * V5.1 rotation-mode flag. Optional; defaults to 0 (register).
+   *   0 — register mode (first-claim or repeat-claim against new ctx)
+   *   1 — rotateWallet mode (delegating identity to a new wallet)
+   *
+   * Under rotation mode, the caller MUST also supply
+   * `rotationOldCommitment` (the prior on-chain `identityCommitments[fp]`
+   * value being replaced) and `rotationNewWalletAddress` (the new wallet
+   * the rotation delegates to). Under register mode (default), these
+   * fields are computed by the builder to satisfy the in-circuit no-op
+   * constraints (`rotationOldCommitment === identityCommitment` and
+   * `rotationNewWallet === msgSender`).
+   */
+  rotationMode?: 0 | 1;
+  /** REQUIRED when `rotationMode === 1`. bigint or hex string. */
+  rotationOldCommitment?: bigint | string;
+  /** REQUIRED when `rotationMode === 1`. Ethereum address (≤2^160). */
+  rotationNewWalletAddress?: bigint | string;
 }
 
 /**
