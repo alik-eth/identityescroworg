@@ -32,7 +32,7 @@ import {
   parseP7s,
   type CmsExtraction,
 } from '@qkb/sdk';
-import { SnarkjsProver } from '@qkb/sdk/prover/snarkjs';
+import { SnarkjsWorkerProver } from '@qkb/sdk/prover/snarkjsWorker';
 import { V5_PROVER_ARTIFACTS } from './circuitArtifacts';
 
 export type V5PipelineStage =
@@ -178,12 +178,19 @@ async function runRealPath(
     zkeyUrl: V5_PROVER_ARTIFACTS.zkeyUrl,
     zkeySha256: V5_PROVER_ARTIFACTS.zkeySha256,
   };
-  // SnarkjsProver-via-Worker lands as a separate task (the worker hosts
-  // the wasm + zkey to avoid main-thread jank). For now we drive snarkjs
-  // directly on the main thread — multi-minute prove step will block.
-  // Browser consumers should swap this for a Worker wrapper before §9.4
-  // closes.
-  const prover: IProver = new SnarkjsProver({ fetchToBytes: false });
+  // Drive snarkjs in a Web Worker so the main thread stays responsive
+  // during the multi-minute prove step. The Worker hosts the wasm + zkey
+  // (URL-based, streamed; not buffered into memory). The Worker is
+  // terminated after each prove to release the 2.2 GB zkey heap back to
+  // the OS — important for tabs that prove sporadically.
+  const proverWorker = new Worker(
+    new URL('../workers/v5-prover.worker.ts', import.meta.url),
+    { type: 'module' },
+  );
+  const prover: IProver = new SnarkjsWorkerProver({
+    worker: proverWorker,
+    terminateAfterProve: true,
+  });
   const proveResult = await proveV5(witness as Record<string, unknown>, {
     prover,
     artifacts,

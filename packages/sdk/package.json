@@ -12,6 +12,18 @@
     "./prover/snarkjs": {
       "types": "./dist/prover/snarkjs.d.ts",
       "import": "./dist/prover/snarkjs.js"
+    },
+    "./prover/snarkjsWorker": {
+      "types": "./dist/prover/snarkjsWorker.d.ts",
+      "import": "./dist/prover/snarkjsWorker.js"
+    },
+    "./prover/snarkjsWorkerEntry": {
+      "types": "./dist/prover/snarkjsWorkerEntry.d.ts",
+      "import": "./dist/prover/snarkjsWorkerEntry.js"
+    },
+    "./prover/verify": {
+      "types": "./dist/prover/verify.d.ts",
+      "import": "./dist/prover/verify.js"
     }
   },
   "main": "./dist/index.js",
