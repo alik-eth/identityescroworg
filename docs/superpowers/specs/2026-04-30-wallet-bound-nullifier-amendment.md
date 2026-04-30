@@ -1,10 +1,12 @@
-# Issuer-Blind Nullifier — V5 Privacy Amendment
+# Wallet-Bound Nullifier — V5 Privacy Amendment
 
-> **Status:** Draft v0.5 — Codex review pass 3 corrections (privacy-table overclaim + missing wallet-uniqueness gate); pending team-lead final read + user-review gate.
+> **Status:** Draft v0.6 — renamed from "Issuer-Blind Nullifier" per user directive 2026-04-30; pending team-lead final read + user-review gate.
+>
+> **Title rationale**: the amendment binds the nullifier to a wallet-derived secret (`nullifier = Poseidon₂(walletSecret, ctxHash)`) — the title now describes the construction rather than asserting an adversary-relative privacy claim. Concrete privacy properties are detailed in §"What different observers learn" and §"Privacy linkability — explicit limitation". Prior name "Issuer-Blind Nullifier" overclaimed; an adversarial issuer with cert access can still enumerate registrations via the public `usedCtx` mapping (the amendment hides nullifier *values* from the issuer, not registration *occurrence*).
 > **Date:** 2026-04-30.
 > **Amends:** §6.6 of `2026-04-29-v5-architecture-design.md` and **supersedes** `2026-04-18-person-nullifier-amendment.md` by reference (the 2026-04-23 ETSI-namespace clarification carries forward).
 > **Sequencing:** Lands BEFORE §11 ceremony kickoff. Post-ceremony adoption costs +1-2 weeks of contributor coordination.
-> **Owner:** circuits-eng (drafter), contracts-eng (independent contract review at `/data/Develop/qkb-wt-v5/arch-contracts/docs/superpowers/specs/2026-04-30-issuer-blind-nullifier-contract-review.md` — review v0.2 endorses this spec).
+> **Owner:** circuits-eng (drafter), contracts-eng (independent contract review at `/data/Develop/qkb-wt-v5/arch-contracts/docs/superpowers/specs/2026-04-30-issuer-blind-nullifier-contract-review.md` — review v0.2 endorses this spec; the review file retains its original filename owned by contracts-eng's worktree).
 >
 > **Revision history:**
 > - v0.1 (2026-04-30 ~12:00 UTC): initial draft.
@@ -21,12 +23,13 @@
 >   (3) **Public-signal binding clarification** for `rotationOldCommitment`/`rotationNewWallet` no-ops under register mode — in-circuit `ForceEqualIfEnabled` (lines in §Rotation circuit ceremony) already enforces; explicit cross-reference added; redundant on-chain gates dropped.
 >   (4) **Drop `nullifierOf[msg.sender] == 0` gate** — incompatible with repeat-claim (same wallet, new ctx). `nullifierOf[wallet]` becomes write-once-on-first-claim view for `IQKBRegistry` compat; anti-Sybil enforced entirely by `usedCtx[fp][ctxKey]`. Sub-flag from contracts-eng §1: caught a real reverting-on-second-ctx bug in v0.3.
 >   (5) **Stale-bind invariant** added explicitly to §Soundness: `identityWallets[fp] == msg.sender` MUST be checked before `usedCtx[fp][ctxKey]` on the repeat-claim path.
->   (6) **Privacy linkability sub-property** clarified: "issuer-blind ≠ unlinkable across user's own registrations" — fingerprint persists in `usedCtx[fp][*]` and is observable; correlatable across an attacker who already has the fingerprint. V6 Pedersen-set-membership candidate.
+>   (6) **Privacy linkability sub-property** clarified: nullifier-value privacy ≠ unlinkability across user's own registrations — fingerprint persists in `usedCtx[fp][*]` and is observable; correlatable across an attacker who already has the fingerprint. V6 Pedersen-set-membership candidate.
 >   (7) **Codex Finding 2 fix — `IdentityEscrowNFT` is NOT non-transferable** (factual correction). The actual contract at `packages/contracts/src/IdentityEscrowNFT.sol` extends OpenZeppelin's `ERC721` without overriding `_update`, so transfers work via standard `transferFrom`/`safeTransferFrom`. The "no regression because NFT is non-transferable" argument was therefore unsound as written. Reframed: V5 already binds verified-status to wallet privkey via `nullifierOf[wallet]`; lose wallet privkey ⇒ can't re-prove verified-status; that V5 invariant survives V5.1 unchanged. NFT artifact transferability is orthogonal.
 >   (8) **NFT decoupling** [user directive 2026-04-30]: the QKB layer does NOT manage NFT state. `rotateWallet()` migrates `identityWallets[fp]`, `identityCommitments[fp]`, and `nullifierOf[wallet]` only. If a user has minted an `IdentityEscrowNFT`, they are responsible for transferring it to the new wallet via standard ERC-721 (currently transferable). No `adminTransfer` cross-contract call; no `nonReentrant` modifier needed (no external calls in `rotateWallet`). Supersedes lead's Q4 `adminTransfer` design — user clarification: "nft is optional. if this works without nft its fine."
 >   Plus: α option documented as "consider for V6 if redesigned".
+> - v0.6 (2026-04-30 ~19:00 UTC): renamed amendment per user directive — "Issuer-Blind Nullifier" → **"Wallet-Bound Nullifier"**. The new name describes the construction (`nullifier = Poseidon₂(walletSecret, ctxHash)`); the old name implied a privacy property against the issuer that the amendment does not actually achieve. File renamed via `git mv` to `2026-04-30-wallet-bound-nullifier-amendment.md`. Body sweep updated: prose references to "issuer-blind" / "issuer-blindness" reframed where they were claims (now use "nullifier-value privacy" or "wallet-bound nullifier" as appropriate); historical references in commit messages and the contracts-eng review filename preserved (cross-package filename change deferred to lead).
 > - v0.5 (2026-04-30 ~18:30 UTC): Codex review pass 3 caught two real spec bugs in v0.4. Fixed:
->   (1) **Privacy table overclaim**: v0.4 row "Which contexts has user X registered against?" said "No — needs walletSecret" for V5.1 — but `usedCtx[fp][ctxKey]` is publicly readable and the issuer can compute `fp` from the cert. So the issuer can still enumerate registrations. Reframed honestly: V5.1 hides nullifier *values* from the issuer but does NOT hide the *fact* of registration occurrence; the privacy improvement is materially against **non-issuer observers without cert access** (who cannot compute the fingerprint). The "issuer-blind" framing of the amendment title is therefore an overclaim — flagged for lead/user to consider rename.
+>   (1) **Privacy table overclaim**: v0.4 row "Which contexts has user X registered against?" said "No — needs walletSecret" for V5.1 — but `usedCtx[fp][ctxKey]` is publicly readable and the issuer can compute `fp` from the cert. So the issuer can still enumerate registrations. Reframed honestly: V5.1 hides nullifier *values* from the issuer but does NOT hide the *fact* of registration occurrence; the privacy improvement is materially against **non-issuer observers without cert access** (who cannot compute the fingerprint). The "issuer-blind" framing of the amendment title was therefore an overclaim — addressed in v0.6 by renaming the amendment to "Wallet-Bound Nullifier".
 >   (2) **Wallet-uniqueness not enforced**: v0.4's register() first-claim branch wrote `nullifierOf[msg.sender] = nul` whenever `identityCommitments[fp] == 0`, with NO check that `msg.sender` was free. So a wallet that already had an identity X bound could claim a SECOND identity Y from a fresh QES, OVERWRITING `nullifierOf[wallet]` (since fp Y is fresh, the first-claim branch fires). This breaks `IdentityEscrowNFT.mint()` (allows re-mint of a second NFT against `nul_Y`) and `IQKBRegistry.isVerified()` semantics. Fix: restored the wallet-free check `require(nullifierOf[msg.sender] == 0)` INSIDE the first-claim branch (not unconditional — repeat-claim of same identity bypasses). `rotateWallet()` similarly gates `require(nullifierOf[newWallet] == 0)` so a wallet can't be the destination of multiple rotations from different identities. New §Soundness invariant 5 codifies wallet-uniqueness explicitly.
 
 ## Motivation — the gap in the current V5 design
@@ -225,7 +228,7 @@ Properties:
 
 Compatibility caveats — **critical user-facing warnings**:
 
-- 🚨 **Lost passphrase = lost identity, permanently, in V5.** No `identityReset()` ships in V5 (see §"identityReset() — V5 decision"). A valid QES does not recover access — the QES proves identity ownership but the *passphrase* protects the commitment escrow. The two are decoupled by design (this is exactly what gives issuer-blindness).
+- 🚨 **Lost passphrase = lost identity, permanently, in V5.** No `identityReset()` ships in V5 (see §"identityReset() — V5 decision"). A valid QES does not recover access — the QES proves identity ownership but the *passphrase* protects the commitment escrow. The two are decoupled by design (this is what makes the nullifier value uncomputable to anyone other than the user — including the issuer).
 - 🚨 **Lost passphrase = lost verified-status.** With `walletSecret` unrecoverable, the user cannot produce a register-mode proof that opens the on-chain `identityCommitments[fp]` — they're locked out of their own QKB identity. `IdentityEscrowNFT` is a separate optional artifact and remains transferable independently of QKB; if minted before the loss, the user can still transfer the NFT via standard ERC-721, but the `Verified` modifier and any `IQKBRegistry.isVerified()` consumer will return false against any new wallet (since `nullifierOf[newWallet] == 0`).
 - Some users will pick weak passphrases despite warnings — Argon2id parameters (m=64MiB, t=3, p=1) tuned to make brute-force expensive but not impossible against publicly-visible commitments. Web SDK enforces a minimum entropy threshold (≥80 bits estimated by zxcvbn) and refuses weaker.
 - Recommend hardware-key derivation (e.g., signing a fixed message with a YubiKey or Ledger) as an alternative entropy source for sophisticated users — the protocol accepts any 32-byte input as `walletSecret`, so the SDK can offer multiple derivation modes.
@@ -658,7 +661,7 @@ Phase B ceremony itself is unaffected by this amendment — pot23 ptau is a prop
 
 ⚠️ **The privacy gain is materially against non-issuer observers**, not against the issuer specifically. The issuer can compute `identityFingerprint` directly from their cert DB (no secret needed) and read `usedCtx[fp][ctxKey]` on-chain — meaning they retain the ability to enumerate a user's registrations even after this amendment. The amendment **hides nullifier *values* from the issuer** but does NOT hide *registration occurrence* from them. See §"Privacy linkability — explicit limitation" for the full analysis.
 
-The amendment's name ("issuer-blind nullifier") emphasizes the nullifier-value privacy property. It does **not** mean the issuer is blind to registrations — they aren't. Renaming to something like "wallet-bound nullifier" would be more accurate; flagged for lead/user.
+The amendment's name was changed from "issuer-blind nullifier" to **"wallet-bound nullifier"** in v0.6 to address this exact overclaim — the issuer is NOT blind to registrations, they're only blind to nullifier *values*. The new name describes the construction (the nullifier is bound to a wallet-derived secret) rather than asserting an adversary-relative privacy claim.
 
 | Query | V5 (current) | V5.1 (this amendment) | Privacy delta |
 |---|---|---|---|
@@ -670,7 +673,7 @@ The amendment's name ("issuer-blind nullifier") emphasizes the nullifier-value p
 | "Which wallet did user X use?" | Yes — `registrantOf[nullifier]` returns msg.sender (with cert + ctx guess) | Yes — `identityWallets[fp]` returns wallet directly (with cert) | **No change** |
 | "What's the size of the QKB user base?" | Yes — count on-chain registrations | Yes — count `identityCommitments` entries | **No change** (intentional — aggregate metric) |
 
-**Bottom line**: V5.1 strictly improves privacy against observers without cert access (most third parties, mass-surveillance crawlers, indexers without cert DBs). It does **not** improve privacy against an adversarial issuer who has a user's cert. **Full issuer-blindness for registration occurrence requires V6 Pedersen-set-membership** (mentioned at the end of §Privacy linkability) — out of scope for this amendment.
+**Bottom line**: V5.1 strictly improves privacy against observers without cert access (most third parties, mass-surveillance crawlers, indexers without cert DBs). It does **not** improve privacy against an adversarial issuer who has a user's cert. **Hiding registration occurrence from cert-holding adversaries requires V6 Pedersen-set-membership** (mentioned at the end of §Privacy linkability) — out of scope for this amendment.
 
 ### What the issuer can attempt (and why each fails)
 
@@ -696,7 +699,7 @@ The amendment's name ("issuer-blind nullifier") emphasizes the nullifier-value p
 
 ### Privacy linkability — explicit limitation [v0.4]
 
-**Issuer-blindness ≠ unlinkability across a user's own registrations.**
+**Wallet-bound nullifier values ≠ unlinkability across a user's own registrations.**
 
 The amendment hides the *issuer's ability to compute nullifiers* for a target user, but it does NOT hide the linkability of one user's registrations across multiple ctxs to anyone who already has the user's `identityFingerprint`. Specifically:
 
