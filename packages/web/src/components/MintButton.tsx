@@ -6,7 +6,7 @@ import {
   deploymentForChainId,
   identityEscrowNftAbi,
   qkbRegistryV4Abi,
-  qkbRegistryV5Abi,
+  qkbRegistryV5_1Abi,
 } from '@qkb/sdk';
 import { ACTIVE_CHAIN } from '../lib/wagmi';
 
@@ -27,7 +27,7 @@ export function MintButton() {
 
   const { data: nullifierV5 } = useReadContract({
     address: dep?.registryV5,
-    abi: qkbRegistryV5Abi,
+    abi: qkbRegistryV5_1Abi,
     functionName: 'nullifierOf',
     args: address ? [address] : undefined,
     query: { enabled: !!address && v5Deployed },

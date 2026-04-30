@@ -12,7 +12,7 @@
 // public-signal order AND the proof-before-sig arg order so any future
 // reshuffle fails loudly at the SDK boundary.
 import { encodeFunctionData } from 'viem';
-import { qkbRegistryV5Abi } from '../abi/QKBRegistryV5.js';
+import { qkbRegistryV5_1Abi } from '../abi/QKBRegistryV5_1.js';
 import { QkbError } from '../errors/index.js';
 
 // ===========================================================================
@@ -259,7 +259,7 @@ function assertU256(v: bigint, field: string): void {
  */
 export function encodeV5RegisterCalldata(args: RegisterArgsV5): `0x${string}` {
   return encodeFunctionData({
-    abi: qkbRegistryV5Abi,
+    abi: qkbRegistryV5_1Abi,
     functionName: 'register',
     args: [
       // proof — Groth16Proof tuple
@@ -327,14 +327,14 @@ export interface RotateWalletArgsV5 {
 /**
  * Encode a `rotateWallet()` call as ABI-encoded calldata.
  *
- * The explicit generic `<typeof qkbRegistryV5Abi, 'rotateWallet'>` pins viem's
+ * The explicit generic `<typeof qkbRegistryV5_1Abi, 'rotateWallet'>` pins viem's
  * TFunctionName so it doesn't union `register`'s 11-arg shape with
  * `rotateWallet`'s 3-arg shape, which would produce a TS2322 assignability
  * error against the wider union target.
  */
 export function encodeV5RotateWalletCalldata(args: RotateWalletArgsV5): `0x${string}` {
-  return encodeFunctionData<typeof qkbRegistryV5Abi, 'rotateWallet'>({
-    abi: qkbRegistryV5Abi,
+  return encodeFunctionData<typeof qkbRegistryV5_1Abi, 'rotateWallet'>({
+    abi: qkbRegistryV5_1Abi,
     functionName: 'rotateWallet',
     args: [
       {
@@ -397,7 +397,10 @@ export const REGISTRY_V5_ERROR_SELECTORS: Readonly<Record<string, `0x${string}`>
   BadSignedAttrsLo: sel('BadSignedAttrsLo()'),
   BadTrustList: sel('BadTrustList()'),
   FutureBinding: sel('FutureBinding()'),
-  NullifierUsed: sel('NullifierUsed()'),
+  // V5 had `NullifierUsed` — dropped at contracts-eng `d3720c6` (Task 1)
+  // when anti-Sybil migrated to `usedCtx`. The role is now split between
+  // `AlreadyRegistered` (wallet+identity already paired) and `CtxAlreadyUsed`
+  // (replay of the same context binding).
   OnlyAdmin: sel('OnlyAdmin()'),
   PoseidonDeployFailed: sel('PoseidonDeployFailed()'),
   PoseidonStaticcallFailed: sel('PoseidonStaticcallFailed()'),
@@ -426,8 +429,9 @@ export function classifyV5RegistryRevert(data: string | undefined): QkbError | n
   if (!lower.startsWith('0x') || lower.length < 10) return null;
   const s = lower.slice(0, 10) as `0x${string}`;
 
-  if (s === REGISTRY_V5_ERROR_SELECTORS.NullifierUsed)
-    return new QkbError('registry.nullifierUsed');
+  // `NullifierUsed` selector dropped at contracts-eng `d3720c6` — the
+  // anti-Sybil constraint moved to `usedCtx` (per-(fp, ctxHash) replay
+  // guard) and surfaces as `CtxAlreadyUsed` below.
   if (s === REGISTRY_V5_ERROR_SELECTORS.AlreadyRegistered)
     return new QkbError('registry.nullifierUsed', { reason: 'already-registered-v5' });
   if (s === REGISTRY_V5_ERROR_SELECTORS.BadProof)

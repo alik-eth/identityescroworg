@@ -12,7 +12,7 @@ import {
 } from 'wagmi';
 import {
   deploymentForChainId,
-  qkbRegistryV5Abi,
+  qkbRegistryV5_1Abi,
   parseP7s,
   findSubjectSerial,
 } from '@qkb/sdk';
@@ -160,7 +160,7 @@ export function Step4ProveAndRegister({ p7s, bindingBytes, onBack }: Step4Props)
       }
       writeContract({
         address: dep!.registryV5,
-        abi: qkbRegistryV5Abi,
+        abi: qkbRegistryV5_1Abi,
         functionName: 'register',
         args: [
           registerArgs.proof,

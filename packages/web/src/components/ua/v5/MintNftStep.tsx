@@ -5,7 +5,7 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
 } from 'wagmi';
-import { deploymentForChainId, identityEscrowNftAbi, qkbRegistryV5Abi } from '@qkb/sdk';
+import { deploymentForChainId, identityEscrowNftAbi, qkbRegistryV5_1Abi } from '@qkb/sdk';
 import { CertificatePreview } from '../../CertificatePreview';
 
 const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
@@ -30,7 +30,7 @@ export function MintNftStep() {
 
   const { data: nullifier } = useReadContract({
     address: dep?.registryV5,
-    abi: qkbRegistryV5Abi,
+    abi: qkbRegistryV5_1Abi,
     functionName: 'nullifierOf',
     args: address ? [address] : undefined,
     query: { enabled: !!address && !!v5Deployed },
