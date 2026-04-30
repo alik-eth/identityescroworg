@@ -179,9 +179,12 @@ commit, or test suites in other packages will silently drift off it.
 
 V5 collapses the V4 leaf+chain split into a **single ~4.02M-constraint
 circuit** (`circuits/QKBPresentationV5.circom`) that takes the QES
-verification on-chain via EIP-7212 P256Verify. The 14-signal public-input
-layout is FROZEN per V5 spec §0.1 + orchestration §2.1 — adding /
-reordering fields is a cross-worker breaking change.
+verification on-chain via EIP-7212 P256Verify. **V5.1 amends V5 in-place
+on the same .circom file** — empirical envelope is now ~4.022M
+constraints with a **19-signal** public-input layout (V5 base shipped 14;
+V5.1 adds 5 — see §V5.11 below). The layout is FROZEN per V5 spec §0.1
++ V5.1 orchestration §1.1 — adding / reordering fields is a cross-worker
+breaking change.
 
 The V4 invariants above (`.p7s` hygiene, test cache stickiness,
 fixture provenance, etc.) remain in force. V5 adds the items below;
@@ -241,9 +244,10 @@ the FIRST run (cache cold) will OOM under V4's 28 GB cap.
 
 ### V5.4 — Constraint envelope
 
-- Empirical (post-§6.10): **4,020,936 constraints** (snarkjs r1cs info).
-- Cap: **4,500,000** per spec amendment 9c866ad. Headroom ~10.7%.
-- Wires: 3,955,558. Public inputs: 14. Private inputs: 9,756.
+- Empirical V5 base (post-§6.10): **4,020,936 constraints** (snarkjs r1cs info).
+- Empirical V5.1 (post-A6.1 wallet-bound nullifier): **4,022,171 constraints** (+1,235 vs V5: T1 +738, T3 +497).
+- Cap: **4,500,000** per spec amendment 9c866ad. Headroom ~10.6% (V5.1).
+- Wires (V5.1): ~3,956,793. Public inputs: **19** (V5: 14). Private inputs: 10,526 (V5: 9,756).
 - V4 hard cap was 8M; V5's tighter envelope reflects ECDSA-on-chain.
 
 **Don't widen the cap without surfacing.** A bigger envelope means
@@ -335,9 +339,11 @@ local zkey is missing (typical fresh checkout — `.zkey` is
 gitignored). CI runners with <32 GB available memory will OOM if
 the zkey IS present; ship the test only if a 48 GB cap is enforced.
 
-The committed sample artifacts (`ceremony/v5-stub/proof-sample.json`
+The committed sample artifacts (`ceremony/v5_1/proof-sample.json`
 + `public-sample.json`) re-verify against the stub vkey at near-zero
-cost — that's the second test in the suite, runs everywhere.
+cost — that's the second test in the suite, runs everywhere. Pre-A6.1
+artifacts at `ceremony/v5-stub/` are archived (V5 layout, 14 signals);
+the V5.1 test consumes `ceremony/v5_1/` exclusively.
 
 ### V5.10 — Cross-package isomorphism (#25)
 
@@ -352,3 +358,192 @@ The web-eng vendored copy at `arch-web/sdk/src/witness/v5/` runs a
 SHA-256 fingerprint drift-check against this package; any divergence
 that requires a polyfill is a drift-check failure, not a "patch
 on re-sync" target.
+
+---
+
+## V5.1 — Wallet-bound nullifier amendment (current)
+
+V5.1 layers on top of V5 architecture per
+`docs/superpowers/specs/2026-04-30-wallet-bound-nullifier-amendment.md`
+(v0.6, user-approved). All V5 invariants (§V5.1–§V5.10 above) remain
+in force; the items below are additive. Spec was originally drafted as
+"Issuer-Blind Nullifier" through v0.5 and renamed in v0.6 — older
+commits still reference the original name; both refer to the same
+amendment.
+
+### V5.11 — Public-signal layout grows from 14 → 19 (FROZEN)
+
+V5.1 inherits the V5 14-signal core (slots 0-13) and appends 5 new
+public outputs at slots 14-18:
+
+| Slot | Signal | Source |
+|---|---|---|
+| 14 | `identityFingerprint` | `Poseidon₂(subjectSerialPacked, FINGERPRINT_DOMAIN)` |
+| 15 | `identityCommitment` | `Poseidon₂(subjectSerialPacked, walletSecret)` |
+| 16 | `rotationMode` | 0 = register, 1 = rotateWallet |
+| 17 | `rotationOldCommitment` | prior `identityCommitment` (rotate) / no-op equal to slot 15 (register) |
+| 18 | `rotationNewWallet` | new wallet (rotate) / no-op equal to `msgSender` (register) |
+
+**Slot 2 (`nullifier`) keeps its index but its construction changes**:
+V5 derived it from `Poseidon₂(subjectSerial-derived-secret, ctxHashField)`;
+V5.1 re-derives it as `Poseidon₂(walletSecret, ctxHashField)`. Slot
+position is preserved for forward-compat with V5 calldata indexing,
+but the value differs across the version boundary — fixtures from V5
+will NOT round-trip against the V5.1 stub vkey.
+
+This layout is **FROZEN** per orchestration §1.1. Reorderings or
+insertions are cross-worker breaking changes — the contracts-eng
+calldata indices (`uint[19] publicInputs[14..18]`) and web-eng SDK
+(`packages/sdk/fixtures/v5_1/verification_key.json`) both pin against
+this exact order.
+
+### V5.12 — `walletSecret` private input + mod-p reduction strategy
+
+V5.1 adds **one** new private input: `signal input walletSecret` —
+a single BN254 field element (NOT 2 limbs, NOT a 254-bit mask).
+
+**Why mod-p, not mask:** an earlier draft used `walletSecret = (input & ((1<<254)-1))`
+to keep values in `[0, 2^254)`. **This was unsound**: BN254's scalar
+field `p ≈ 0.756 × 2^254`, so values in `[p, 2^254)` silently wrap
+mod p in-circuit, allowing two distinct secrets `x` and `x+p` to
+collide on `identityCommitment` and `nullifier` while still passing
+`Num2Bits(254)`. **Codex pass 1 [P1] caught this** before T2 shipped.
+
+The correct approach is `walletSecret = u256 mod p_bn254` (canonical
+field element). Lives in `src/wallet-secret.ts:reduceTo254()` (function
+name preserved for backwards compat despite the semantics rename).
+This guarantees no aliasing collisions.
+
+The single-field-element (NOT two limbs) choice trades 2 bits of
+entropy for ~600 fewer constraints + simpler witness shape. Acceptable
+since the input is 256-bit HKDF/Argon2id output (uniformly random).
+
+**Don't change this back to a mask** — soundness loss is real.
+
+### V5.13 — `rotationMode` gate semantics
+
+`rotationMode` is a 1-bit boolean public input. Both modes are
+serviced by the SAME circuit (β-fold per spec §"Architecture decision");
+the mode flag gates branch-specific constraints via `ForceEqualIfEnabled`.
+
+**Register mode (`rotationMode = 0`):**
+- `rotationOldCommitment === identityCommitment` (no-op echo for downstream calldata uniformity).
+- `rotationNewWallet === msgSender` (no-op echo).
+- Both gates fire under `ForceEqualIfEnabled(rotationMode = 0 ? 1 : 0)` — i.e., enabled when mode is 0.
+
+**Rotate mode (`rotationMode = 1`):**
+- `rotationOldCommitment === Poseidon₂(subjectSerialPacked, oldWalletSecret)` — open gate against the prior wallet's secret. **Load-bearing soundness gate**: without it, anyone with cert + on-chain commitment value could craft a valid rotation proof to ANY new wallet. Codex pass 3 [P2] caught this gap in T1; fixed in T3 (+497 constraints).
+- `rotationNewWallet` is unconstrained by the circuit (consumer / contract supplies; the contract enforces `rotationNewWallet == new EOA`).
+- Old-wallet *authority* (i.e., proving the user controls the prior wallet's private key) is contract-side via a typed-message sig over (chainId, registry, oldCommit, newWallet) — NOT the circuit's job.
+
+The contract enforces the `rotationOldCommitment` matches the on-chain
+stored commitment for the caller's identity fingerprint — the circuit
+cannot enforce that (no on-chain state inside R1CS).
+
+### V5.14 — Wallet-uniqueness rule (anti-Sybil invariant)
+
+A user's `identityCommitment` is keyed by `(subjectSerialPacked, walletSecret)`.
+Per ETSI EN 319 412-1 semantics-identifier namespacing (carried forward
+from the V4 person-nullifier amendment), `subjectSerialPacked` is
+stable across cert renewals **inside** the identifier namespace
+(e.g., all `PNOUA-…` certs from any QTSP collapse to the same value).
+
+**Implication**: the same human holding both `PNOUA-…` and `PNODE-…`
+certs (different Member States) produces TWO distinct commitments
++ TWO distinct fingerprints. This is intentional — eIDAS does NOT
+require pan-EU identifier collapse; cross-namespace dedup belongs in
+a separate identity-escrow layer ABOVE QKB.
+
+**Implication**: a single user can derive multiple `walletSecret`s
+from the SAME identity (e.g., HKDF from different EOA keys), each
+producing a different `identityCommitment` for the same `identityFingerprint`.
+Wallet-uniqueness is therefore enforced contract-side by **two
+`nullifierOf` write-once gates** (per spec v0.6 §"Wallet uniqueness
+[v0.5]"):
+- `register()` first-claim path: `require(nullifierOf[msg.sender] == 0)`
+  before writing `nullifierOf[msg.sender] = nul`. Prevents a wallet
+  that already claimed identity X from claiming identity Y.
+- `rotateWallet()`: `require(nullifierOf[newWallet] == 0)`. Prevents
+  rotating to a wallet that already holds another identity.
+
+Repeat-claim paths against the SAME fingerprint go through `register()`'s
+repeat-claim branch (`identityCommitments[fp] != 0`); cross-wallet
+re-association on the same identity goes through `rotateWallet()`. The
+circuit alone does not detect the multi-wallet case — these gates are
+strictly contract-side. `usedFp` is NOT used; uniqueness lives entirely
+on `nullifierOf` + `identityCommitments[fp]` + `identityWallets[fp]`.
+
+### V5.15 — `usedCtx[fp][ctxKey]` is load-bearing for the no-reset stance
+
+Even without an `identityReset()` primitive (V5.1 ships none), the
+nullifier semantics are preserved across `rotateWallet()`: the
+`identityFingerprint` is wallet-independent (`subjectSerialPacked +
+FINGERPRINT_DOMAIN`), so `usedCtx[fp][ctxKey]` flags persist forever
+regardless of how many times the wallet rotates.
+
+This is the anti-Sybil load-bearing invariant. Future V6 reset paths
+(time-locked veto, social recovery via M-of-N guardians) MUST preserve
+`usedCtx[fp][*]` write-once semantics; otherwise a stolen-QES attacker
+who triggers reset can re-claim against a previously-used context.
+Out of scope for A6.1 — flagged in spec v0.5 §"identityReset() — V5
+decision".
+
+### V5.16 — Witness-builder API: `walletSecret` is required
+
+`buildWitnessV5` in `src/build-witness-v5.ts` REQUIRES `walletSecret:
+Buffer` (32 bytes) as a top-level input field. The rotate path requires
+`rotationMode: 1` PLUS three additional inputs (`rotationOldCommitment`,
+`rotationNewWalletAddress`, `oldWalletSecret`) — all three are required
+when `rotationMode === 1`; under register mode (default 0) they default
+to no-op self-equal values inside the witness builder.
+
+```ts
+const witness = await buildWitnessV5({
+  bindingBytes,
+  leafCertDer, leafSpki, intSpki,
+  signedAttrsDer, signedAttrsMdOffset,
+  walletSecret,                            // V5.1 required, 32 bytes
+  // -- rotate path (all three required when rotationMode === 1) --
+  rotationMode: 0,                         // V5.1 optional, default 0 (register)
+  rotationOldCommitment,                   // V5.1 required iff rotationMode=1
+  rotationNewWalletAddress,                // V5.1 required iff rotationMode=1 (NB: input field is …Address; the public-signal slot 18 name in the circuit is `rotationNewWallet`)
+  oldWalletSecret,                         // V5.1 required iff rotationMode=1
+});
+```
+
+**Caller responsibility**: derive `walletSecret` via HKDF over a
+`personal_sign` signature (EOA path) or Argon2id over a passphrase +
+domain-separated salt (SCW path). Per spec v0.6 §"SCW path", the SCW
+derivation is:
+
+```
+salt = SHA-256("qkb-walletsecret-v1" || chainId || smartWalletAddress)
+walletSecret = Argon2id(passphrase, salt, m=64MiB, t=3, p=1, L=32)
+walletSecret_field = bytesToField(walletSecret) % p_bn254
+```
+
+Web-eng owns the production derivation in `@qkb/sdk`; this package's
+`src/wallet-secret.ts` exports `reduceTo254()` + `packFieldToBytes32()`
+for circuit-level test fixtures only. **Both paths MUST produce
+byte-identical commitments** — cross-package fingerprint drift here
+breaks witness exchange.
+
+### V5.17 — Stub ceremony at `ceremony/v5_1/` supersedes `ceremony/v5-stub/`
+
+Task 4 of A6.1 produces V5.1-specific stub artifacts at
+`ceremony/v5_1/`:
+
+- `Groth16VerifierV5_1Stub.sol` — 19-public-input Solidity verifier.
+- `verification_key.json` — V5.1 vkey (no "-stub" suffix per pump
+  contract; web-eng pins to this filename).
+- `proof-sample.json` + `public-sample.json` + `witness-input-sample.json` —
+  the (witness, public, proof) triple for round-trip integration tests.
+- `qkb-v5_1-stub.zkey` — gitignored (~2.1 GB).
+
+The V5 stub at `ceremony/v5-stub/` is left as an archive (different
+circuit, 14 public signals). Downstream consumers (contracts-eng's
+register/rotateWallet, web-eng SDK fixtures) consume `ceremony/v5_1/`
+exclusively after the Task 4 pump.
+
+Reproduce: `bash ceremony/scripts/stub-v5_1.sh` (~20-30 min wall with
+pot23 cached, ~30-50 GB peak RSS).
