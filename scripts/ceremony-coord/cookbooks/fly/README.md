@@ -78,8 +78,13 @@ openssl rand -hex 32
 ```
 
 Copy the 64-character hex string. You will enter it when the launcher prompts;
-it is stored as a Fly encrypted secret and is never logged by any script in
-this cookbook.
+the launcher passes it to `fly machine run` as a `--env` value (see §6 for the
+security reasoning) and is never echoed or logged by any script in this
+cookbook. The launcher also unsets it from your local shell immediately after
+the machine starts.
+
+The interactive launcher can also auto-generate entropy with `openssl rand
+-hex 32` if you press Enter at the prompt.
 
 Alternatively, you may use any high-quality random source: a hardware RNG,
 a few thousand keystrokes fed through a hash function, a dice roll encoded in
@@ -267,11 +272,11 @@ volume does ($0.15/GB/month). Destroy promptly.
 **`snarkjs zkey verify` fails after contribute**
 
 The entrypoint exits non-zero without uploading. This is a rare snarkjs edge
-case unrelated to your entropy. Re-run the full deploy with fresh entropy:
+case unrelated to your entropy. Tear down and re-run with fresh entropy:
 
-1. Generate new entropy: `openssl rand -hex 32`
-2. Update the secret: `flyctl secrets set CONTRIBUTOR_ENTROPY=<new-hex> -a qkb-ceremony-<your-handle>`
-3. Re-deploy: run command 4 again.
+1. Destroy the failed app: `flyctl apps destroy qkb-ceremony-<your-handle> --yes`
+2. Re-run the launcher (`bash fly-launch.sh`) — it will auto-generate fresh
+   entropy or accept new entropy you paste.
 
 The previous output zkey was not uploaded, so there is no chain gap. Inform
 the coordinator that you are retrying.
@@ -282,11 +287,11 @@ The entrypoint prints the HTTP status and exits non-zero. Two common causes:
 
 - **403 / 410 — URL expired or already used.** Signed URLs are single-use and
   expire 24 hours after minting. Contact the coordinator to obtain a fresh URL,
-  then update the secret and re-deploy.
+  then destroy the app and re-run the launcher with the new URL.
 
-- **5xx — R2 transient error.** Rare. Re-deploy without changing secrets; the
-  upload is idempotent from the perspective of the signed URL as long as it has
-  not been consumed.
+- **5xx — R2 transient error.** Rare. Destroy the app and re-run the launcher
+  with the same URLs; the upload is idempotent from the signed URL's
+  perspective as long as it has not been consumed.
 
 **The machine stops before logs show the attestation hash**
 
@@ -302,9 +307,9 @@ Then retrieve full logs:
 flyctl logs -a qkb-ceremony-<your-handle> --no-tail
 ```
 
-If the error is a download failure (network timeout on a large file), re-deploy.
-The scratch volume retains any already-downloaded files across deploys of the
-same app, so only the missing file is re-fetched.
+If the error is a download failure (network timeout on a large file), destroy
+the app and re-run the launcher. The downloads start from scratch each run
+(the volume is destroyed with the app), but the cost difference is small.
 
 ---
 

@@ -1,14 +1,15 @@
 #!/bin/bash
 # zk-QES V5 Phase 2 ceremony — Fly.io contributor entrypoint.
 #
-# Reads seven env vars (set as Fly secrets before deploy), executes the full
-# contribution round, verifies the output, uploads via the signed PUT URL,
-# prints the attestation hash, then removes all local artefacts.
+# Reads seven env vars (passed via --env to `fly machine run`), executes the
+# full contribution round, verifies the output, uploads via the signed PUT
+# URL, prints the attestation hash, then removes all local artefacts.
 #
 # SECURITY: set +x is unconditional and permanent.  CONTRIBUTOR_ENTROPY must
 # never appear in stdout, stderr, or process listings that persist beyond the
 # machine's lifecycle.  The machine is destroyed by the contributor immediately
-# after this script exits.
+# after this script exits.  See README §6 for the trust-model rationale on
+# why --env is acceptable here vs HSM-backed secrets.
 set +x
 set -euo pipefail
 
@@ -83,7 +84,7 @@ echo ""
 
 echo "[step 1/3] Running snarkjs zkey contribute (30-45 min)..."
 echo "           Contributor name: ${CONTRIBUTOR_NAME}"
-echo "           Entropy source:   Fly encrypted secret (not printed here)"
+echo "           Entropy source:   --env CONTRIBUTOR_ENTROPY (not printed here)"
 echo ""
 
 snarkjs zkey contribute \
