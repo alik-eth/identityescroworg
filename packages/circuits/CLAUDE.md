@@ -172,3 +172,183 @@ commit, or test suites in other packages will silently drift off it.
   URL artifacts.
 - LOTL Merkle root updates → `packages/lotl-flattener`.
 - QES attestation service (Phase 2) → `packages/qie-*`.
+
+---
+
+## V5 architecture (current — `feat/v5arch-circuits`)
+
+V5 collapses the V4 leaf+chain split into a **single ~4.02M-constraint
+circuit** (`circuits/QKBPresentationV5.circom`) that takes the QES
+verification on-chain via EIP-7212 P256Verify. The 14-signal public-input
+layout is FROZEN per V5 spec §0.1 + orchestration §2.1 — adding /
+reordering fields is a cross-worker breaking change.
+
+The V4 invariants above (`.p7s` hygiene, test cache stickiness,
+fixture provenance, etc.) remain in force. V5 adds the items below;
+where V5 numbers replace V4 numbers (memory cap, constraint envelope),
+prefer V5.
+
+### V5.1 — Memory caps for compile / ceremony / heavy tests
+
+V4 used `MemoryMax=28G`. **V5 uses 48G.** Empirical peaks:
+
+| Operation | Peak RSS | Why |
+|---|---|---|
+| `circom --r1cs --wasm` (cold compile) | ~14 GB | 4.02M-constraint R1CS construction in Rust binary |
+| `circom_tester.wasm()` (mocha cold compile) | ~32 GB | circom output + V8 holds the witness-calc graph in heap |
+| `snarkjs groth16 setup` (zkey new) | ~30 GB | 9.1 GB pot23 + R1CS matrices + G1/G2 scratch tables |
+| `snarkjs.groth16.fullProve` (mocha runtime) | ~26 GB | 2.2 GB zkey + V8 BigInt MSM scratch |
+
+V4's 28 GB cap was tight for V4-leaf (which compiled at ~6.5M
+constraints in ~22 GB) and **does not fit V5** — `circom_tester.wasm()`
+OOMs reproducibly at 28 GB. New pattern:
+
+```bash
+systemd-run --user --scope -p MemoryMax=48G -p MemorySwapMax=0 \
+  NODE_OPTIONS='--max-old-space-size=46080' \
+  <cmd>
+```
+
+For `circom` CLI direct (not `circom_tester.wasm()`), the cap can drop
+to 24G — the binary doesn't double-buffer the witness-calc graph.
+
+### V5.2 — `--exit` flag in mocha test scripts
+
+`snarkjs.groth16.fullProve` leaks Worker threads (open issue against
+snarkjs). mocha 4+ waits for the event loop to drain before exiting,
+so the runner hangs indefinitely after tests pass — observed an
+~85 s test session sit at 20 GB RSS for 8+ hours overnight without
+exiting until manually killed.
+
+**Fix: `mocha --exit`** in every script that runs heavy V5 tests.
+Already applied to package.json's `test` and `test:v5` scripts.
+
+### V5.3 — Cold-compile pattern (avoid `circom_tester.wasm()` for V5 main)
+
+For ad-hoc constraint-count probes, run circom directly:
+
+```bash
+circom circuits/QKBPresentationV5.circom --r1cs --wasm \
+  -l circuits -l node_modules -o build/qkb-presentation/
+pnpm exec snarkjs r1cs info build/qkb-presentation/QKBPresentationV5.r1cs
+```
+
+(`pnpm -F @qkb/circuits compile:v5` packages the above.)
+
+The mocha test path uses `circom_tester.wasm()` which is convenient
+but ~2× memory-heavier; it's fine for warm-cache replay (cheap) but
+the FIRST run (cache cold) will OOM under V4's 28 GB cap.
+
+### V5.4 — Constraint envelope
+
+- Empirical (post-§6.10): **4,020,936 constraints** (snarkjs r1cs info).
+- Cap: **4,500,000** per spec amendment 9c866ad. Headroom ~10.7%.
+- Wires: 3,955,558. Public inputs: 14. Private inputs: 9,756.
+- V4 hard cap was 8M; V5's tighter envelope reflects ECDSA-on-chain.
+
+**Don't widen the cap without surfacing.** A bigger envelope means
+slower prove time + larger zkey, both of which threaten the
+mobile-browser acceptance gate (web-eng spec-pass-5).
+
+### V5.5 — `MAX_LEAF_TBS = 1408` (1024 → 1408 empirical bump)
+
+Real Diia leaf TBSCertificate measures **1203 bytes** (admin-ecdsa
+fixture). Spec amendment eeb2f4a bumped from the original 1024
+(estimated assuming "~700-900 bytes") to 1408 to fit. ~17% headroom
+over the 1216 padded-length floor — matches the spec convention
+established by MAX_BCANON (real 849, ~21%) and MAX_SA (real 1388,
+~10%).
+
+### V5.6 — Vendored Keccak: bkomuves/hash-circuits @ `4ef64777` (MIT)
+
+V5 §6.8 needs in-circuit Keccak-256 for the `msgSender` ←
+`keccak256(uncompressed_pk[1:])[12:]` derivation. We vendor
+**bkomuves/hash-circuits** at commit `4ef64777cc9b78ba987fbace27e0be7348670296`
+(Faulhorn Labs / Balazs Komuves, MIT, last commit 2025-01-24).
+
+| Why bkomuves over alternatives | |
+|---|---|
+| vocdoni/keccak256-circom | GPL-3.0, 4-year stale, "WIP experimental" |
+| rarimo/passport-zk-circuits | MIT but pulls in transitive bitify+sha2 deps + bit-level API |
+| **bkomuves/hash-circuits** | **MIT, 4 self-contained files, byte-level `Keccak_256_bytes(input_len)` API** |
+
+PROVENANCE.md in `circuits/primitives/vendor/bkomuves-keccak/`
+documents the pin + sha256 of each vendored file. Updates require a
+new provenance entry, fresh checksums, and a new ceremony.
+
+### V5.7 — pot23 ptau
+
+Phase 2 ceremony uses `powersOfTau28_hez_final_23.ptau` (cap 8.39M
+constraints, ~110% headroom over the 4.5M circuit envelope).
+
+**Empirical file size: 9.1 GB** (Polygon zkEVM mirror at
+`https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_23.ptau`,
+sha256 `047f16d75daaccd6fb3f859acc8cc26ad1fb41ef030da070431e95edb126d19d`).
+Spec amendment 9c866ad's "~1.2 GB" estimate was wrong — that's
+roughly the size of pot21's "lite" form, not pot23's full Hermez
+ceremony output. **Cross-check pending** against canonical Hermez
+sha256 manifest before §11 real ceremony.
+
+Disk usage: 9.1 GB ptau + ~1 GB R1CS + ~2.2 GB zkey ≈ 13 GB scratch
+during ceremony. Goes into `build/qkb-presentation/` (gitignored).
+
+### V5.8 — `build-witness-v5` public API
+
+Witness construction lives in `src/build-witness-v5.ts` and exports
+the stable surface via `src/index.ts`:
+
+```ts
+import {
+  buildWitnessV5,
+  parseP7s,
+  type BuildWitnessV5Input,
+  type WitnessV5,
+} from '@qkb/circuits';
+
+const cms = parseP7s(p7sBuffer);
+const witness = await buildWitnessV5({
+  bindingBytes,
+  leafCertDer: cms.leafCertDer,
+  leafSpki, intSpki,
+  signedAttrsDer: cms.signedAttrsDer,
+  signedAttrsMdOffset: cms.signedAttrsMdOffset,
+});
+// `witness` is plain JSON ready for snarkjs.wtns.calculate.
+```
+
+CLI: `pnpm -F @qkb/circuits build-witness-v5 ...`. Two modes:
+`--p7s <path>` (real Diia ingestion) OR
+`--signed-attrs/--md-offset/--leaf-cert` (pre-extracted artifacts).
+
+**Subtle contract**: `signedAttrsMdOffset` is the offset of the
+**leading `0x30 0x2f` Attribute SEQUENCE byte** (the start of
+`SignedAttrsParser.circom`'s 17-byte EXPECTED_PREFIX walker), NOT
+the digest content offset. `parseP7s` byte-checks the leadIn
+before returning. Web-eng's vendored copy MUST preserve this
+convention or §6.4 breaks silently.
+
+### V5.9 — prove + verify resource envelope (test/integration/v5-prove-verify)
+
+`groth16.fullProve` on the V5 circuit + 2.2 GB zkey: peak RSS
+~26 GB, wall ~85 s. **Test gracefully `describe.skip`s** when the
+local zkey is missing (typical fresh checkout — `.zkey` is
+gitignored). CI runners with <32 GB available memory will OOM if
+the zkey IS present; ship the test only if a 48 GB cap is enforced.
+
+The committed sample artifacts (`ceremony/v5-stub/proof-sample.json`
++ `public-sample.json`) re-verify against the stub vkey at near-zero
+cost — that's the second test in the suite, runs everywhere.
+
+### V5.10 — Cross-package isomorphism (#25)
+
+`src/build-witness-v5.ts` and helpers MUST work in a browser bundle
+without polyfills. That means:
+
+- **No `node:crypto`** — use `@noble/hashes/sha2#sha256`.
+- **No `ethers/lib/utils.keccak256`** — use `@noble/hashes/sha3#keccak_256`.
+- **No CJS `require`** — `import { buildPoseidon } from 'circomlibjs'`.
+
+The web-eng vendored copy at `arch-web/sdk/src/witness/v5/` runs a
+SHA-256 fingerprint drift-check against this package; any divergence
+that requires a polyfill is a drift-check failure, not a "patch
+on re-sync" target.
