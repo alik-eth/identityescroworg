@@ -75,11 +75,32 @@ contract QKBRegistryV5 is IQKBRegistry {
 
     /// Per-holder nullifier — non-zero iff the holder has registered.
     /// Drives both `isVerified()` (boolean) and `nullifierOf()` (raw value).
+    /// V5.1 invariant 4: write-once on first-claim only — `register()`
+    /// repeat-claim path (same wallet, same identity, fresh ctx) does NOT
+    /// overwrite. This preserves the bytes32 type + non-zero-iff-registered
+    /// semantics that `IdentityEscrowNFT` and `IQKBRegistry.isVerified()`
+    /// consumers rely on.
     mapping(address => bytes32) public override nullifierOf;
 
-    /// Reverse: nullifier → holder. Catches "two wallets, same nullifier"
-    /// (Sybil-by-multi-wallet) — register() reverts on collision.
-    mapping(bytes32 => address) public registrantOf;
+    /* ---------- V5.1 wallet-bound identity escrow (per orchestration §1.4) --- */
+
+    /// fingerprint → identity commitment. Written once per identity on the
+    /// first-claim register; subsequent claims must match. The fingerprint is
+    /// `Poseidon₂(subjectSerialPacked, FINGERPRINT_DOMAIN)` (issuer-blind
+    /// person identifier) and the commitment is
+    /// `Poseidon₂(subjectSerialPacked, walletSecret)` (wallet-bound escrow).
+    mapping(bytes32 => bytes32) public identityCommitments;
+
+    /// fingerprint → bound wallet. The wallet that holds the identity is
+    /// the only one allowed to register against new ctxs (repeat-claim) or
+    /// initiate a `rotateWallet()`. Updated atomically by `rotateWallet()`.
+    mapping(bytes32 => address) public identityWallets;
+
+    /// fingerprint → ctxKey → used. Per-(identity, ctx) anti-Sybil gate.
+    /// Monotonic — once true, never cleared. Carries forward across
+    /// `rotateWallet()` (V5.1 invariant 3); any future V6 reset path MUST
+    /// preserve these flags.
+    mapping(bytes32 => mapping(bytes32 => bool)) public usedCtx;
 
     /* ---------- events ---------- */
 
@@ -190,7 +211,10 @@ contract QKBRegistryV5 is IQKBRegistry {
     error FutureBinding();   // Gate 5:  sig.timestamp > block.timestamp (clock-skew defensive).
     error BadSender();       // Gate 5:  sig.msgSender ≠ uint160(msg.sender).
     error AlreadyRegistered();// Gate 5: this wallet already has a nullifier on file.
-    error NullifierUsed();   // Gate 5:  some other wallet already registered this nullifier.
+    // V5.1: NullifierUsed dropped — anti-Sybil migrated to usedCtx[fp][ctxKey].
+    // The reverse `registrantOf[nullifier] → wallet` mapping was redundant
+    // once the nullifier became per-(walletSecret, ctxHash) and the per-
+    // (identity, ctx) uniqueness moved into the new usedCtx gate.
 
     /// @notice 5-gate registration. Gates land incrementally:
     ///   Gate 1 (this commit, §6.2): Groth16 verify call.
@@ -337,18 +361,19 @@ contract QKBRegistryV5 is IQKBRegistry {
         // Replay (per-holder): one binding per wallet. Re-registration
         // requires a fresh proof anyway, but this guards against the
         // "submit the same proof twice" scenario explicitly.
+        //
+        // V5.1 NOTE: Task 2 splits this into first-claim vs. repeat-claim
+        // branches keyed on `identityCommitments[fingerprint] == 0`. For now
+        // (Task 1), the V5 single-branch behavior is preserved so existing
+        // tests still pass.
         if (nullifierOf[msg.sender] != bytes32(0)) revert AlreadyRegistered();
 
-        // Replay (per-nullifier): one wallet per nullifier (one-person-per
-        // -ctx Sybil resistance per V4 §13.4). If the same nullifier was
-        // ever registered from a different wallet, this binding is
-        // rejected as a duplicate identity claim.
         bytes32 nullifierBytes = bytes32(sig.nullifier);
-        if (registrantOf[nullifierBytes] != address(0)) revert NullifierUsed();
 
         // Write-out: persist the binding and emit the event.
+        // V5.1: registrantOf write removed — anti-Sybil moves to usedCtx
+        // in Task 2's register() rewrite.
         nullifierOf[msg.sender] = nullifierBytes;
-        registrantOf[nullifierBytes] = msg.sender;
         emit Registered(msg.sender, nullifierBytes, sig.timestamp);
     }
 }

@@ -734,15 +734,18 @@ gates run first, so a tampered signal hits Gate 2a before Gate 3).
 | 2b| 2× P-256      | EIP-7212 verifies leaf sig over signedAttrs, intermediate sig over leafTbsHash | `BadLeafSig`, `BadIntSig` |
 | 3 | Trust Merkle  | `bytes32(intSpkiCommit)` ∈ trustedListRoot (depth 16)     | `BadTrustList`                      |
 | 4 | Policy Merkle | `bytes32(policyLeafHash)` ∈ policyRoot (depth 16)         | `BadPolicy`                         |
-| 5 | Timing/sender/replay | `block.timestamp - sig.timestamp ≤ MAX_BINDING_AGE` (1h), `sig.msgSender == uint160(msg.sender)`, no prior nullifier from this wallet, no prior wallet for this nullifier | `FutureBinding`, `StaleBinding`, `BadSender`, `AlreadyRegistered`, `NullifierUsed` |
+| 5 | Timing/sender/replay | `block.timestamp - sig.timestamp ≤ MAX_BINDING_AGE` (1h), `sig.msgSender == uint160(msg.sender)`, no prior nullifier from this wallet | `FutureBinding`, `StaleBinding`, `BadSender`, `AlreadyRegistered` |
 
 After Gate 5 passes, the registry writes:
-- `nullifierOf[msg.sender] = bytes32(sig.nullifier)`
-- `registrantOf[bytes32(sig.nullifier)] = msg.sender`
+- `nullifierOf[msg.sender] = bytes32(sig.nullifier)` (V5.1: write-once on first-claim only)
 - emits `Registered(holder, nullifier, timestamp)`.
 
-The bidirectional nullifier mapping enforces the V4 §13.4 amendment
-(one-person-per-ctx Sybil resistance).
+V5.1 amendment migrated cross-wallet anti-Sybil from `registrantOf[nullifier]`
+(now dropped) to `usedCtx[fingerprint][ctxKey]` — see the V5.1 plan at
+`docs/superpowers/plans/2026-04-30-wallet-bound-nullifier-contracts.md` and
+the new mappings on QKBRegistryV5: `identityCommitments`, `identityWallets`,
+`usedCtx`. Task 2 of that plan rewrites Gate 5 with first-claim/repeat-claim
+branching; Task 3 adds the `rotateWallet()` entry point.
 
 ### 14.3 File structure
 

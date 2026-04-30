@@ -676,17 +676,11 @@ contract QKBRegistryV5RegisterTest is Test {
         _callRegister(_baselineProof(), sig);
     }
 
-    function test_register_revertsNullifierUsed_whenDifferentWallet() public {
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
-        _callRegister(_baselineProof(), sig); // first wallet registers
-
-        // Same nullifier from a different wallet → NullifierUsed.
-        address other = address(0xB0B2);
-        QKBRegistryV5.PublicSignals memory sig2 = _baselineSignals(other);
-        sig2.nullifier = sig.nullifier;
-        vm.expectRevert(QKBRegistryV5.NullifierUsed.selector);
-        _callRegisterAs(other, _baselineProof(), sig2);
-    }
+    // V5.1: NullifierUsed gate dropped — same-nullifier-different-wallet
+    // collision is no longer possible because the V5.1 nullifier is
+    // Poseidon₂(walletSecret, ctxHash) and walletSecret is wallet-bound.
+    // Cross-wallet anti-Sybil is now enforced by usedCtx[fp][ctxKey],
+    // exercised in QKBRegistryV5_1.t.sol (Task 2).
 
     /* ===== Gate 5 — success path: state writes + event ===== */
 
@@ -695,7 +689,6 @@ contract QKBRegistryV5RegisterTest is Test {
 
         // Pre-conditions: zero state.
         assertEq(registry.nullifierOf(holder), bytes32(0));
-        assertEq(registry.registrantOf(bytes32(sig.nullifier)), address(0));
         assertFalse(registry.isVerified(holder));
 
         // Expect Registered(holder, nullifier, timestamp).
@@ -706,7 +699,6 @@ contract QKBRegistryV5RegisterTest is Test {
 
         // Post-conditions.
         assertEq(registry.nullifierOf(holder), bytes32(sig.nullifier));
-        assertEq(registry.registrantOf(bytes32(sig.nullifier)), holder);
         assertTrue(registry.isVerified(holder));
     }
 

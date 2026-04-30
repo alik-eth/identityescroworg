@@ -72,8 +72,10 @@ contract IdentityEscrowNFTV5CompatibilityTest is Test {
         //   slot 0:  admin (address)
         //   slot 1:  trustedListRoot (bytes32)
         //   slot 2:  policyRoot (bytes32)
-        //   slot 3:  nullifierOf  ← target mapping
-        //   slot 4:  registrantOf
+        //   slot 3:  nullifierOf          ← target mapping (write-once on first-claim)
+        //   slot 4:  identityCommitments  (V5.1; was registrantOf in V5)
+        //   slot 5:  identityWallets      (V5.1)
+        //   slot 6:  usedCtx              (V5.1)
         // mapping(address => bytes32) at slot s has key=address giving
         // slot keccak256(abi.encode(key, s)).
         bytes32 nullifierSlot = keccak256(abi.encode(alice, uint256(3)));
