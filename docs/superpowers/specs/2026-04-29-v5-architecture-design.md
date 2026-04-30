@@ -259,16 +259,18 @@ function _packHash(uint256 hi, uint256 lo) internal pure returns (bytes32) {
 | policy merklePath + bits | 520 |
 | **Total calldata** | **~2.2-2.4 KB** |
 
-Estimated gas (Base mainnet):
+Empirical gas (Forge revm, real-tuple snapshot post-§8 stub ceremony, `7ff73f2`):
 
-- Groth16 verify: ~250K
-- 2× p256Verify (EIP-7212): ~7K total
+- Groth16VerifierV5Stub.verifyProof: **~328K**
+- 2× p256Verify (EIP-7212, mocked in test): ~7K total
 - 1× sha256(signedAttrs): ~5K
-- 2× spkiCommit (Poseidon₆ ×2 + Poseidon₂ per call): ~60K total. Reused for trust-list Merkle leaf — no double cost.
-- 2× 16-deep Poseidon Merkle (trust + policy): ~60K
+- 2× spkiCommit (4× Poseidon₆ T7 + 2× Poseidon₂ T3): **~628K** (T7 = 139,729 gas/call, T3 = 34,407 gas/call; per-call cost is ~10-50× higher than the v1 estimate's "~3K-per-Poseidon" assumption)
+- 2× 16-deep Poseidon Merkle (trust + policy, 32× Poseidon₂ T3): **~966K**
 - Storage writes (`nullifierOf` + `registrantOf`): ~44K
-- Misc ops: ~15K
-- **Total: ~440-490K gas** ≈ $0.20-0.45 USD on Base. Higher than v2 estimate because `spkiCommit` is full Poseidon-on-EVM, not a cheap byte-hash. Acceptance budget bumps from 500K to 600K.
+- Misc ops + calldata + sha256 + EIP-7212 framing: ~40K
+- **Total: ~2.0M gas** ≈ $0.10-0.20 USD on Base mainnet (gas at ~0.005 gwei). **Acceptance budget revised 600K → 2.5M** with the empirical measurement; one-time-per-user registry cost; user impact is negligible.
+
+The original "~440-490K" estimate underestimated EVM Poseidon by ~10-50× per call. The implementation choice (full Poseidon-over-EVM via PoseidonT3/T7 bytecode-deployed contracts) is correct for the soundness model — no shortcut exists that preserves the SpkiCommit + Merkle equality semantics without paying the true Poseidon cost. Five resolution paths were evaluated (option 2: inline-assembly Poseidon ~50% reduction high audit cost; option 3: Merkle depth 16→8 saves 480K caps lists at 256; option 4: Merkle in-circuit saves 960K consumes most envelope headroom; option 5: EIP-5988 precompile not yet on Base); founder selected **option 1: accept higher budget + spec amend** on premature-optimization grounds — actual user impact is $0.15/register, registry is one-time per user, and other paths trade meaningful audit/constraint surface for unnoticeable gas savings.
 
 ## Circuit — `QKBPresentationV5.circom`
 
@@ -608,7 +610,7 @@ A1 sub-project is complete when:
   - [ ] iOS in-app WebView (Telegram / Instagram / X) explicitly returns the rerouting UX, never the prove flow.
 - [ ] `QKBRegistryV5.register()` succeeds end-to-end on Base Sepolia for the founder address with a real Diia .p7s, executed from a desktop browser.
 - [ ] `IdentityEscrowNFT.mint()` succeeds for the founder address; `tokenURI(1)` decodes to a civic-monumental certificate SVG.
-- [ ] Total `register()` gas on Base Sepolia ≤ 600K (raised from 500K → 600K because `spkiCommit` is full Poseidon-on-EVM, not byte-Poseidon).
+- [ ] Total `register()` gas on Base Sepolia ≤ 2.5M (revised 600K → 2.5M post-§8 empirical measurement, `7ff73f2`; per-Poseidon cost is ~10-50× higher than v1 spec assumed; founder accepted higher budget on premature-optimization grounds since user impact is ~$0.15/register on Base mainnet).
 - [ ] Ceremony transparency artifacts committed to repo.
 - [ ] Desktop-browser end-to-end (no CLI used) validated for at least one full register + mint.
 - [ ] Soundness regression tests pass:
