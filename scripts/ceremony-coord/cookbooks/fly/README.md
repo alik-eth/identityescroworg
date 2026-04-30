@@ -169,8 +169,9 @@ at `prove.identityescrow.org/ceremony/status.json`.
 flyctl logs -a qkb-ceremony-<your-handle> --follow
 ```
 
-The contribution phase takes 30-45 minutes. When it finishes you will see an
-attestation block in the output:
+The full machine run takes ~45-60 minutes (downloads ~5 min, `snarkjs zkey
+contribute` 30-45 min, verify+upload ~5 min). When the contribute step
+finishes you will see an attestation block in the output:
 
 ```
 ================================================================

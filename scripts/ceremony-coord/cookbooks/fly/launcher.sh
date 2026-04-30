@@ -163,10 +163,15 @@ cat >/dev/tty <<'BANNER'
  zk-QES V5 Phase 2 trusted-setup ceremony
  Fly.io one-command launcher
 
- Prompts you for your round details, then runs:
-   apps create → volumes create → machine run → logs → destroy
+ Five steps:
+   1. Authenticate with Fly
+   2. Create app + scratch volume
+   3. Start ceremony machine
+   4. Stream logs and capture attestation hash
+   5. Destroy app
 
  Time:  ~45-60 min total
+        (downloads ~5 min · contribute 30-45 min · verify+upload ~5 min)
  Cost:  under $0.30 (free-tier credit covers it)
  Needs: flyctl only — no Docker, no Node.js, no repo clone
 ================================================================
@@ -247,6 +252,12 @@ cat >/dev/tty <<CONFIRM
    Entropy:     ${ENTROPY_SOURCE}
    Image:       ${GHCR_IMAGE}
    Image ref:   ${IMAGE_REF_KIND}
+
+ URLs (verify each matches the coordinator's DM):
+   PREV_ROUND_URL: ${PREV_ROUND_URL}
+   R1CS_URL:       ${R1CS_URL}
+   PTAU_URL:       ${PTAU_URL}
+   SIGNED_PUT_URL: ${SIGNED_PUT_URL}
 ================================================================
 CONFIRM
 
@@ -268,7 +279,7 @@ confirm_n "Proceed?" || { tty_out "Aborted."; exit 0; }
 # ── 1. Auth ───────────────────────────────────────────────────────────────────
 
 tty_out ""
-tty_out "[1/4] Checking Fly authentication..."
+tty_out "[1/5] Checking Fly authentication..."
 if ! flyctl auth whoami >/dev/null 2>&1; then
   tty_out "      Not logged in — opening browser..."
   flyctl auth login
@@ -278,7 +289,7 @@ tty_out "      Authenticated."
 # ── 2. Create app + volume ────────────────────────────────────────────────────
 
 tty_out ""
-tty_out "[2/4] Creating app and scratch volume..."
+tty_out "[2/5] Creating app and scratch volume..."
 
 if flyctl apps create "${APP}" --region "${FLY_REGION}" 2>/dev/null; then
   tty_out "      App created."
@@ -309,7 +320,7 @@ fi
 # adversarial they control the compute directly. See README §6.
 
 tty_out ""
-tty_out "[3/4] Starting ceremony machine..."
+tty_out "[3/5] Starting ceremony machine..."
 tty_out "      Image:  ${GHCR_IMAGE}"
 tty_out "      Size:   performance-cpu-4x / 32 GB RAM / 60 GB scratch"
 tty_out ""
@@ -334,11 +345,22 @@ flyctl machine run "${GHCR_IMAGE}" \
 unset CONTRIBUTOR_ENTROPY
 
 # ── 4. Tail logs + capture SHA-256 ───────────────────────────────────────────
+#
+# Two-pass capture:
+#   pass 1: `flyctl logs --follow` streams in real time so the contributor
+#           sees progress. tee'd to disk for awk.
+#   pass 2: after the stream ends (cleanly OR from a network blip), we
+#           re-fetch the full archived log via `--no-tail` and combine it
+#           with the streamed log, then awk both. This makes the attestation
+#           hash robust to any --follow disconnect.
+
+tty_out ""
+tty_out "[4/5] Streaming machine logs (downloads ~5 min · contribute 30-45 min)..."
 
 cat >/dev/tty <<'LOGINFO'
 
 ================================================================
- Machine running (30-45 min).
+ Machine running.
 
  Logs stream below. The machine exits when done and the stream
  ends automatically. Ctrl-C at any time — the interrupt handler
@@ -347,25 +369,62 @@ cat >/dev/tty <<'LOGINFO'
 
 LOGINFO
 
-SHA_LOG="$(mktemp)"
+# Stream pass — use a temp file in $HOME so it survives /tmp cleanup races.
+SHA_LOG="$(mktemp -p "${HOME}" qkb-ceremony-stream.XXXXXX)"
 flyctl logs --app "${APP}" --follow 2>&1 | tee "${SHA_LOG}" || true
 
-CONTRIBUTION_HASH="$(
+# Archive pass — always run, even if stream looked clean. flyctl logs
+# without --follow returns the full machine-side history; safer than
+# trusting --follow held the connection for 45 min.
+ARCHIVE_LOG="$(mktemp -p "${HOME}" qkb-ceremony-archive.XXXXXX)"
+tty_out ""
+tty_out "      Fetching full archived log (post-stream double-check)..."
+flyctl logs --app "${APP}" --no-tail >"${ARCHIVE_LOG}" 2>/dev/null || true
+
+# Helper: scan one file for the attestation SHA (line after "SAVE THIS").
+# Prints the hash on success, empty on miss.
+extract_sha() {
   awk '
     /SAVE THIS/ { found=1; next }
     found && match($0, /[0-9a-f]{64}/) {
       print substr($0, RSTART, RLENGTH)
       exit
     }
-  ' "${SHA_LOG}" || true
-)"
-rm -f "${SHA_LOG}"
+  ' "$1" 2>/dev/null || true
+}
+
+# Prefer the archive (full machine-side history), fall back to the stream
+# if archive came back empty (e.g., flyctl logs --no-tail not yet available).
+CONTRIBUTION_HASH=""
+if [ -s "${ARCHIVE_LOG}" ]; then
+  CONTRIBUTION_HASH="$(extract_sha "${ARCHIVE_LOG}")"
+fi
+if [ -z "${CONTRIBUTION_HASH}" ] && [ -s "${SHA_LOG}" ]; then
+  CONTRIBUTION_HASH="$(extract_sha "${SHA_LOG}")"
+fi
+rm -f "${SHA_LOG}" "${ARCHIVE_LOG}"
 
 # ── final summary + destroy ───────────────────────────────────────────────────
 
 tty_out ""
 
 if [ -n "$CONTRIBUTION_HASH" ]; then
+  # Persist a copy to the contributor's CWD so it survives terminal close,
+  # scrollback overflow, etc. The hash is public-by-design (it's the public
+  # commitment of the contribution); no secret material is written.
+  SUMMARY_FILE="./qkb-ceremony-round-${ROUND}.txt"
+  {
+    printf '# zk-QES V5 Phase 2 ceremony — round %s contribution record\n' "${ROUND}"
+    printf '# Generated: %s\n\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf 'Round:           %s\n' "${ROUND}"
+    printf 'Contributor:     %s\n' "${CONTRIBUTOR_NAME}"
+    printf 'Attestation SHA: %s\n' "${CONTRIBUTION_HASH}"
+    printf 'Image ran:       %s\n' "${GHCR_IMAGE}"
+    printf 'Image ref kind:  %s\n' "${IMAGE_REF_KIND}"
+    printf 'Fly app:         %s\n' "${APP}"
+    printf 'Fly region:      %s\n' "${FLY_REGION}"
+  } >"${SUMMARY_FILE}" 2>/dev/null || SUMMARY_FILE=""
+
   cat >/dev/tty <<SUMMARY
 
 ================================================================
@@ -379,12 +438,20 @@ if [ -n "$CONTRIBUTION_HASH" ]; then
 
  Save this hash and your DM thread with the coordinator.
  That is your complete contribution record.
+SUMMARY
+
+  if [ -n "${SUMMARY_FILE}" ] && [ -f "${SUMMARY_FILE}" ]; then
+    tty_out ""
+    tty_out " A copy was saved to: ${SUMMARY_FILE}"
+  fi
+
+  cat >/dev/tty <<'TAIL'
 
  The coordinator will verify independently and publish your
  entry to the public log at:
  https://prove.identityescrow.org/ceremony/status.json
 ================================================================
-SUMMARY
+TAIL
 else
   cat >/dev/tty <<NOSUMMARY
 
@@ -401,6 +468,7 @@ NOSUMMARY
 fi
 
 tty_out ""
+tty_out "[5/5] Cleanup..."
 if confirm_y "Destroy app ${APP} now? (Removes all artefacts from Fly infra.)"; then
   flyctl apps destroy "${APP}" --yes
   APP=""
