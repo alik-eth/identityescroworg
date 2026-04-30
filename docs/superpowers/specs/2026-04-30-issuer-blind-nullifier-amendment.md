@@ -1,10 +1,19 @@
 # Issuer-Blind Nullifier — V5 Privacy Amendment
 
-> **Status:** Draft. Pending review by team-lead + contracts-eng.
+> **Status:** Draft v0.2 — design-pass approved by team-lead 2026-04-30; pending independent contracts-eng review + user-review gate.
 > **Date:** 2026-04-30.
-> **Amends:** §6.6 of `2026-04-29-v5-architecture-design.md` and supersedes `2026-04-18-person-nullifier-amendment.md` (the 2026-04-23 clarification carries forward).
-> **Sequencing:** Lands BEFORE §11 ceremony kickoff. Post-ceremony adoption costs +2 weeks of contributor coordination.
-> **Owner:** circuits-eng (drafter), contracts-eng (independent contract review).
+> **Amends:** §6.6 of `2026-04-29-v5-architecture-design.md` and **supersedes** `2026-04-18-person-nullifier-amendment.md` by reference (the 2026-04-23 ETSI-namespace clarification carries forward).
+> **Sequencing:** Lands BEFORE §11 ceremony kickoff. Post-ceremony adoption costs +1-2 weeks of contributor coordination.
+> **Owner:** circuits-eng (drafter), contracts-eng (independent contract review, dispatched in parallel).
+>
+> **Revision history:**
+> - v0.1 (2026-04-30 ~12:00 UTC): initial draft.
+> - v0.2 (2026-04-30 ~13:30 UTC): incorporated team-lead's three approval-with-notes:
+>   (1) flipped rotation-circuit recommendation from separate (α) to fold-into-main with `rotation_mode` flag (β), single-ceremony operational simplicity wins;
+>   (2) strengthened SCW passphrase-trap warning + moved into threat model — "lose passphrase, lose identity, even with valid QES";
+>   (3) reaffirmed V5 ships no `identityReset()`; added explicit note re: `IdentityEscrowNFT` non-transferability (lost wallet = lost artifact, no regression); promoted `usedCtx`-persistence-across-resets to a load-bearing invariant V6 must honor.
+>   Added missing **§Recovery scenarios** table (every QES-rotate × wallet-rotate × wallet-loss combination → outcome).
+>   Added sequence diagrams for `register()` and `rotateWallet()`.
 
 ## Motivation — the gap in the current V5 design
 
@@ -49,6 +58,13 @@ The two goals are in tension: deterministic-from-identity gives (2) for free but
 - Cross-eIDAS-country deduplication (different national identifiers for the same human stay distinct, per 2026-04-23 clarification — unchanged).
 - Hiding the wallet-to-identity binding from the issuer (would require Pedersen/Semaphore-style private set membership; ~2 weeks of additional circuit work; deferred to V6).
 - Defending against persistent wallet compromise (game-over by definition).
+- Recovering from SCW-path passphrase loss (see §"Wallet-secret derivation" — passphrase is load-bearing user secret in the SCW path; loss is unrecoverable in V5).
+- Recovering from EOA wallet loss without prior `rotateWallet()` (see §"identityReset() — V5 decision" — no reset entry point in V5).
+
+**Trade-offs the user accepts:**
+
+1. **EOA path** (default): user trusts their EOA wallet vendor's signing implementation to be RFC-6979 deterministic. Wallet loss is identity loss unless `rotateWallet()` was called pre-loss. The IdentityEscrowNFT minted to the wallet is non-transferable (per V4 design, unchanged), so wallet loss is artifact loss too — no regression.
+2. **SCW path**: user accepts a memory burden — the chosen passphrase is the *only* secret that protects the identity-commitment on-chain. **Losing the passphrase is unrecoverable in V5: even possessing a valid QES does not let you recompute `walletSecret`.** This is fundamentally weaker UX than the EOA path and the spec recommends EOA for the V5 alpha.
 
 ## Construction
 
@@ -73,9 +89,9 @@ Where:
 
 ### Public-signal layout (V5 → V5.1)
 
-Today: 14 frozen public signals. The amendment adds **2** new signals (`identityFingerprint`, `identityCommitment`). The existing `nullifier` slot keeps its index but its construction changes.
+Today: 14 frozen public signals. The amendment adds **5** new signals: 2 for the identity escrow construction (`identityFingerprint`, `identityCommitment`) and 3 for the fold-in rotation mode (`rotationMode`, `rotationOldCommitment`, `rotationNewWallet`). The existing `nullifier` slot keeps its index but its construction changes.
 
-V5.1 public-signal layout (16 elements, FROZEN order):
+V5.1 public-signal layout (19 elements, FROZEN order):
 
 | Idx | Name | Construction (V5.1) | Note |
 |---|---|---|---|
@@ -95,10 +111,13 @@ V5.1 public-signal layout (16 elements, FROZEN order):
 | 13 | `intSpkiCommit` | unchanged | |
 | 14 | **`identityFingerprint`** | **NEW**: `Poseidon₂(subjectSerialPacked, FINGERPRINT_DOMAIN)` | for contract-level anti-Sybil + escrow lookup |
 | 15 | **`identityCommitment`** | **NEW**: `Poseidon₂(subjectSerialPacked, walletSecret)` | escrow value ensuring user keeps consistent secret per identity |
+| 16 | **`rotationMode`** | **NEW**: 0 = register, 1 = rotate (boolean) | mode flag for fold-in circuit |
+| 17 | **`rotationOldCommitment`** | **NEW**: under rotate mode, the prior commitment being replaced; under register mode, equals `identityCommitment` (no-op) | |
+| 18 | **`rotationNewWallet`** | **NEW**: under rotate mode, the new wallet address being delegated to; under register mode, equals `msgSender` (no-op) | |
 
-Both new signals are field elements (no hi/lo split — Poseidon outputs are already in BN254).
+All five new signals are field elements (no hi/lo split — Poseidon outputs are already in BN254; `rotationMode` is boolean; `rotationNewWallet` is a packed 160-bit address).
 
-The 14-slot layout is **frozen** in `IQKBRegistryV5.PublicSignals` (commit confirmed 2026-04-29). Promotion to 16 slots is an ABI bump; contracts-eng must coordinate with the registry struct.
+The 14-slot layout is **frozen** in `IQKBRegistryV5.PublicSignals` (commit confirmed 2026-04-29). Promotion to **19 slots** is an ABI bump; contracts-eng must coordinate with the registry struct. Calldata size impact: 19 × 32 = 608 bytes (vs current 14 × 32 = 448 bytes), so register/rotate calldata grows by 160 bytes — well within typical block-gas margins.
 
 ### In-circuit constraints (§6.6 replacement)
 
@@ -190,13 +209,16 @@ Properties:
 - Issuer cannot compute (no passphrase knowledge).
 - Argon2id resists brute-force from publicly-visible commitment.
 
-Compatibility caveats:
+Compatibility caveats — **critical user-facing warnings**:
 
-- **Lost passphrase = lost identity** (no `identityReset()` in V5; see §Identity reset).
-- Some users will pick weak passphrases despite warnings — Argon2id parameters tuned to make brute-force expensive but not impossible.
-- Recommend hardware-key derivation (e.g., signing a fixed message with a YubiKey) as an alternative entropy source for sophisticated users.
+- 🚨 **Lost passphrase = lost identity, permanently, in V5.** No `identityReset()` ships in V5 (see §"identityReset() — V5 decision"). A valid QES does not recover access — the QES proves identity ownership but the *passphrase* protects the commitment escrow. The two are decoupled by design (this is exactly what gives issuer-blindness).
+- 🚨 **Lost passphrase = lost IdentityEscrowNFT.** Per V4 design (unchanged), the IdentityEscrowNFT is non-transferable. Losing the wallet means losing the artifact. SCW passphrase loss is functionally equivalent to wallet loss.
+- Some users will pick weak passphrases despite warnings — Argon2id parameters (m=64MiB, t=3, p=1) tuned to make brute-force expensive but not impossible against publicly-visible commitments. Web SDK enforces a minimum entropy threshold (≥80 bits estimated by zxcvbn) and refuses weaker.
+- Recommend hardware-key derivation (e.g., signing a fixed message with a YubiKey or Ledger) as an alternative entropy source for sophisticated users — the protocol accepts any 32-byte input as `walletSecret`, so the SDK can offer multiple derivation modes.
 
-V5 launch document: **EOA strongly recommended for the alpha.** SCW support is "supported but degraded UX". V6 will add automated encrypted-blob storage tied to the SCW's owner-set with rotation hooks.
+**V5 launch posture: EOA strongly recommended for the alpha.** SCW support exists for protocol-completeness and to avoid hard-blocking Safe / AA users, but is documented as "supported with significant caveats". The web onboarding flow must show the passphrase trap warning prominently and require explicit user acknowledgment before proceeding on the SCW path.
+
+V6 will add automated encrypted-blob storage tied to the SCW's owner-set with rotation hooks — this lifts the memory burden but adds storage-layer dependencies. Out of scope for V5.
 
 ### Cross-wallet portability
 
@@ -272,106 +294,255 @@ function register(
 
 ### `rotateWallet()` flow
 
-Wallet rotation requires a **separate, dedicated ZK proof** (not just a sig on the rotation tx) because:
+Wallet rotation requires a **dedicated ZK proof in `rotation_mode == 1`** (not just a sig on the rotation tx) because:
 
-1. The contract cannot verify off-circuit that `newCommitment` is correctly derived from the *same* `subjectSerial` as `oldCommitment`. A user (or an ephemerally-compromised wallet) could submit a malformed `newCommitment`, bricking the identity.
+1. The contract cannot verify off-circuit that `newCommitment` (= `identityCommitment` under rotation mode) is correctly derived from the *same* `subjectSerial` as `rotationOldCommitment`. A user (or an ephemerally-compromised wallet) could submit a malformed `newCommitment`, bricking the identity.
 2. Proving knowledge of `oldWalletSecret` raises the bar against tx-only compromise: an attacker who tricks the user into signing a rotation tx (UI deception) doesn't automatically have the user's `oldWalletSecret` unless they ALSO obtained a separate `personal_sign` of the HKDF input.
 
-#### Dedicated rotation circuit
+#### Rotation-mode constraints (within the V5.1 main circuit)
 
-```circom
-template QKBRotationV1() {
-    // ===== Public inputs (4) =====
-    signal input identityFingerprint;
-    signal input oldCommitment;
-    signal input newCommitment;
-    signal input newWalletAddr;       // ≤2^160; bound by msg.sender via the contract
+Per the fold-in design (Option β), rotation runs through the **same circuit** with `rotationMode == 1`. Under rotation mode:
 
-    // ===== Private witness =====
-    signal input subjectSerialPacked;
-    signal input oldWalletSecret;
-    signal input newWalletSecret;
+```
+Public:  identityFingerprint, identityCommitment (= newCommitment under this mode),
+         rotationMode (= 1), rotationOldCommitment, rotationNewWallet (= newWallet)
 
-    // ===== Constraints =====
-    // (1) fingerprint matches the identity
-    component fp = Poseidon(2);
-    fp.inputs[0] <== subjectSerialPacked;
-    fp.inputs[1] <== FINGERPRINT_DOMAIN;
-    fp.out === identityFingerprint;
+Private (rotation-relevant): subjectSerialPacked, walletSecret (new), oldWalletSecret
 
-    // (2) old commitment opens to (subjectSerial, oldWalletSecret)
-    component oc = Poseidon(2);
-    oc.inputs[0] <== subjectSerialPacked;
-    oc.inputs[1] <== oldWalletSecret;
-    oc.out === oldCommitment;
+Active constraints (rotationMode == 1):
+  identityFingerprint   == Poseidon₂(subjectSerialPacked, FINGERPRINT_DOMAIN)
+  rotationOldCommitment == Poseidon₂(subjectSerialPacked, oldWalletSecret)
+  identityCommitment    == Poseidon₂(subjectSerialPacked, walletSecret)
+  oldWalletSecret < p_bn254
+  walletSecret    < p_bn254
 
-    // (3) new commitment opens to (SAME subjectSerial, newWalletSecret)
-    component nc = Poseidon(2);
-    nc.inputs[0] <== subjectSerialPacked;
-    nc.inputs[1] <== newWalletSecret;
-    nc.out === newCommitment;
-
-    // (4) range-check both secrets
-    component osBits = Num2Bits(254);
-    osBits.in <== oldWalletSecret;
-    component nsBits = Num2Bits(254);
-    nsBits.in <== newWalletSecret;
-
-    // newWalletAddr is unbound here — purely a public input that gets bound to msg.sender
-    // by the contract; included in the proof so it's tx-replay-bound.
-}
+Disabled constraints (rotationMode == 1 → all register-mode binding/SHA/SPKI/EIP-7212 plumbing
+  is no-op'd via `(1 - rotationMode) * (constraint) === 0` gating;
+  msgSender, timestamp, ctxHash*, binding*, signedAttrs*, leafTbs*, policyLeafHash, leaf/intSpkiCommit,
+  nullifier are unconstrained pass-through.)
 ```
 
-Constraint count: ~3 × Poseidon(2) (~600 each) + 2 × Num2Bits(254) ≈ 2.5K constraints. **Tiny**.
+Constraint cost added by rotation-mode-only branch: ~3 × Poseidon₂ (~600 each) + 2 × Num2Bits(254) + Force-Equal-If-Enabled gates ≈ **2.5K constraints**. Sub-0.1% of envelope.
+
+#### Off-circuit derivation flow
+
+User-side (web SDK) before submitting a rotation tx:
+
+1. Connect old wallet. `personal_sign` the HKDF message → derive `oldWalletSecret`. Sanity-check that `Poseidon₂(subjectSerialPacked, oldWalletSecret) == identityCommitments[fingerprint]` (read from chain).
+2. Connect new wallet. `personal_sign` the HKDF message with new wallet → derive `walletSecret` (the new one).
+3. Compute `newCommitment = Poseidon₂(subjectSerialPacked, walletSecret)` off-circuit.
+4. Generate ZK proof with `rotationMode = 1`, public-signal fields populated as per layout above.
+5. Submit `rotateWallet(proof, fingerprint, oldCommitment, newCommitment, newWallet)` from the OLD wallet (msg.sender enforcement).
 
 #### Rotation circuit ceremony
 
-Two options:
+Two options considered:
 
-**Option α: Separate ceremony.** New circuit, new `pot17`-class ptau (much smaller — fits on a laptop). One-shot setup. Distinct verifying key + zkey.
+**Option α: Separate ceremony.** New circuit, new `pot15`-class ptau (much smaller — fits on a laptop). One-shot setup. Distinct verifying key + zkey + verifier contract.
 
 - Pro: clean separation; rotation circuit doesn't bloat the main register circuit.
 - Pro: independent ceremony can be quick (one-day, single contributor or small group).
-- Con: extra ceremony coordination overhead.
+- Con: extra ceremony coordination overhead — two pot files to manage, two verifier contracts to deploy, two zkeys to host.
+- Con: contributor cognitive load — "you're contributing to two ceremonies".
 
-**Option β: Fold into main circuit with a `mode` flag.** Single circuit handles both register and rotate; `mode == 0` skips identity-escrow gates, `mode == 1` enables only escrow + serial bind.
+**Option β: Fold into main circuit with `rotation_mode` flag.** Single circuit handles both register and rotate; `rotation_mode == 0` enables full register path (all 14 main constraints + 2 new escrow gates), `rotation_mode == 1` enables only the escrow consistency gates (3 Poseidons + Num2Bits + new-wallet pin).
 
-- Pro: one ceremony, one verifier contract.
-- Con: bloats the register circuit slightly (~3K extra constraints under register mode, which only need to be active under rotate mode — circom doesn't have efficient mode-switching).
-- Con: Mixing semantically distinct flows in one circuit complicates audits.
+- Pro: **one ceremony, one verifier contract, one zkey**. Operationally significantly simpler — meaningful win at launch.
+- Pro: contributor coordination unchanged — single pot23, single contributor flow.
+- Con: bloats the register circuit slightly. The rotation-only constraints (~2.5K) are dwarfed by the register-only constraints (~4.0M); under register mode the rotation constraints are ~no-op (rotation public signals fixed to dummy values, e.g. `newCommitment === identityCommitment`). Net main-circuit size: ~+2.5K (0.06% of envelope).
+- Con: mixing semantically distinct flows in one circuit complicates audits — must explicitly call out the mode-flag invariants in the audit memo.
 
-**Recommendation: Option α (separate ceremony).** Cleanest. The rotation circuit is small enough that a 1-day ceremony with 3-5 contributors is sufficient — much less coordinator burden than the main circuit's pot23 ceremony.
+**Recommendation: Option β (fold-into-main with `rotation_mode` flag)** [team-lead 2026-04-30 second-pass approval].
 
-#### Contract `rotateWallet()`
+Justification: 0.06% constraint overhead is trivial against the operational simplicity of a single ceremony. Going α means coordinating a second ceremony during launch — extra ops cycles that don't earn their keep at this scale. The mode-flag design pattern is well-tested (we already use `dobSupported` flags in the QKB/2.0 binding spec for similar branching).
 
-```solidity
-function rotateWallet(
-    Proof calldata rotationProof,
-    bytes32 identityFingerprint,
-    bytes32 oldCommitment,
-    bytes32 newCommitment,
-    address newWallet
-) external {
-    require(identityWallets[identityFingerprint] == msg.sender, "only current wallet can rotate");
-    require(identityCommitments[identityFingerprint] == oldCommitment, "stale oldCommitment");
-    require(newWallet != address(0) && newWallet != msg.sender, "invalid newWallet");
-    require(rotationVerifier.verifyProof(
-        rotationProof,
-        [uint256(identityFingerprint), uint256(oldCommitment),
-         uint256(newCommitment), uint256(uint160(newWallet))]
-    ), "invalid rotation proof");
+Implementation sketch for fold-into-main:
 
-    identityCommitments[identityFingerprint] = newCommitment;
-    identityWallets[identityFingerprint]     = newWallet;
-    emit WalletRotated(identityFingerprint, msg.sender, newWallet);
+```circom
+template QKBPresentationV5_1() {
+    // ... existing 14 main public signals ...
+    signal input identityFingerprint;
+    signal input identityCommitment;
+
+    // NEW: rotation-mode public signals (dummy under register mode)
+    signal input rotationMode;            // 0 = register, 1 = rotate
+    signal input rotationOldCommitment;   // bound to identityCommitment under register mode
+    signal input rotationNewWallet;       // bound to msgSender under register mode
+
+    // Boolean range
+    rotationMode * (rotationMode - 1) === 0;
+
+    // Under rotation_mode == 0, the rotation extras must be no-ops.
+    // (1 - rotationMode) * (rotationOldCommitment - identityCommitment) === 0
+    // (1 - rotationMode) * (rotationNewWallet - msgSender) === 0
+    component regModeCheck1 = ForceEqualIfEnabled();
+    regModeCheck1.enabled <== 1 - rotationMode;
+    regModeCheck1.in[0]   <== rotationOldCommitment;
+    regModeCheck1.in[1]   <== identityCommitment;
+
+    component regModeCheck2 = ForceEqualIfEnabled();
+    regModeCheck2.enabled <== 1 - rotationMode;
+    regModeCheck2.in[0]   <== rotationNewWallet;
+    regModeCheck2.in[1]   <== msgSender;
+
+    // Rotation-mode constraints (active only under rotation_mode == 1):
+    // identityFingerprint = Poseidon(subjectSerialPacked, FP_DOMAIN)
+    // rotationOldCommitment = Poseidon(subjectSerialPacked, oldWalletSecret)
+    // identityCommitment    = Poseidon(subjectSerialPacked, walletSecret)   // == newCommitment in this mode
+    // (subjectSerialPacked & both secrets are private witness)
+
+    // Register-mode-only constraints (active only under rotation_mode == 0):
+    // - all binding/SHA/SPKI/keccak/EIP-7212 plumbing from §6
+    // These can be wired with similar Force-Equal-If-Enabled gates so
+    // unused inputs stay free of soundness obligations under rotation mode.
 }
 ```
 
-The `usedCtx[fingerprint][*]` flags **persist** across rotation — anti-Sybil unaffected.
+The mode-flag approach lets a single proof + single verifier handle both flows. Contract picks the entry point (`register()` vs `rotateWallet()`) based on which call dispatches — both reuse the same underlying verifier contract.
 
-`nullifierOf[msg.sender]` does NOT migrate to the new wallet automatically. The new wallet's `nullifierOf` is fresh; the old wallet's stays as it was (legacy registration record). Per-ctx uniqueness is enforced via `usedCtx`, not via `nullifierOf`, so this is OK.
+**Public-signal layout under fold-in**: 16 main signals + 3 rotation-mode signals = **19 frozen public signals total**. Updated in §"Public-signal layout" below.
 
-If we want to migrate `nullifierOf` too: add `nullifierOf[newWallet] = nullifierOf[msg.sender]; delete nullifierOf[msg.sender];` to the function. Cleaner. Recommended.
+(Spec'ing α as a fallback in case constraint-cost analysis post-`compile:v5` shows the no-op gates don't cleanly fold — escape hatch only; not the planned path.)
+
+#### Contract `rotateWallet()`
+
+Under fold-in, both `register()` and `rotateWallet()` reuse the **same** `Groth16VerifierV5_1` contract (single zkey, single verifier). They differ only in entry-point and post-verify state transitions:
+
+```solidity
+function rotateWallet(
+    Proof calldata proof,
+    PublicSignalsV51 calldata sig    // 19 fields; rotationMode == 1 enforced
+) external {
+    bytes32 fp = bytes32(sig.identityFingerprint);
+    require(sig.rotationMode == 1, "must be rotation mode");
+    require(identityWallets[fp] == msg.sender,                    "only current wallet can rotate");
+    require(identityCommitments[fp] == bytes32(sig.rotationOldCommitment), "stale oldCommitment");
+    address newWallet = address(uint160(sig.rotationNewWallet));
+    require(newWallet != address(0) && newWallet != msg.sender,   "invalid newWallet");
+    require(verifier.verifyProof(proof, sig.toArray()),           "invalid rotation proof");
+
+    bytes32 newCommit = bytes32(sig.identityCommitment);
+    identityCommitments[fp] = newCommit;
+    identityWallets[fp]     = newWallet;
+
+    // Migrate nullifierOf so IdentityEscrowNFT ownership lookups continue to work
+    // for users who rotate. Without this, every rotation orphans the user's NFT.
+    bytes32 nul = nullifierOf[msg.sender];
+    if (nul != bytes32(0)) {
+        nullifierOf[newWallet] = nul;
+        delete nullifierOf[msg.sender];
+        // registrantOf[nul] still points to msg.sender — update it:
+        registrantOf[nul] = newWallet;
+    }
+
+    emit WalletRotated(fp, msg.sender, newWallet);
+}
+```
+
+**Critical invariants enforced here:**
+
+1. The `usedCtx[fingerprint][*]` mapping **MUST persist** across rotation — anti-Sybil load-bearing across all wallet/identity-state transitions, present and future.
+2. `nullifierOf` migrates to keep `IdentityEscrowNFT` lookups consistent. `registrantOf` updated to track the new owner. Without these two lines, the NFT is orphaned (the wallet that "owns" the NFT no longer maps to a nullifier).
+3. The verifier check is the SAME `verifier.verifyProof()` used in `register()` — single audit surface, single ceremony output.
+
+#### Sequence diagrams
+
+**`register()` — first claim:**
+
+```
+User wallet              Browser SDK              QKBRegistryV5.1
+─────────────            ──────────────           ─────────────────
+                          read .p7s, parse cert
+                          extract subjectSerial → packed
+                          personal_sign("qkb-...") → walletSecret (HKDF)
+                          build witness {walletSecret, rotationMode=0, ...}
+                          snarkjs.fullProve()
+                          → proof, publicSignals[19]
+register(proof, sig) ─────────────────────────►  ① verify proof (Groth16)
+                                                  ② EIP-7212 × 2 (leaf, intermediate)
+                                                  ③ trustedListRoot Merkle
+                                                  ④ policyRoot Merkle
+                                                  ⑤ identityCommitments[fp] == 0?
+                                                       └─ YES (first claim)
+                                                       → store commit + wallet
+                                                  ⑥ usedCtx[fp][ctxKey] = false?
+                                                       └─ YES → set true
+                                                  ⑦ nullifierOf[msg.sender] = nullifier
+                                                  ⑧ registrantOf[nullifier] = msg.sender
+                          ◄────────────────────── tx success
+                          mint IdentityEscrowNFT
+```
+
+**`register()` — repeat claim against a NEW ctx:**
+
+```
+... (same flow up to ⑤) ...
+                                                  ⑤ identityCommitments[fp] != 0?
+                                                       └─ YES (repeat)
+                                                       → check storedCommit == sig.identityCommitment
+                                                       → check identityWallets[fp] == msg.sender
+                                                  ⑥ usedCtx[fp][ctxKey_new] = false?
+                                                       └─ YES → set true
+                                                  ⑦ ⑧ ... (as above)
+                          ◄────────────────────── tx success
+```
+
+**`register()` — repeat claim against a USED ctx (rejected):**
+
+```
+... (same flow up to ⑥) ...
+                                                  ⑥ usedCtx[fp][ctxKey_existing] == true!
+                          ◄────────────────────── REVERT "already registered for this ctx"
+```
+
+**`rotateWallet()`:**
+
+```
+Old wallet               Browser SDK              New wallet         QKBRegistryV5.1
+──────────               ──────────────           ──────────         ─────────────────
+                          read identityCommitments[fp] from chain
+   personal_sign ◄─────── derive oldWalletSecret (HKDF)
+                          ─── personal_sign ────►
+                          ◄─── sig ──────────────
+                          derive walletSecret (HKDF, new)
+                          newCommit = Poseidon₂(packedSerial, walletSecret)
+                          build witness {rotationMode=1,
+                                         rotationOldCommitment=storedCommit,
+                                         rotationNewWallet=newAddr, ...}
+                          snarkjs.fullProve()
+                          → proof, publicSignals[19]
+rotateWallet(proof,sig) ──────────────────────────────────────────► ① verify proof
+                                                                    ② msg.sender == identityWallets[fp]
+                                                                    ③ stored == rotationOldCommitment
+                                                                    ④ store new commit + new wallet
+                                                                    ⑤ migrate nullifierOf + registrantOf
+                                                                    ⑥ emit WalletRotated
+                          ◄────────────────────────────────────────── tx success
+```
+
+### Recovery scenarios
+
+Comprehensive matrix of QES-rotation × wallet-state × user-action outcomes. **Critical**: this maps user mental models to protocol behavior, and exposes which paths require user discipline (back up wallet) vs which are protocol-handled.
+
+| # | QES state | Wallet state | User action | V5.1 outcome |
+|---|---|---|---|---|
+| 1 | Valid, current | Same wallet, working | `register(ctxA)` (first time) | ✅ Identity claimed; NFT minted; `usedCtx[fp][ctxA]` set. |
+| 2 | Valid, current | Same wallet, working | `register(ctxA)` again from same wallet | ❌ Reverts "already registered for this ctx". |
+| 3 | Valid, current | Same wallet, working | `register(ctxB)` (new ctx, same identity) | ✅ Same fp/commit, fresh ctx → new nullifier, mint OK. |
+| 4 | Valid, **renewed** (same `subjectSerial`) | Same wallet, working | `register(ctxC)` from new cert | ✅ `subjectSerial` unchanged → same fp → same commit (walletSecret unchanged) → mint OK. The whole point of the design. |
+| 5 | Valid, current | Wallet **rotated** pre-action | `register(ctxC)` from new wallet (no `rotateWallet` called) | ❌ Reverts "wallet mismatch — use rotateWallet()". |
+| 6 | Valid, current | User runs `rotateWallet(W_old → W_new)` while both wallets accessible | Then `register(ctxC)` from W_new | ✅ Both commitment and identityWallets[fp] updated atomically; nullifierOf migrated; new ctx claim succeeds. |
+| 7 | Valid, current | **Wallet lost, no prior rotateWallet** | Cannot register | ❌ Identity locked. No reset in V5. NFT also lost (non-transferable). User must wait for V6 reset path. |
+| 8 | Valid, current | EOA path; wallet vendor changed firmware to non-deterministic ECDSA | `register(any)` | ❌ HKDF input changes → walletSecret changes → commitment mismatch → reverts. Web SDK should detect and warn pre-tx. |
+| 9 | Valid, current | SCW path; user **forgot passphrase** | `register(any)` | ❌ Cannot derive walletSecret → cannot prove commitment opening → reverts. Even with valid QES, no recovery in V5. (See §SCW-path threat-model.) |
+| 10 | **QES expired, not renewed** | Working wallet | `register(any)` | ❌ EIP-7212 leaf-sig verify fails on chain (cert chain check). User must obtain a new QES (issuer issues fresh cert with same `subjectSerial`). |
+| 11 | **QES revoked** by issuer | Working wallet | `register(any)` | ❌ EIP-7212 still verifies (revocation isn't on-chain in V5), BUT the spec recommends issuer-driven revocation be propagated via trustedListRoot updates. Out of scope for this amendment. |
+| 12 | Valid, current | Attacker briefly compromises wallet, signs `rotateWallet` to attacker-controlled addr | Tx submitted | ⚠️ If attacker also obtained the user's `personal_sign` of the HKDF input (separate sig), they can produce a valid `oldWalletSecret` → ZK proof passes → identity stolen. Without that separate sig, ZK proof fails. UX takeaway: never sign multiple `personal_sign` requests for the QKB domain in a session you don't trust. |
+| 13 | Valid, current | Attacker has long-term wallet privkey access | Any | ❌ Game-over by definition (out of scope; persistent compromise breaks any wallet-bound system). |
+| 14 | Valid, current | User has TWO QES (e.g. PNOUA-… + PASUA-… same person, different cert) | `register(ctxA)` with QES1 then `register(ctxA)` with QES2 | ✅ Both succeed. Distinct `subjectSerial` → distinct fingerprints → distinct identities. Per 2026-04-23 clarification this is intentional (cross-eIDAS dedup is out of scope). |
+| 15 | Valid, current | User changes from EOA to SCW | `rotateWallet(EOA → SCW)` | ✅ Possible IF user sets up SCW passphrase pre-rotation. Web SDK guides through new derivation path. Caveat — see #9 for forgotten-passphrase risk. |
+
+The key user-discipline message: **"set up a backup wallet AND rotate to it as a precaution before you actually need to."** This fixes scenario #7 (the only common loss scenario) preemptively. V5 alpha onboarding flow should surface this prominently.
 
 ### `identityReset()` — V5 decision
 
@@ -379,14 +550,23 @@ A reset entry point lets a user with a fresh QES proof override `identityCommitm
 
 #### V5 launch decision: NO reset
 
-V5 ships **without** `identityReset()`. Rationale:
+V5 ships **without** `identityReset()`. [team-lead 2026-04-30 second-pass affirmation.]
+
+Rationale:
 
 1. **QES is hardware-protected.** Diia uses biometric + smart card; theft requires concurrent compromise of physical device + biometric. Real-world attack frequency is low for the launch user base.
-2. **Bad recovery is worse than no recovery.** A naive reset opens DoS; a sophisticated reset (social recovery, time-locked, etc.) is significant additional design and contract work that we don't have time for in V5.
-3. **`rotateWallet()` covers the most common case.** As long as the user has BOTH wallets at the time of rotation, no reset is needed. The "hard" case is total wallet loss + no rotation pre-arranged.
-4. **`usedCtx` flags persist forever.** Even with a future reset added in V6, anti-Sybil is preserved.
+2. **Bad recovery is worse than no recovery.** A naive reset opens DoS via stolen-QES ping-pong; a sophisticated reset (social recovery, time-locked) is significant additional design and contract work that we don't have time for in V5. The leading two-phase-commit-with-cancellation alternative has the wrong threat model — it assumes users monitor on-chain events for their own identity, which they won't.
+3. **`rotateWallet()` covers the most common legitimate case.** As long as the user has BOTH wallets at the time of rotation, no reset is needed. The "hard" case is total wallet loss + no rotation pre-arranged.
+4. **`usedCtx` flags persist forever — load-bearing invariant.** Even with a future reset added in V6, anti-Sybil is preserved. **V6 reset implementations MUST NOT clear `usedCtx[fp][*]`**; this is an explicit contract-level invariant carried forward.
+5. **`IdentityEscrowNFT` non-transferability is consistent.** Per V4 design (carried unchanged into V5), `IdentityEscrowNFT` is non-transferable. Losing the wallet means losing the artifact regardless of the QKB layer's reset capability. So "no reset → losing wallet = losing identity" is *no regression* against the existing V5 model — it's the same trade-off, made explicit.
 
-User-facing copy: *"Treat your wallet like your QES — back it up. V5 does not support identity recovery if you lose your wallet AND haven't rotated to a backup wallet first. V6 will add social recovery."*
+User-facing copy (web onboarding, registration confirmation page):
+
+> *Your QKB identity is bound to this wallet. **Back it up.** If you lose this wallet without first calling `rotateWallet()` to delegate to a backup wallet, your QKB identity is permanently lost — even if you still have your QES. The IdentityEscrowNFT is non-transferable, so losing the wallet is also losing the artifact. V6 (planned for later 2026) will add a social-recovery option for users who want stronger recoverability.*
+
+User-facing copy (rotateWallet UI):
+
+> *Rotation is your **only** recovery path in V5. Set up a backup wallet now and rotate to it as a precaution — you can always rotate back later.*
 
 #### V6 plan (out of scope for this amendment, sketched for completeness)
 
@@ -399,22 +579,19 @@ Both can coexist (user picks at registration). Either way, `usedCtx[fp][*]` pers
 
 ## Constraint cost & ceremony sequencing
 
-### Main circuit delta (V5 → V5.1)
+### Main circuit delta (V5 → V5.1, fold-in)
 
-| Component | V5 | V5.1 | Δ |
+| Component | V5 | V5.1 (β) | Δ |
 |---|---|---|---|
-| `subjectSerial` (Poseidon₅ pack) | 1 | 1 | 0 (reused) |
+| `subjectSerial` (Poseidon₅ pack) | 1 | 1 | 0 (reused across 3 downstream Poseidons) |
 | `nullifierDerive` (was Poseidon₅ + Poseidon₂) | 2 Poseidons | 1 Poseidon (only `Poseidon₂(walletSecret, ctxHash)`) | -1 Poseidon₅ |
 | `identityFingerprint` Poseidon₂ | 0 | 1 | +1 |
 | `identityCommitment` Poseidon₂ | 0 | 1 | +1 |
 | `walletSecret` Num2Bits(254) | 0 | 1 | +1 |
-| **Total** | | | **~+800 constraints** (sub-1% of 4.0M envelope) |
+| Rotation-mode-only constraints (Force-Equal-If-Enabled gates, Poseidon₂ on oldWalletSecret, Num2Bits on oldWalletSecret) | 0 | 1 mode flag bool + ~3 force-equal gates + 1 Poseidon₂ + 1 Num2Bits | +~2.5K (only "alive" under rotation_mode == 1, but still in the R1CS) |
+| **Total** | | | **~+2.5K to +3K constraints** (≤0.08% of 4.0M envelope) |
 
-Actually slightly NEGATIVE delta because we reuse `subjectPack.out` across three Poseidons that previously each computed it independently. Net: ~+800 vs ~+1.5K naive. Will confirm with `compile:v5` post-implementation.
-
-### Rotation circuit (new, separate)
-
-~2.5K constraints. Independent ceremony (Option α recommended). pot15-class ptau (fits on commodity hardware). 1-day ceremony with 3-5 contributors.
+Single ceremony, single zkey, single verifier. Will confirm with `compile:v5` post-implementation; if cost overshoots envelope (unlikely at this scale), fall back to Option α (separate rotation ceremony).
 
 ### Ceremony sequencing — critical path
 
@@ -426,6 +603,8 @@ Actually slightly NEGATIVE delta because we reuse `subjectPack.out` across three
 - Web-eng + contracts-eng broadcast.
 
 Pre-ceremony adoption cost: zero. We have ~1-2 weeks (founder recruitment + R2 bucket prep) to land the spec, code, tests, and re-design fixtures BEFORE §11 fires.
+
+Phase B ceremony itself is unaffected by this amendment — pot23 ptau is a property of the construction (BN254 + Groth16), not of the specific circuit. The same pot file accommodates the V5.1 circuit at +0.08% size; no re-pot needed.
 
 ## Privacy analysis
 
@@ -523,25 +702,26 @@ V4 (Phase-1 mainnet, `0x7F36aF783538Ae8f981053F2b0E45421a1BF4815`) is unaffected
 
 ## Open questions for review
 
-These items I'd like contracts-eng + team-lead to weigh in on before I start implementation:
+### Resolved (team-lead 2026-04-30 second-pass review)
 
-### Q1: Rotation circuit ceremony — α (separate) vs β (folded)?
+- **Q1 — Rotation circuit ceremony α vs β?** → **β (fold-into-main)**. 0.08% constraint overhead is trivial against the operational simplicity of a single ceremony. Implementation per §"Rotation circuit ceremony" above.
+- **Q3 — V5 identityReset()?** → **None ship in V5**. `usedCtx` persistence promoted to load-bearing invariant V6 reset implementations must honor. Two-phase-commit-with-cancellation rejected as having wrong threat model (assumes user monitors chain). V6 reset path TBD; social-recovery is the most likely candidate but not blocking.
 
-Recommendation: α (separate ceremony, 1-day, 3-5 contributors, pot15-class ptau).
+### Open — contracts-eng review needed
 
 ### Q2: SCW path passphrase — required at registration, or deferred to first use?
 
 Sub-question: should we force every user to choose a backup passphrase at first registration so SCW migration is possible later? Or leave it opt-in (only SCW users encounter it)?
 
-Recommendation: opt-in. Don't add UX friction for the 95% EOA majority. Surface a "set up SCW migration backup" prompt only if user later attempts to rotate to an SCW.
+Circuits-eng recommendation: opt-in. Don't add UX friction for the 95% EOA majority. Surface a "set up SCW migration backup" prompt only if user later attempts to rotate to an SCW.
 
-### Q3: V6 reset path — preference between two-phase commit vs social recovery vs both?
-
-Not blocking V5; flagging for early discussion since it affects the contract's storage layout (guardian list adds significant per-identity storage).
+Contracts-eng angle: zero contract impact (passphrase derivation is purely off-chain). Web-eng owns this UX call.
 
 ### Q4: `nullifierOf` migration on `rotateWallet()` — yes or no?
 
-Recommendation: yes. Add `nullifierOf[newWallet] = nullifierOf[oldWallet]; delete nullifierOf[oldWallet];` to `rotateWallet()`. Without it, `IdentityEscrowNFT` ownership lookups break for users who rotate.
+Spec **lands as yes** (see contract code above: `nullifierOf[newWallet] = nullifierOf[oldWallet]; delete nullifierOf[oldWallet]; registrantOf[nul] = newWallet;`). Without it, `IdentityEscrowNFT` ownership lookups break for users who rotate.
+
+Contracts-eng review angle: gas cost of the migration block (~3 SSTOREs); attack surface (does migration introduce any front-run vector? answer: no, msg.sender authorization is checked first). Confirm or push back.
 
 ### Q5: `WalletRotated` event privacy
 
@@ -549,11 +729,15 @@ The event emits `(identityFingerprint, oldWallet, newWallet)`, which lets extern
 
 Recommendation: emit. Indexers + UX need this. The leak is implicit anyway from the state transition.
 
+Contracts-eng review angle: confirm event signature + indexed fields support efficient indexing for IdentityEscrowNFT consumers.
+
 ### Q6: HKDF input domain — should we include cert subject serial in the message?
 
 If `msg = "qkb-personal-secret-v1\n" + chainId + "\n" + walletAddr + "\n" + subjectSerial`, then the same wallet bound to two different identities (e.g. user has both PNOUA-… and PASUA-… certs) gets *different* `walletSecret` per identity. Without it, all of a wallet's identities share one secret.
 
-Recommendation: include. It's free entropy and prevents weird cross-identity correlation. But the user must know their `subjectSerial` at signing time → web SDK extracts from QES first, signs second. Two-step UX, doable.
+Circuits-eng recommendation: include. It's free entropy and prevents weird cross-identity correlation. But the user must know their `subjectSerial` at signing time → web SDK extracts from QES first, signs second. Two-step UX, doable.
+
+Web-eng angle: confirm the two-step flow is acceptable. Web-eng owns this UX call.
 
 ## Test surface
 
@@ -566,19 +750,30 @@ The amendment requires the following test additions (TDD, written by circuits-en
 - `contracts/test/QKBRegistryV5.t.sol` — extend with `register()` happy path → `register()` same-ctx reverts → `rotateWallet()` happy path → `register()` post-rotation → `register()` previously-used-ctx reverts.
 - `contracts/test/integration/IssuerSimulator.t.sol` — NEW. Simulates a malicious issuer trying to compute nullifiers for known users; asserts brute-force fails.
 
-## Cost summary (revised post-spec)
+## Cost summary (revised post-fold-in)
 
-| Workstream | Effort | Deliverable |
+End-to-end across all four worktrees (`feat/v5arch-circuits`, `feat/v5arch-contracts`, `feat/v5arch-web`, integration tests cross-cutting):
+
+| Worktree / workstream | Effort | Deliverable |
 |---|---|---|
-| Circuits — main circuit edits | 2 days | §6.6 rewrite, +800 constraints, `compile:v5` envelope re-confirm |
-| Circuits — rotation circuit | 1 day | New circom file, unit tests, off-circuit Poseidon helpers |
-| Circuits — separate rotation ceremony | 1 day | pot15 ptau, 3-5 contributor day, verifier export |
-| Contracts | 1.5 days | New mappings + `rotateWallet()` + reset gate (intentionally absent), gas snapshot |
-| Web SDK | 2 days | EOA HKDF derivation, SCW Argon2id path, witness-builder threading, rotation UI flow |
-| Spec iteration | 1-2 days | This doc; revisions per review |
-| Integration / E2E | 2 days | Cross-package tests, Playwright happy + rotate paths |
-| **Buffer (issues, audits, fixture rebakes)** | 1-2 days | |
-| **Total** | **11-14 days** | Tracks lead's 8-13 day estimate (slight expansion for rotation ceremony) |
+| **Circuits** — main-circuit fold-in (rotation_mode flag + escrow constructions) | 2 days | §6.6 rewrite, V5.1 templates, +2.5K constraints, `compile:v5` envelope re-confirm, KAT-vector unit tests |
+| **Circuits** — witness builder updates | 1 day | `walletSecret` derivation helpers (EOA + SCW), witness-builder threading, off-circuit Poseidon utility for `subjectSerialPacked` |
+| **Contracts** — registry mappings + rotateWallet | 1.5 days | `identityCommitments`, `identityWallets`, `usedCtx` mappings; `register()` gate updates; new `rotateWallet()` entry point; nullifierOf migration; gas snapshot |
+| **Contracts** — adversarial test suite | 0.5 days | `IssuerSimulator.t.sol` (asserts brute-force fails); rotation happy/sad paths; first-claim race vs replay attacks |
+| **Web** — wallet-secret derivation | 1 day | `deriveWalletSecret(wallet)` (EOA personal_sign + HKDF-SHA-256, SCW Argon2id-from-passphrase), entropy validation, wallet-vendor-determinism detection |
+| **Web** — rotation UI flow | 1 day | New `/rotate` page; two-wallet personal_sign coordination; passphrase prompt for SCW; transaction submission |
+| **Web** — onboarding copy + warnings | 0.5 days | Passphrase trap warning, "back up your wallet" copy, V6-recovery roadmap link |
+| **Spec** — this draft + iteration | 1-2 days | This doc; revisions per contracts-eng + user review |
+| **Integration / E2E** — cross-package | 2 days | Playwright happy-path + rotate paths; KAT-fixture generation; cross-circuit consistency tests |
+| **Buffer** — audit findings, fixture rebakes, edge cases | 1-2 days | |
+| **TOTAL** | **11-13 days** | Tracks lead's 8-13 day end-to-end estimate. |
+
+Workstream parallelism opportunities:
+- Circuits + Web wallet-secret derivation can run in parallel (both depend on the spec but not on each other's outputs initially).
+- Contracts work blocks on circuits' V5.1 verifier export; contracts adversarial tests can run in parallel with web rotation UI once main contracts changes are in.
+- Spec iteration runs concurrently with all of the above (revisions per review feedback).
+
+Critical path: spec lock → main-circuit constraints → verifier export → contracts deploy on testnet → web E2E. ~7 sequential days; rest is parallelizable.
 
 ---
 
