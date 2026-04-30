@@ -79,7 +79,9 @@
       "title": "Prove and register",
       "ceremonyPending": "Awaiting ceremony artifacts. The Phase 2 ceremony hasn't finished yet — this button activates once the prover .zkey is published.",
       "cta": "Generate proof + register",
-      "back": "Back"
+      "back": "Back",
+      "walletNotConnected": "Wallet not connected. Please connect your wallet before generating a proof.",
+      "scwNotYetSupported": "Smart contract wallets are not yet supported for registration. Please use an EOA (MetaMask, Rabby, Frame, etc.)."
     }
   },
   "mintV5": {

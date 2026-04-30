@@ -1,20 +1,25 @@
 /**
- * V5 proof pipeline — orchestrates the in-browser Diia QES → witness →
+ * V5.1 proof pipeline — orchestrates the in-browser Diia QES → witness →
  * Groth16 proof → register() flow on top of the @qkb/sdk primitives.
  *
- * The flow has three deliberately separable stages so the Step 4
+ * The flow has four deliberately separable stages so the Step 4
  * component can render granular progress and so the Playwright e2e
  * can stub each stage:
  *
- *   1. parse  — CAdES bundle (existing parseCades from V4)
- *   2. witness — buildV5Witness (gated on circuits-eng §7; Task 8)
- *   3. prove  — proveV5 driver (Task 6)
+ *   1. parse  — CAdES bundle (parseCades from SDK witness/v5)
+ *   2. witness — buildWitnessV5 (V5.1: requires walletSecret, emits 19 signals)
+ *   3. prove  — proveV5 driver (SnarkjsWorkerProver or MockProver)
  *   4. encode — assemble RegisterArgsV5 calldata
+ *
+ * `walletSecret` (32 bytes, derived in Step 4 via HKDF-SHA256 personal_sign
+ * for EOA or Argon2id for SCW) is threaded through opts into buildWitnessV5.
+ * The mock path accepts an optional walletSecret — defaults to 32 zero bytes
+ * for CI/preview where wallet interaction is absent.
  *
  * Until the real witness builder lands, callers can pass
  * `useMockProver: true` to bypass stages 2-3 entirely and use a canned
- * 14-signal output. This keeps the Step 4 component testable without
- * the real zkey; the Playwright e2e in Task 11 uses this toggle.
+ * 19-signal output. This keeps the Step 4 component testable without
+ * the real zkey; the Playwright e2e uses this toggle.
  */
 import { Buffer } from 'buffer';
 import { fromBER } from 'asn1js';
@@ -62,6 +67,17 @@ export interface V5PipelineOptions {
    *  Step 2 of /ua/registerV5 is responsible for producing these and
    *  threading them through to Step 4 alongside the .p7s. */
   readonly bindingBytes?: Uint8Array;
+  /**
+   * 32-byte wallet secret (reduced mod BN254 scalar field).
+   *
+   * For EOA: HKDF-SHA256 over personal_sign("qkb-wallet-secret-v1", wallet).
+   * For SCW: Argon2id(passphrase, wallet+chainId salt) — ScwPassphraseModal.
+   *
+   * Required for the real path; mock path uses Buffer.alloc(32) when absent.
+   * Step 4 of /ua/registerV5 derives this via deriveWalletSecretEoa() before
+   * calling runV5Pipeline().
+   */
+  readonly walletSecret?: Uint8Array;
   /** Pre-extracted SPKIs. If omitted, the real path falls back to deriving
    *  them from the certs inside the .p7s; pass them explicitly when the
    *  caller has already computed them (e.g. integration tests). */
@@ -161,6 +177,13 @@ async function runRealPath(
           );
         })();
 
+  if (!opts.walletSecret) {
+    throw new Error(
+      'V5 real-prover pipeline requires opts.walletSecret (32-byte wallet secret ' +
+        'derived via HKDF for EOA or Argon2id for SCW). Derive with ' +
+        'deriveWalletSecretEoa() / deriveWalletSecretScw() before calling runV5Pipeline().',
+    );
+  }
   tick('build-witness', 25, 'building witness from binding + CMS');
   const witness = await buildWitnessV5({
     bindingBytes: Buffer.from(opts.bindingBytes),
@@ -169,11 +192,12 @@ async function runRealPath(
     intSpki,
     signedAttrsDer: cms.signedAttrsDer,
     signedAttrsMdOffset: cms.signedAttrsMdOffset,
+    walletSecret: Buffer.from(opts.walletSecret),
   });
 
-  // Run the prover. The proveV5 driver guards on the 14-public-signal
+  // Run the prover. The proveV5 driver guards on the 19-public-signal
   // count and throws on mismatch — keeps the cross-package contract
-  // tight even if circuits-eng adds a 15th signal in a future amendment.
+  // tight even if circuits-eng changes the signal count in a future amendment.
   tick('prove', 50, 'running snarkjs Groth16 prover');
   const artifacts: CircuitArtifactUrls = {
     wasmUrl: V5_PROVER_ARTIFACTS.wasmUrl,
@@ -313,8 +337,9 @@ async function runMockPath(
   await delay(20);
   tick('prove', 40);
 
-  // Canned 14-signal output — values are deterministic but synthetic.
-  // Position-correct per orchestration §0.1, all values = decimal index+1.
+  // Canned 19-signal output — values are deterministic but synthetic.
+  // Position-correct per orchestration §1.1 FROZEN layout (V5.1).
+  // Slots 0-13 unchanged; slots 14-18 are V5.1 wallet-bound additions.
   const cannedSignals: PublicSignalsV5 = {
     msgSender: 1n,
     timestamp: BigInt(Math.floor(Date.now() / 1000)),
@@ -326,6 +351,12 @@ async function runMockPath(
     policyLeafHash: 12n,
     leafSpkiCommit: 13n,
     intSpkiCommit: 14n,
+    // V5.1 additions — synthetic non-zero values (slot 14-18).
+    identityFingerprint: 15n,
+    identityCommitment: 16n,
+    rotationMode: 0n,            // register mode
+    rotationOldCommitment: 16n,  // == identityCommitment (register-mode default)
+    rotationNewWallet: 1n,       // == msgSender placeholder
   };
   const prover: IProver = new MockProver({
     delayMs: 30,
@@ -340,6 +371,7 @@ async function runMockPath(
       publicSignals: [
         '1', String(cannedSignals.timestamp), '3', '4', '5', '6', '7', '8',
         '9', '10', '11', '12', '13', '14',
+        '15', '16', '0', '16', '1',
       ],
     },
   });

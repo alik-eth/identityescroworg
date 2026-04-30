@@ -1,13 +1,21 @@
 import { useState } from 'react';
+import { Buffer } from 'buffer';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from '@tanstack/react-router';
 import {
   useAccount,
   useChainId,
+  usePublicClient,
+  useWalletClient,
   useWriteContract,
   useWaitForTransactionReceipt,
 } from 'wagmi';
-import { deploymentForChainId, qkbRegistryV5Abi } from '@qkb/sdk';
+import {
+  deploymentForChainId,
+  qkbRegistryV5Abi,
+  parseP7s,
+  findSubjectSerial,
+} from '@qkb/sdk';
 import {
   isV5ArtifactsConfigured,
 } from '../../../lib/circuitArtifacts';
@@ -15,6 +23,11 @@ import {
   runV5Pipeline,
   type V5PipelineProgress,
 } from '../../../lib/uaProofPipelineV5';
+import {
+  deriveWalletSecretEoa,
+  isSmartContractWallet,
+  type GetCodeClient,
+} from '../../../lib/walletSecret';
 
 export interface Step4Props {
   p7s: Uint8Array;
@@ -53,6 +66,8 @@ export function Step4ProveAndRegister({ p7s, bindingBytes, onBack }: Step4Props)
   const { address } = useAccount();
   const chainId = useChainId();
   const dep = deploymentForChainId(chainId);
+  const publicClient = usePublicClient();
+  const { data: walletClient } = useWalletClient();
 
   const useMockProver =
     typeof import.meta !== 'undefined' &&
@@ -83,9 +98,50 @@ export function Step4ProveAndRegister({ p7s, bindingBytes, onBack }: Step4Props)
     setPipelineDone(false);
     setSubmitSkippedReason(null);
     try {
+      // ---- V5.1 wallet-secret derivation ----
+      // Derive before entering the pipeline so the walletClient prompt
+      // appears before the multi-minute prove step (better UX).
+      let walletSecret: Uint8Array | undefined;
+      if (!useMockProver) {
+        if (!walletClient) {
+          throw new Error(t('registerV5.step4.walletNotConnected'));
+        }
+        if (!address) {
+          throw new Error(t('registerV5.step4.walletNotConnected'));
+        }
+        // SCW detection — Task 5 adds the Argon2id passphrase modal;
+        // for now surface an informative error so the user knows to
+        // switch to an EOA. Cast to GetCodeClient: viem's PublicClient
+        // is structurally compatible but its exact return type differs
+        // from the minimal interface (Hex vs `0x${string}`).
+        if (publicClient) {
+          const scw = await isSmartContractWallet(
+            publicClient as unknown as GetCodeClient,
+            address,
+          );
+          if (scw) {
+            throw new Error(t('registerV5.step4.scwNotYetSupported'));
+          }
+        }
+        // Quick parse to extract subjectSerial for HKDF signing.
+        // The full parse happens again inside runV5Pipeline; this
+        // pre-parse is fast (~1 ms) and keeps the derivation call
+        // before the prover warm-up.
+        const cms = parseP7s(Buffer.from(p7s));
+        const serial = findSubjectSerial(cms.leafCertDer);
+        const subjectSerialBytes = cms.leafCertDer.subarray(
+          serial.offset,
+          serial.offset + serial.length,
+        );
+        walletSecret = await deriveWalletSecretEoa(walletClient, subjectSerialBytes);
+      }
+
       const { registerArgs } = await runV5Pipeline(p7s, {
         useMockProver,
         bindingBytes,
+        // exactOptionalPropertyTypes: only spread when defined so we
+        // don't pass explicit `undefined` for an optional field.
+        ...(walletSecret !== undefined ? { walletSecret } : {}),
         onProgress: setStage,
       });
       setPipelineDone(true);
