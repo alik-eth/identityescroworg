@@ -268,9 +268,26 @@ export {
   hiLoToBytes32,
 } from './core/bytes32ToHiLo.js';
 
+// V5 witness builder — vendored from arch-circuits f0d5a73 with browser
+// patches (see `./witness/v5/build-witness-v5.ts` header). The lower-level
+// helpers (MAX_BCANON, pkCoordToLimbs etc.) live under `./core` already and
+// are re-exported above; we only surface V5-specific symbols here.
 export {
-  buildV5Witness,
-  type BindingV2Offsets,
-  type BuildV5WitnessInput,
-  type QKBPresentationV5WitnessInput,
+  buildWitnessV5,
+  parseP7s,
+  extractBindingOffsets,
+  findTbsInCert,
+  findSubjectSerial,
+  subjectSerialBytesToLimbs,
+  decomposeTo643Limbs,
+  parseP256Spki,
+  spkiCommit,
+  MAX_CTX_PADDED,
+  MAX_LEAF_TBS,
+  MAX_POLICY_ID,
+  type BuildWitnessV5Input,
+  type CmsExtraction,
+  type V2CoreBindingOffsets,
+  type WitnessV5,
+  type ParsedSpki,
 } from './witness/v5.js';

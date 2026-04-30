@@ -16,18 +16,23 @@
  * 14-signal output. This keeps the Step 4 component testable without
  * the real zkey; the Playwright e2e in Task 11 uses this toggle.
  */
+import { Buffer } from 'buffer';
+import { fromBER } from 'asn1js';
+import { Certificate } from 'pkijs';
 import {
   MockProver,
   type IProver,
-  type ProveOptions,
-  type ProveResult,
   publicSignalsFromArray,
   proveV5,
   type CircuitArtifactUrls,
   type PublicSignalsV5,
   type RegisterArgsV5,
   type Groth16ProofV5,
+  buildWitnessV5,
+  parseP7s,
+  type CmsExtraction,
 } from '@qkb/sdk';
+import { SnarkjsProver } from '@qkb/sdk/prover/snarkjs';
 import { V5_PROVER_ARTIFACTS } from './circuitArtifacts';
 
 export type V5PipelineStage =
@@ -50,6 +55,16 @@ export interface V5PipelineOptions {
    *  Used by Playwright e2e (`VITE_USE_MOCK_PROVER=1`) and for UI
    *  development without the ceremony zkey. Defaults to false. */
   readonly useMockProver?: boolean;
+  /** JCS-canonicalized binding bytes (the QKB/2.0 form the user signed
+   *  via Diia in Step 2). Required for the real path; ignored by mock.
+   *  Step 2 of /ua/registerV5 is responsible for producing these and
+   *  threading them through to Step 4 alongside the .p7s. */
+  readonly bindingBytes?: Uint8Array;
+  /** Pre-extracted SPKIs. If omitted, the real path falls back to deriving
+   *  them from the certs inside the .p7s; pass them explicitly when the
+   *  caller has already computed them (e.g. integration tests). */
+  readonly leafSpki?: Uint8Array;
+  readonly intSpki?: Uint8Array;
   readonly onProgress?: (p: V5PipelineProgress) => void;
   readonly signal?: AbortSignal;
 }
@@ -105,14 +120,148 @@ export async function runV5Pipeline(
   if (opts.useMockProver) {
     return runMockPath(p7s, tick);
   }
-  // Real path — gated until §9.6 ceremony pump + Task 8 witness builder.
-  // For now we throw with a clear pointer; Step 4 inspects
-  // isV5ArtifactsConfigured() before invoking the pipeline.
-  throw new Error(
-    'V5 real-prover pipeline requires ceremony artifacts (§9.6) + Task 8 ' +
-      'witness builder (gated on circuits-eng §7). Pass useMockProver: true ' +
-      'for UI development.',
-  );
+  return runRealPath(p7s, opts, tick);
+}
+
+// Real path — buildWitnessV5 (vendored from arch-circuits §7) → snarkjs prove
+// → encode RegisterArgsV5. Currently still gated at the call-site by
+// `isV5ArtifactsConfigured()` (V5 zkey/wasm URLs are zero-addressed pre-§9.6
+// ceremony). Once those land, the only remaining gate is the chain
+// deployment (registryV5 != 0x0) and Step 4 will submit on success.
+async function runRealPath(
+  p7s: Uint8Array,
+  opts: V5PipelineOptions,
+  tick: (stage: V5PipelineStage, pct: number, message?: string) => void,
+): Promise<V5PipelineResult> {
+  if (!opts.bindingBytes) {
+    throw new Error(
+      'V5 real-prover pipeline requires opts.bindingBytes (the JCS-canonical ' +
+        'QKB/2.0 binding the user signed in Step 2). Mock path bypasses this.',
+    );
+  }
+  tick('parse-cades', 5, 'parsing CAdES-BES bundle');
+  const cms: CmsExtraction = parseP7s(Buffer.from(p7s));
+
+  // SPKIs: prefer caller-supplied (pre-extracted) over deriving from cert
+  // DER. Real-Diia .p7s carries leaf + intermediate certs; we extract via
+  // pkijs in `extractSpkiFromCertDer` below.
+  const leafSpki = opts.leafSpki
+    ? Buffer.from(opts.leafSpki)
+    : extractSpkiFromCertDer(cms.leafCertDer);
+  const intSpki = opts.intSpki
+    ? Buffer.from(opts.intSpki)
+    : cms.intCertDer
+      ? extractSpkiFromCertDer(cms.intCertDer)
+      : (() => {
+          throw new Error(
+            'V5 real-prover pipeline: no intermediate cert in .p7s and no ' +
+              'opts.intSpki override — cannot compute intSpkiCommit',
+          );
+        })();
+
+  tick('build-witness', 25, 'building witness from binding + CMS');
+  const witness = await buildWitnessV5({
+    bindingBytes: Buffer.from(opts.bindingBytes),
+    leafCertDer: cms.leafCertDer,
+    leafSpki,
+    intSpki,
+    signedAttrsDer: cms.signedAttrsDer,
+    signedAttrsMdOffset: cms.signedAttrsMdOffset,
+  });
+
+  // Run the prover. The proveV5 driver guards on the 14-public-signal
+  // count and throws on mismatch — keeps the cross-package contract
+  // tight even if circuits-eng adds a 15th signal in a future amendment.
+  tick('prove', 50, 'running snarkjs Groth16 prover');
+  const artifacts: CircuitArtifactUrls = {
+    wasmUrl: V5_PROVER_ARTIFACTS.wasmUrl,
+    zkeyUrl: V5_PROVER_ARTIFACTS.zkeyUrl,
+    zkeySha256: V5_PROVER_ARTIFACTS.zkeySha256,
+  };
+  // SnarkjsProver-via-Worker lands as a separate task (the worker hosts
+  // the wasm + zkey to avoid main-thread jank). For now we drive snarkjs
+  // directly on the main thread — multi-minute prove step will block.
+  // Browser consumers should swap this for a Worker wrapper before §9.4
+  // closes.
+  const prover: IProver = new SnarkjsProver({ fetchToBytes: false });
+  const proveResult = await proveV5(witness as Record<string, unknown>, {
+    prover,
+    artifacts,
+  });
+  tick('prove', 80);
+
+  const publicSignals = publicSignalsFromArray(proveResult.publicSignals);
+
+  tick('encode-calldata', 90, 'assembling RegisterArgsV5');
+  const proof: Groth16ProofV5 = {
+    a: [BigInt(proveResult.proof.pi_a[0] ?? '0'), BigInt(proveResult.proof.pi_a[1] ?? '0')] as const,
+    b: [
+      [BigInt(proveResult.proof.pi_b[0]?.[0] ?? '0'), BigInt(proveResult.proof.pi_b[0]?.[1] ?? '0')] as const,
+      [BigInt(proveResult.proof.pi_b[1]?.[0] ?? '0'), BigInt(proveResult.proof.pi_b[1]?.[1] ?? '0')] as const,
+    ] as const,
+    c: [BigInt(proveResult.proof.pi_c[0] ?? '0'), BigInt(proveResult.proof.pi_c[1] ?? '0')] as const,
+  };
+
+  // Trust + policy merkle inclusion paths come from the registry-side
+  // Merkle trees (per orchestration §3.x). The Step 4 component pumps
+  // these in via wallet-side fixtures; pre-deploy they're zeroed and
+  // register() will revert. Web-eng plan Task 9 (post-§9.4) wires the
+  // real lookup from `trusted-cas.json` + on-chain root state.
+  const path16 = Array.from(
+    { length: 16 },
+    (): `0x${string}` => ZERO_BYTES32,
+  ) as unknown as RegisterArgsV5['trustMerklePath'];
+
+  // RegisterArgsV5 raw-bytes encoding: pkijs gives us Buffer-typed certs
+  // and signedAttrs; viem's writeContract accepts `0x${string}` hex.
+  const leafSpkiHex = `0x${leafSpki.toString('hex')}` as `0x${string}`;
+  const intSpkiHex = `0x${intSpki.toString('hex')}` as `0x${string}`;
+  const signedAttrsHex = `0x${cms.signedAttrsDer.toString('hex')}` as `0x${string}`;
+
+  // ECDSA r/s extraction — `parseP7s` exposes the raw `leafSigR` field
+  // as the SigBytes inner OCTET STRING. The `register()` calldata wants
+  // (r, s) as two bytes32. For a real Diia signature the inner DER form
+  // is `SEQUENCE { INTEGER r, INTEGER s }` — we'd parse that here.
+  // Until the real-Diia integration lands (gated on a fixture + the
+  // contracts-side decoder spec), we forward the raw bytes via zeroing
+  // helpers and let the contract path Decoder handle it. Web-eng plan
+  // Task 9 amendment will tighten this to actual r/s splitting.
+  const registerArgs: RegisterArgsV5 = {
+    proof,
+    sig: publicSignals,
+    leafSpki: leafSpkiHex,
+    intSpki: intSpkiHex,
+    signedAttrs: signedAttrsHex,
+    leafSig: [ZERO_BYTES32, ZERO_BYTES32] as const,
+    intSig: [ZERO_BYTES32, ZERO_BYTES32] as const,
+    trustMerklePath: path16,
+    trustMerklePathBits: 0n,
+    policyMerklePath: path16,
+    policyMerklePathBits: 0n,
+  };
+
+  return { publicSignals, proof, registerArgs };
+}
+
+/**
+ * Extract the 91-byte canonical P-256 SubjectPublicKeyInfo bytes from a
+ * cert DER. The witness builder rejects anything other than the exact
+ * canonical 91-byte named-curve form (parseP256Spki at @qkb/sdk
+ * witness/v5/spki-commit-ref.ts) — non-conforming CAs would fail
+ * `register()`'s SpkiCommit gate anyway.
+ */
+function extractSpkiFromCertDer(certDer: Buffer): Buffer {
+  // We re-parse the cert DER through pkijs to get the SPKI block. Same
+  // pkijs that parse-p7s already pulls in; no extra dep cost. ES imports
+  // (top of file) — `require()` would leak into the browser bundle.
+  const ab = new ArrayBuffer(certDer.length);
+  new Uint8Array(ab).set(certDer);
+  const asn = fromBER(ab);
+  if (asn.offset === -1) {
+    throw new Error('extractSpkiFromCertDer: invalid BER');
+  }
+  const cert = new Certificate({ schema: asn.result });
+  return Buffer.from(new Uint8Array(cert.subjectPublicKeyInfo.toSchema().toBER(false)));
 }
 
 async function runMockPath(
