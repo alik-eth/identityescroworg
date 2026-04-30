@@ -34,19 +34,26 @@ function makePublicSignals(): PublicSignalsV5 {
     policyLeafHash: 12n,
     leafSpkiCommit: 13n,
     intSpkiCommit: 14n,
+    // V5.1 additions — slots 14-18 (FROZEN, orchestration §1.1).
+    identityFingerprint: 15n,
+    identityCommitment: 16n,
+    rotationMode: 17n,
+    rotationOldCommitment: 18n,
+    rotationNewWallet: 19n,
   };
 }
 
-describe('publicSignalsToArray (orchestration §0.1 layout)', () => {
-  it('preserves the 14-element index order', () => {
+describe('publicSignalsToArray (orchestration §1.1 layout — V5.1 FROZEN)', () => {
+  it('preserves the 19-element index order (slots 0-13 unchanged, 14-18 new)', () => {
     expect(publicSignalsToArray(makePublicSignals())).toEqual([
       1n, 2n, 3n, 4n, 5n, 6n, 7n, 8n, 9n, 10n, 11n, 12n, 13n, 14n,
+      15n, 16n, 17n, 18n, 19n,
     ]);
   });
 
   it('emits exactly PUBLIC_SIGNALS_V5_LENGTH entries', () => {
     expect(publicSignalsToArray(makePublicSignals()).length).toBe(PUBLIC_SIGNALS_V5_LENGTH);
-    expect(PUBLIC_SIGNALS_V5_LENGTH).toBe(14);
+    expect(PUBLIC_SIGNALS_V5_LENGTH).toBe(19);
   });
 
   it('round-trips through publicSignalsFromArray', () => {
@@ -56,13 +63,16 @@ describe('publicSignalsToArray (orchestration §0.1 layout)', () => {
   });
 
   it('publicSignalsFromArray accepts decimal-string arrays (snarkjs shape)', () => {
-    const arr = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14'];
+    const arr = [
+      '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14',
+      '15', '16', '17', '18', '19',
+    ];
     expect(publicSignalsFromArray(arr)).toEqual(makePublicSignals());
   });
 
   it('publicSignalsFromArray rejects wrong-length arrays', () => {
     expect(() => publicSignalsFromArray([1n, 2n, 3n])).toThrow(/public-signals-v5-length/);
-    expect(() => publicSignalsFromArray(new Array(15).fill(0n))).toThrow(/public-signals-v5-length/);
+    expect(() => publicSignalsFromArray(new Array(18).fill(0n))).toThrow(/public-signals-v5-length/);
   });
 });
 

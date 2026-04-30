@@ -1,15 +1,22 @@
-// V5 witness-builder type surface.
+// V5.1 witness-builder type surface.
 //
-// Source-of-truth: cross-read from circuits-eng's `f0d5a73`
+// Source-of-truth: cross-read from circuits-eng's `7d07536`
 // (`/data/Develop/qkb-wt-v5/arch-circuits/packages/circuits/src/types.ts`).
 // We keep a verbatim copy here so the V5 register flow has no runtime
-// dependency on @qkb/circuits (which is Node-flavoured: `node:crypto`,
-// `require('ethers/lib/utils')`). The cross-package "byte-identical
-// witness" contract still applies — every shape here MUST match
-// circuits-eng's source. If circuits-eng amends the schema, drift is
-// caught by the integration test that pins the witness JSON byte-for-byte
-// against `buildV5SmokeWitness` (test/integration/build-witness-v5.test.ts
-// in arch-circuits).
+// dependency on @qkb/circuits (which is Node-flavoured: `node:buffer`,
+// `node:crypto`). The cross-package "byte-identical witness" contract
+// still applies — every shape here MUST match circuits-eng's source.
+// If circuits-eng amends the schema, drift is caught by the integration
+// test that pins the witness JSON byte-for-byte against `buildV5SmokeWitness`
+// (test/integration/build-witness-v5.test.ts in arch-circuits).
+//
+// V5 → V5.1 deltas (spec v0.6, user-approved df203b8):
+//   - BuildWitnessV5Input: +walletSecret (required), +rotationMode,
+//     +rotationOldCommitment, +rotationNewWalletAddress, +oldWalletSecret.
+//   - Witness output: +identityFingerprint, +identityCommitment,
+//     +rotationMode, +rotationOldCommitment, +rotationNewWallet (slots 14-18).
+//   - nullifier construction: was Poseidon₂(serial-secret, ctxHash);
+//     now Poseidon₂(walletSecret, ctxHash).
 //
 // Bumps post-spec-pass-5:
 //   MAX_LEAF_TBS 1024 → 1408 (real Diia leaf TBS measured 1203 B,
@@ -98,11 +105,39 @@ export interface BuildWitnessV5Input {
    * `signedAttrsMdOffset + 17`.
    */
   signedAttrsMdOffset: number;
+  /**
+   * V5.1 wallet-bound nullifier secret. 32 bytes, off-circuit-derived per
+   * orchestration §1.2 (HKDF-SHA256 for EOA, Argon2id for SCW). The witness
+   * builder reduces it to a 254-bit field element via `reduceTo254()` (see
+   * `wallet-secret.ts`) before injection into the circuit.
+   */
+  walletSecret: Buffer;
+  /**
+   * V5.1 rotation-mode flag. Optional; defaults to 0 (register).
+   *   0 — register mode (first-claim or repeat-claim against new ctx)
+   *   1 — rotateWallet mode (delegating identity to a new wallet)
+   *
+   * Under rotation mode, the caller MUST also supply
+   * `rotationOldCommitment`, `rotationNewWalletAddress`, and
+   * `oldWalletSecret`.
+   */
+  rotationMode?: 0 | 1;
+  /** REQUIRED when `rotationMode === 1`. bigint or hex string. */
+  rotationOldCommitment?: bigint | string;
+  /** REQUIRED when `rotationMode === 1`. Ethereum address (≤2^160). */
+  rotationNewWalletAddress?: bigint | string;
+  /**
+   * REQUIRED when `rotationMode === 1`. 32-byte buffer. The OLD wallet's
+   * walletSecret — proves ownership of the prior commitment via the
+   * in-circuit gate. Defaults to `walletSecret` under register mode
+   * (the constraint is gated OFF; the value is unconstrained).
+   */
+  oldWalletSecret?: Buffer;
 }
 
 /**
  * Witness JSON — every field bigint-stringified for snarkjs serialization
- * via `JSON.stringify`. Public inputs in canonical V5 spec §0.1 order;
- * private witness inputs follow.
+ * via `JSON.stringify`. Public inputs in canonical V5.1 spec §1.1 order
+ * (19 public inputs); private witness inputs follow.
  */
 export type WitnessV5 = Record<string, unknown>;

@@ -90,6 +90,8 @@ describe('V5 witness builder — synthetic-CAdES round-trip', () => {
       intSpki,
       signedAttrsDer: parsed.signedAttrsDer,
       signedAttrsMdOffset: parsed.signedAttrsMdOffset,
+      // V5.1: 32 zero bytes — reduced-mod-p to a valid field element.
+      walletSecret: Buffer.alloc(32),
     });
 
     // ---- Assertions mirror arch-circuits' build-witness-v5.test.ts ----
@@ -115,7 +117,7 @@ describe('V5 witness builder — synthetic-CAdES round-trip', () => {
     expect(witness.policyLeafHash).toMatch(/^\d+$/);
     expect(BigInt(witness.policyLeafHash as string)).not.toBe(0n);
 
-    // 4. the 14 public signals are all present.
+    // 4. all 19 public signals are present (V5.1 FROZEN layout §1.1).
     const PUBLIC_KEYS = [
       'msgSender', 'timestamp', 'nullifier',
       'ctxHashHi', 'ctxHashLo',
@@ -123,9 +125,17 @@ describe('V5 witness builder — synthetic-CAdES round-trip', () => {
       'signedAttrsHashHi', 'signedAttrsHashLo',
       'leafTbsHashHi', 'leafTbsHashLo',
       'policyLeafHash', 'leafSpkiCommit', 'intSpkiCommit',
+      // V5.1 additions — slots 14-18.
+      'identityFingerprint', 'identityCommitment',
+      'rotationMode', 'rotationOldCommitment', 'rotationNewWallet',
     ];
     for (const k of PUBLIC_KEYS) {
-      expect(witness[k]).toBeDefined();
+      expect(witness[k as keyof typeof witness]).toBeDefined();
     }
+    // V5.1: identityFingerprint + identityCommitment are non-zero field elements.
+    expect(BigInt(witness.identityFingerprint as string)).not.toBe(0n);
+    expect(BigInt(witness.identityCommitment as string)).not.toBe(0n);
+    // rotationMode defaults to 0 (register mode).
+    expect(witness.rotationMode).toBe(0);
   });
 });

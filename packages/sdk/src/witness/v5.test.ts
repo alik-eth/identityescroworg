@@ -58,6 +58,8 @@ describe('buildWitnessV5', () => {
       intSpki: Buffer.alloc(91),
       signedAttrsDer: Buffer.alloc(0),
       signedAttrsMdOffset: 0,
+      // V5.1: walletSecret is required (32 zero bytes is a valid input).
+      walletSecret: Buffer.alloc(32),
       // Pre-supplied offsets so the builder skips the JCS walk and
       // reaches the size check directly.
       bindingOffsets: {

@@ -1,12 +1,16 @@
-// QKBRegistryV5 ABI — copied verbatim from forge artifact
+// QKBRegistryV5.1 ABI — synced from forge artifact
 //   packages/contracts/out/QKBRegistryV5.sol/QKBRegistryV5.json
-// Keep in sync whenever the contract's external surface changes; the
-// canonical authority is the contract source at
-//   packages/contracts/src/QKBRegistryV5.sol
+//   (contracts-eng commit eb9e552, arch-contracts branch feat/v5arch-contracts)
 //
-// `register()` argument order matches the contract source: (proof, sig, ...).
-// Per orchestration §0.2 (amended): an earlier draft had the args reversed —
-// always treat the contract source / forge artifact as the source of truth.
+// V5 → V5.1 changes:
+//   - `register()` sig tuple extended from 14 to 19 PublicSignals fields.
+//   - `rotateWallet(proof, sig, oldWalletAuthSig)` added.
+//   - `identityCommitments(bytes32)`, `identityWallets(bytes32)`,
+//     `usedCtx(bytes32, bytes32)` view functions added.
+//   - `WalletRotated` event added.
+//   - `registrantOf` dropped (anti-Sybil migrated to usedCtx).
+//   - V5.1 errors: WrongMode, CommitmentMismatch, WalletNotBound,
+//     CtxAlreadyUsed, UnknownIdentity, InvalidNewWallet, InvalidRotationAuth.
 //
 // Two duplicate `PoseidonDeployFailed` entries in the raw forge JSON were
 // folded into one (the duplication came from forge merging the contract's
@@ -112,6 +116,12 @@ export const qkbRegistryV5Abi = [
           { name: 'policyLeafHash', type: 'uint256', internalType: 'uint256' },
           { name: 'leafSpkiCommit', type: 'uint256', internalType: 'uint256' },
           { name: 'intSpkiCommit', type: 'uint256', internalType: 'uint256' },
+          // V5.1 additions — slots 14-18.
+          { name: 'identityFingerprint', type: 'uint256', internalType: 'uint256' },
+          { name: 'identityCommitment', type: 'uint256', internalType: 'uint256' },
+          { name: 'rotationMode', type: 'uint256', internalType: 'uint256' },
+          { name: 'rotationOldCommitment', type: 'uint256', internalType: 'uint256' },
+          { name: 'rotationNewWallet', type: 'uint256', internalType: 'uint256' },
         ],
       },
       { name: 'leafSpki', type: 'bytes', internalType: 'bytes' },
@@ -126,12 +136,76 @@ export const qkbRegistryV5Abi = [
     ],
     outputs: [],
   },
+  // V5.1 storage mappings (registrantOf dropped — replaced by identityCommitments/identityWallets).
   {
     type: 'function',
-    name: 'registrantOf',
+    name: 'identityCommitments',
+    stateMutability: 'view',
+    inputs: [{ name: '', type: 'bytes32', internalType: 'bytes32' }],
+    outputs: [{ name: '', type: 'bytes32', internalType: 'bytes32' }],
+  },
+  {
+    type: 'function',
+    name: 'identityWallets',
     stateMutability: 'view',
     inputs: [{ name: '', type: 'bytes32', internalType: 'bytes32' }],
     outputs: [{ name: '', type: 'address', internalType: 'address' }],
+  },
+  {
+    type: 'function',
+    name: 'usedCtx',
+    stateMutability: 'view',
+    inputs: [
+      { name: '', type: 'bytes32', internalType: 'bytes32' },
+      { name: '', type: 'bytes32', internalType: 'bytes32' },
+    ],
+    outputs: [{ name: '', type: 'bool', internalType: 'bool' }],
+  },
+  // V5.1 rotateWallet().
+  {
+    type: 'function',
+    name: 'rotateWallet',
+    stateMutability: 'nonpayable',
+    inputs: [
+      {
+        name: 'proof',
+        type: 'tuple',
+        internalType: 'struct QKBRegistryV5.Groth16Proof',
+        components: [
+          { name: 'a', type: 'uint256[2]', internalType: 'uint256[2]' },
+          { name: 'b', type: 'uint256[2][2]', internalType: 'uint256[2][2]' },
+          { name: 'c', type: 'uint256[2]', internalType: 'uint256[2]' },
+        ],
+      },
+      {
+        name: 'sig',
+        type: 'tuple',
+        internalType: 'struct QKBRegistryV5.PublicSignals',
+        components: [
+          { name: 'msgSender', type: 'uint256', internalType: 'uint256' },
+          { name: 'timestamp', type: 'uint256', internalType: 'uint256' },
+          { name: 'nullifier', type: 'uint256', internalType: 'uint256' },
+          { name: 'ctxHashHi', type: 'uint256', internalType: 'uint256' },
+          { name: 'ctxHashLo', type: 'uint256', internalType: 'uint256' },
+          { name: 'bindingHashHi', type: 'uint256', internalType: 'uint256' },
+          { name: 'bindingHashLo', type: 'uint256', internalType: 'uint256' },
+          { name: 'signedAttrsHashHi', type: 'uint256', internalType: 'uint256' },
+          { name: 'signedAttrsHashLo', type: 'uint256', internalType: 'uint256' },
+          { name: 'leafTbsHashHi', type: 'uint256', internalType: 'uint256' },
+          { name: 'leafTbsHashLo', type: 'uint256', internalType: 'uint256' },
+          { name: 'policyLeafHash', type: 'uint256', internalType: 'uint256' },
+          { name: 'leafSpkiCommit', type: 'uint256', internalType: 'uint256' },
+          { name: 'intSpkiCommit', type: 'uint256', internalType: 'uint256' },
+          { name: 'identityFingerprint', type: 'uint256', internalType: 'uint256' },
+          { name: 'identityCommitment', type: 'uint256', internalType: 'uint256' },
+          { name: 'rotationMode', type: 'uint256', internalType: 'uint256' },
+          { name: 'rotationOldCommitment', type: 'uint256', internalType: 'uint256' },
+          { name: 'rotationNewWallet', type: 'uint256', internalType: 'uint256' },
+        ],
+      },
+      { name: 'oldWalletAuthSig', type: 'bytes', internalType: 'bytes' },
+    ],
+    outputs: [],
   },
   {
     type: 'function',
@@ -200,6 +274,17 @@ export const qkbRegistryV5Abi = [
       { name: 'admin', type: 'address', indexed: false, internalType: 'address' },
     ],
   },
+  // V5.1 event.
+  {
+    type: 'event',
+    name: 'WalletRotated',
+    anonymous: false,
+    inputs: [
+      { name: 'identityFingerprint', type: 'bytes32', indexed: true, internalType: 'bytes32' },
+      { name: 'oldWallet', type: 'address', indexed: true, internalType: 'address' },
+      { name: 'newWallet', type: 'address', indexed: true, internalType: 'address' },
+    ],
+  },
   { type: 'error', name: 'AlreadyRegistered', inputs: [] },
   { type: 'error', name: 'BadIntSig', inputs: [] },
   { type: 'error', name: 'BadIntSpki', inputs: [] },
@@ -221,4 +306,12 @@ export const qkbRegistryV5Abi = [
   { type: 'error', name: 'SpkiPrefix', inputs: [] },
   { type: 'error', name: 'StaleBinding', inputs: [] },
   { type: 'error', name: 'ZeroAddress', inputs: [] },
+  // V5.1 errors.
+  { type: 'error', name: 'WrongMode', inputs: [] },
+  { type: 'error', name: 'CommitmentMismatch', inputs: [] },
+  { type: 'error', name: 'WalletNotBound', inputs: [] },
+  { type: 'error', name: 'CtxAlreadyUsed', inputs: [] },
+  { type: 'error', name: 'UnknownIdentity', inputs: [] },
+  { type: 'error', name: 'InvalidNewWallet', inputs: [] },
+  { type: 'error', name: 'InvalidRotationAuth', inputs: [] },
 ] as const;

@@ -1,22 +1,24 @@
-// QKBRegistryV5 client-side types + calldata encoder.
+// QKBRegistryV5.1 client-side types + calldata encoder.
 //
-// This module mirrors the on-chain `register()` signature in
-//   packages/contracts/src/QKBRegistryV5.sol  (lines 206-218)
-// and the ABI in `../abi/QKBRegistryV5.ts`. Per the amended plan §0.2 the
-// argument order is (proof, sig, leafSpki, intSpki, signedAttrs, leafSig,
-// intSig, trustMerklePath, trustMerklePathBits, policyMerklePath,
-// policyMerklePathBits). An earlier draft had the struct order reversed —
-// the `publicSignalsToArray` test below pins both the 14-element
-// public-signal order AND the proof-before-sig argument order so any
-// future reshuffle fails loudly at the SDK boundary.
+// V5 → V5.1 bump: PublicSignalsV5 extended from 14 to 19 fields (slots 14-18
+// added per orchestration §1.1 FROZEN layout). Mirrors QKBRegistryV5.sol's
+// `PublicSignals` struct (contracts-eng `eb9e552`).
+//
+// `rotateWallet()` encoder added for the new V5.1 wallet-rotation flow.
+//
+// Argument order for register(): (proof, sig, leafSpki, intSpki, signedAttrs,
+// leafSig, intSig, trustMerklePath, trustMerklePathBits, policyMerklePath,
+// policyMerklePathBits). `publicSignalsToArray` test pins the 19-element
+// public-signal order AND the proof-before-sig arg order so any future
+// reshuffle fails loudly at the SDK boundary.
 import { encodeFunctionData } from 'viem';
 import { qkbRegistryV5Abi } from '../abi/QKBRegistryV5.js';
 import { QkbError } from '../errors/index.js';
 
 // ===========================================================================
-// PublicSignals — 14-element struct. Order is locked by orchestration §2.1
-// and the contract source. The TS SDK transmits decimal-string bigints to
-// match the existing prover/snarkjs convention used by V4.
+// PublicSignals — 19-element struct (V5.1). Order is FROZEN per orchestration
+// §1.1 (commit 7f5c517). Indices [0..13] preserve V5 semantics; [14..18] are
+// V5.1 wallet-bound-amendment additions.
 // ===========================================================================
 
 export interface PublicSignalsV5 {
@@ -34,19 +36,28 @@ export interface PublicSignalsV5 {
   readonly policyLeafHash: bigint;
   readonly leafSpkiCommit: bigint;
   readonly intSpkiCommit: bigint;
+  // V5.1 additions — slots 14-18 (FROZEN, orchestration §1.1).
+  readonly identityFingerprint: bigint;
+  readonly identityCommitment: bigint;
+  readonly rotationMode: bigint;
+  readonly rotationOldCommitment: bigint;
+  readonly rotationNewWallet: bigint;
 }
 
-export const PUBLIC_SIGNALS_V5_LENGTH = 14;
+export const PUBLIC_SIGNALS_V5_LENGTH = 19;
 
 /**
- * Pack PublicSignals into the 14-bigint array consumed by snarkjs verifiers
- * and the on-chain Gate 1 `uint256[14]` Groth16 input. Order MUST match
- * orchestration §0.1 exactly. Verified by registryV5.test.ts.
+ * Pack PublicSignals into the 19-bigint array consumed by snarkjs verifiers
+ * and the on-chain Gate 1 `uint256[19]` Groth16 input. Order MUST match
+ * orchestration §1.1 exactly. Verified by registryV5.test.ts.
  */
 export function publicSignalsToArray(
   ps: PublicSignalsV5,
-): readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint,
-            bigint, bigint, bigint, bigint, bigint, bigint, bigint] {
+): readonly [
+    bigint, bigint, bigint, bigint, bigint, bigint, bigint,
+    bigint, bigint, bigint, bigint, bigint, bigint, bigint,
+    bigint, bigint, bigint, bigint, bigint,
+  ] {
   return [
     ps.msgSender,
     ps.timestamp,
@@ -62,12 +73,17 @@ export function publicSignalsToArray(
     ps.policyLeafHash,
     ps.leafSpkiCommit,
     ps.intSpkiCommit,
+    ps.identityFingerprint,
+    ps.identityCommitment,
+    ps.rotationMode,
+    ps.rotationOldCommitment,
+    ps.rotationNewWallet,
   ] as const;
 }
 
 /**
- * Inverse: 14 decimal strings (snarkjs publicSignals output) → typed struct.
- * Throws when the array isn't exactly 14 long — protects against drift in
+ * Inverse: 19 decimal strings (snarkjs publicSignals output) → typed struct.
+ * Throws when the array isn't exactly 19 long — protects against drift in
  * either the circuit's public-signal count or the call site's slicing.
  */
 export function publicSignalsFromArray(arr: readonly (string | bigint)[]): PublicSignalsV5 {
@@ -95,6 +111,11 @@ export function publicSignalsFromArray(arr: readonly (string | bigint)[]): Publi
     policyLeafHash: b(11),
     leafSpkiCommit: b(12),
     intSpkiCommit: b(13),
+    identityFingerprint: b(14),
+    identityCommitment: b(15),
+    rotationMode: b(16),
+    rotationOldCommitment: b(17),
+    rotationNewWallet: b(18),
   };
 }
 
@@ -266,6 +287,12 @@ export function encodeV5RegisterCalldata(args: RegisterArgsV5): `0x${string}` {
         policyLeafHash: args.sig.policyLeafHash,
         leafSpkiCommit: args.sig.leafSpkiCommit,
         intSpkiCommit: args.sig.intSpkiCommit,
+        // V5.1 additions — slots 14-18.
+        identityFingerprint: args.sig.identityFingerprint,
+        identityCommitment: args.sig.identityCommitment,
+        rotationMode: args.sig.rotationMode,
+        rotationOldCommitment: args.sig.rotationOldCommitment,
+        rotationNewWallet: args.sig.rotationNewWallet,
       },
       args.leafSpki,
       args.intSpki,
@@ -276,6 +303,70 @@ export function encodeV5RegisterCalldata(args: RegisterArgsV5): `0x${string}` {
       args.trustMerklePathBits,
       args.policyMerklePath,
       args.policyMerklePathBits,
+    ],
+  });
+}
+
+// ===========================================================================
+// RotateWalletArgsV5 — the calldata shape the SDK passes to `rotateWallet()`.
+//
+// rotateWallet(proof, sig, oldWalletAuthSig) — V5.1 only.
+//   - proof + sig carry a V5.1 proof with rotationMode === 1.
+//   - oldWalletAuthSig is 65-byte EIP-191 signature from the old wallet over
+//     keccak256(abi.encodePacked("qkb-rotate-auth-v1", chainId, registry, fp, newWallet)).
+//     Note: viem's signMessage auto-applies the EIP-191 prefix; web-eng constructs
+//     the inner hash directly and signs as raw bytes.
+// ===========================================================================
+
+export interface RotateWalletArgsV5 {
+  readonly proof: Groth16ProofV5;
+  readonly sig: PublicSignalsV5;
+  readonly oldWalletAuthSig: `0x${string}`;  // 65-byte EIP-191 ECDSA sig
+}
+
+/**
+ * Encode a `rotateWallet()` call as ABI-encoded calldata.
+ *
+ * The explicit generic `<typeof qkbRegistryV5Abi, 'rotateWallet'>` pins viem's
+ * TFunctionName so it doesn't union `register`'s 11-arg shape with
+ * `rotateWallet`'s 3-arg shape, which would produce a TS2322 assignability
+ * error against the wider union target.
+ */
+export function encodeV5RotateWalletCalldata(args: RotateWalletArgsV5): `0x${string}` {
+  return encodeFunctionData<typeof qkbRegistryV5Abi, 'rotateWallet'>({
+    abi: qkbRegistryV5Abi,
+    functionName: 'rotateWallet',
+    args: [
+      {
+        a: [args.proof.a[0], args.proof.a[1]] as const,
+        b: [
+          [args.proof.b[0][0], args.proof.b[0][1]] as const,
+          [args.proof.b[1][0], args.proof.b[1][1]] as const,
+        ] as const,
+        c: [args.proof.c[0], args.proof.c[1]] as const,
+      },
+      {
+        msgSender: args.sig.msgSender,
+        timestamp: args.sig.timestamp,
+        nullifier: args.sig.nullifier,
+        ctxHashHi: args.sig.ctxHashHi,
+        ctxHashLo: args.sig.ctxHashLo,
+        bindingHashHi: args.sig.bindingHashHi,
+        bindingHashLo: args.sig.bindingHashLo,
+        signedAttrsHashHi: args.sig.signedAttrsHashHi,
+        signedAttrsHashLo: args.sig.signedAttrsHashLo,
+        leafTbsHashHi: args.sig.leafTbsHashHi,
+        leafTbsHashLo: args.sig.leafTbsHashLo,
+        policyLeafHash: args.sig.policyLeafHash,
+        leafSpkiCommit: args.sig.leafSpkiCommit,
+        intSpkiCommit: args.sig.intSpkiCommit,
+        identityFingerprint: args.sig.identityFingerprint,
+        identityCommitment: args.sig.identityCommitment,
+        rotationMode: args.sig.rotationMode,
+        rotationOldCommitment: args.sig.rotationOldCommitment,
+        rotationNewWallet: args.sig.rotationNewWallet,
+      },
+      args.oldWalletAuthSig,
     ],
   });
 }
@@ -315,6 +406,14 @@ export const REGISTRY_V5_ERROR_SELECTORS: Readonly<Record<string, `0x${string}`>
   SpkiPrefix: sel('SpkiPrefix()'),
   StaleBinding: sel('StaleBinding()'),
   ZeroAddress: sel('ZeroAddress()'),
+  // V5.1 errors.
+  WrongMode: sel('WrongMode()'),
+  CommitmentMismatch: sel('CommitmentMismatch()'),
+  WalletNotBound: sel('WalletNotBound()'),
+  CtxAlreadyUsed: sel('CtxAlreadyUsed()'),
+  UnknownIdentity: sel('UnknownIdentity()'),
+  InvalidNewWallet: sel('InvalidNewWallet()'),
+  InvalidRotationAuth: sel('InvalidRotationAuth()'),
 } as const;
 
 /**
@@ -354,5 +453,20 @@ export function classifyV5RegistryRevert(data: string | undefined): QkbError | n
     return new QkbError('binding.field', { reason: 'future-binding-v5' });
   if (s === REGISTRY_V5_ERROR_SELECTORS.BadSender)
     return new QkbError('binding.pkMismatch', { reason: 'msg-sender-mismatch-v5' });
+  // V5.1 errors.
+  if (s === REGISTRY_V5_ERROR_SELECTORS.WrongMode)
+    return new QkbError('witness.fieldTooLong', { reason: 'wrong-rotation-mode-v5' });
+  if (s === REGISTRY_V5_ERROR_SELECTORS.CommitmentMismatch)
+    return new QkbError('registry.nullifierUsed', { reason: 'commitment-mismatch-v5' });
+  if (s === REGISTRY_V5_ERROR_SELECTORS.WalletNotBound)
+    return new QkbError('registry.nullifierUsed', { reason: 'wallet-not-bound-v5' });
+  if (s === REGISTRY_V5_ERROR_SELECTORS.CtxAlreadyUsed)
+    return new QkbError('registry.nullifierUsed', { reason: 'ctx-already-used-v5' });
+  if (s === REGISTRY_V5_ERROR_SELECTORS.UnknownIdentity)
+    return new QkbError('registry.nullifierUsed', { reason: 'unknown-identity-v5' });
+  if (s === REGISTRY_V5_ERROR_SELECTORS.InvalidNewWallet)
+    return new QkbError('registry.nullifierUsed', { reason: 'invalid-new-wallet-v5' });
+  if (s === REGISTRY_V5_ERROR_SELECTORS.InvalidRotationAuth)
+    return new QkbError('registry.nullifierUsed', { reason: 'invalid-rotation-auth-v5' });
   return null;
 }

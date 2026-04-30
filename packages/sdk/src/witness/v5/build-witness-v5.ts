@@ -1,11 +1,17 @@
-// V5 witness builder — production entry point (browser-safe port).
+// V5.1 witness builder — production entry point (browser-safe port).
 //
-// Cross-read from arch-circuits f0d5a73's `src/build-witness-v5.ts`. Two
-// browser patches relative to the source:
-//   1. `node:crypto.createHash('sha256')` → `sha256` from `@noble/hashes/sha2`.
-//      Byte-identical: both follow FIPS 180-4 strictly.
-//   2. `require('ethers/lib/utils').keccak256` → `keccak_256` from
-//      `@noble/hashes/sha3`. Byte-identical: both follow FIPS 202 Keccak-256.
+// Cross-read from arch-circuits `7d07536`'s `src/build-witness-v5.ts`.
+// Browser patches relative to the circuits-eng source:
+//   1. `import { Buffer } from 'node:buffer'` → `_buffer-global` (Vite shim).
+//   2. `@noble/hashes/sha2.js` suffix dropped — bundler resolves without it.
+//   3. `@noble/hashes/sha3.js` suffix dropped — same reason.
+//
+// V5 → V5.1 deltas (spec v0.6, circuits-eng commit 7d07536):
+//   - nullifier: was Poseidon₂(serial-secret, ctxHash); now Poseidon₂(walletSecret, ctxHash).
+//   - new public signals [14-18]: identityFingerprint, identityCommitment,
+//     rotationMode, rotationOldCommitment, rotationNewWallet.
+//   - new private witness inputs: walletSecret, oldWalletSecret.
+//   - BuildWitnessV5Input now requires walletSecret (32 bytes).
 //
 // The cross-package "byte-identical witness" contract still applies — if
 // circuits-eng amends `build-witness-v5.ts`, this copy MUST be re-synced.
@@ -30,6 +36,7 @@ import {
   parseP256Spki,
   spkiCommit,
 } from './spki-commit-ref';
+import { FINGERPRINT_DOMAIN, reduceTo254 } from './wallet-secret';
 import {
   MAX_BCANON,
   MAX_CERT,
@@ -204,11 +211,44 @@ export async function buildWitnessV5(
     return Buffer.from(hex, 'hex');
   })();
   const ctxHashField = await poseidonChunkHashVar(new Uint8Array(ctxBytes));
-  const secret = await poseidon5([
+
+  // -------- §6.6 V5.1 wallet-bound nullifier construction --------
+  //
+  // Replaces V5's `NullifierDerive(subjectSerial-derived-secret, ctxHash)` with:
+  //   subjectPack         = Poseidon₅(subjectSerialLimbs[0..3], subjectSerialLen)
+  //   identityFingerprint = Poseidon₂(subjectPack, FINGERPRINT_DOMAIN)
+  //   identityCommitment  = Poseidon₂(subjectPack, walletSecret)
+  //   nullifier           = Poseidon₂(walletSecret, ctxHashField)
+  //
+  // walletSecret is provided by the caller as 32 bytes (HKDF-SHA256 for EOA,
+  // Argon2id for SCW — see walletSecret.ts). We reduce to a 254-bit field
+  // element to match the in-circuit Num2Bits(254) range check.
+  if (input.walletSecret.length !== 32) {
+    throw new Error(
+      `walletSecret must be 32 bytes (got ${input.walletSecret.length})`,
+    );
+  }
+  const walletSecretField = reduceTo254(input.walletSecret);
+
+  // oldWalletSecret — required for rotationMode === 1 to prove prior-wallet
+  // ownership. Defaults to walletSecret under register mode (constraint OFF).
+  const oldWalletSecretBuf = input.oldWalletSecret ?? input.walletSecret;
+  if (oldWalletSecretBuf.length !== 32) {
+    throw new Error(
+      `oldWalletSecret must be 32 bytes (got ${oldWalletSecretBuf.length})`,
+    );
+  }
+  const oldWalletSecretField = reduceTo254(oldWalletSecretBuf);
+
+  // subjectPack — Poseidon₅(subjectSerialLimbs[0..3], subjectSerialLen)
+  const subjectPack = await poseidon5([
     ...subjectSerialLimbs,
     BigInt(subjectSerial.length),
   ]);
-  const nullifier = await poseidon2(secret, ctxHashField);
+
+  const identityFingerprint = await poseidon2(subjectPack, FINGERPRINT_DOMAIN);
+  const identityCommitment = await poseidon2(subjectPack, walletSecretField);
+  const nullifier = await poseidon2(walletSecretField, ctxHashField);
 
   // -------- §6.7 — Byte-domain SHA over ctx --------
   const ctxDigest = sha256Buf(ctxBytes);
@@ -258,9 +298,47 @@ export async function buildWitnessV5(
     return BigInt('0x' + hex);
   })();
 
+  // -------- V5.1 rotation-mode payload --------
+  // Defaults to register mode (rotationMode === 0). Under register mode the
+  // in-circuit ForceEqualIfEnabled gates pin slot 17 == identityCommitment
+  // and slot 18 == msgSender; we set those values here so the no-op
+  // constraint is trivially satisfied.
+  const rotationMode = input.rotationMode ?? 0;
+  const rotationOldCommitment = ((): bigint => {
+    if (rotationMode === 1) {
+      if (input.rotationOldCommitment === undefined) {
+        throw new Error(
+          'rotationMode=1 (rotateWallet) requires rotationOldCommitment',
+        );
+      }
+      return typeof input.rotationOldCommitment === 'bigint'
+        ? input.rotationOldCommitment
+        : BigInt(input.rotationOldCommitment);
+    }
+    return identityCommitment;
+  })();
+  const rotationNewWallet = ((): bigint => {
+    if (rotationMode === 1) {
+      if (input.rotationNewWalletAddress === undefined) {
+        throw new Error(
+          'rotationMode=1 (rotateWallet) requires rotationNewWalletAddress',
+        );
+      }
+      return typeof input.rotationNewWalletAddress === 'bigint'
+        ? input.rotationNewWalletAddress
+        : BigInt(input.rotationNewWalletAddress);
+    }
+    return msgSender;
+  })();
+  if (rotationMode === 1 && input.oldWalletSecret === undefined) {
+    throw new Error(
+      'rotationMode=1 (rotateWallet) requires oldWalletSecret to prove old-wallet ownership',
+    );
+  }
+
   // -------- Witness assembly --------
   return {
-    // 14 public inputs (canonical V5 spec §0.1 order).
+    // 19 public inputs (canonical V5.1 spec §1.1 order — FROZEN).
     msgSender: msgSender.toString(),
     timestamp: tsValue,
     nullifier: nullifier.toString(),
@@ -275,6 +353,12 @@ export async function buildWitnessV5(
     policyLeafHash: policyLeafHash.toString(),
     leafSpkiCommit: leafSpkiCommit.toString(),
     intSpkiCommit: intSpkiCommit.toString(),
+    // V5.1 additions (slots 14-18).
+    identityFingerprint: identityFingerprint.toString(),
+    identityCommitment: identityCommitment.toString(),
+    rotationMode: rotationMode,
+    rotationOldCommitment: rotationOldCommitment.toString(),
+    rotationNewWallet: rotationNewWallet.toString(),
 
     // Binding parser inputs (§6.2).
     bindingBytes: rightPadZero(input.bindingBytes, MAX_BCANON),
@@ -331,6 +415,12 @@ export async function buildWitnessV5(
     // §6.8 — pkX/pkY limbs (Secp256k1PkMatch repacks parser.pkBytes into these).
     pkX: pkX.map((x) => x.toString()),
     pkY: pkY.map((y) => y.toString()),
+
+    // V5.1 — wallet-bound nullifier secret (private, range-checked in-circuit).
+    walletSecret: walletSecretField.toString(),
+    // V5.1 — old-wallet-secret (private, only meaningfully constrained under
+    // rotationMode === 1; under register mode the in-circuit gate is OFF).
+    oldWalletSecret: oldWalletSecretField.toString(),
   };
 }
 
@@ -339,6 +429,12 @@ export { parseP7s } from './parse-p7s';
 export { extractBindingOffsets } from './binding-offsets';
 export { findTbsInCert, findSubjectSerial } from './leaf-cert-walk';
 export { pkCoordToLimbs, subjectSerialBytesToLimbs } from './limbs';
+export {
+  FINGERPRINT_DOMAIN,
+  BN254_SCALAR_FIELD,
+  reduceTo254,
+  packFieldToBytes32,
+} from './wallet-secret';
 export type {
   BuildWitnessV5Input,
   CmsExtraction,

@@ -256,11 +256,13 @@ export {
   assertRegisterArgsV5Shape,
   classifyV5RegistryRevert,
   encodeV5RegisterCalldata,
+  encodeV5RotateWalletCalldata,
   publicSignalsFromArray,
   publicSignalsToArray,
   type Groth16ProofV5,
   type PublicSignalsV5,
   type RegisterArgsV5,
+  type RotateWalletArgsV5,
 } from './registry/registryV5.js';
 
 export {
