@@ -1,5 +1,7 @@
-// V5 final E2E gate — `groth16.prove + groth16.verify` round-trip against
-// the §8 stub zkey + verification key.
+// V5.1 final E2E gate — `groth16.prove + groth16.verify` round-trip against
+// the V5.1 stub zkey + verification key (Task 4 of A6.1).  V5 stub at
+// ceremony/v5-stub/ is left as an archive; this test consumes V5.1
+// artifacts exclusively.
 
 import { expect } from 'chai';
 import { createHash } from 'node:crypto';
@@ -12,24 +14,34 @@ import { buildSynthCades } from '../helpers/build-synth-cades';
 import { buildWitnessV5, parseP7s } from '../../src/build-witness-v5';
 
 const FIXTURE_DIR = resolve(__dirname, '..', '..', 'fixtures', 'integration', 'admin-ecdsa');
-const STUB_DIR = resolve(__dirname, '..', '..', 'ceremony', 'v5-stub');
-const ZKEY_PATH = resolve(STUB_DIR, 'qkb-v5-stub.zkey');
-const VKEY_PATH = resolve(STUB_DIR, 'verification_key-stub.json');
+const STUB_DIR = resolve(__dirname, '..', '..', 'ceremony', 'v5_1');
+const ZKEY_PATH = resolve(STUB_DIR, 'qkb-v5_1-stub.zkey');
+const VKEY_PATH = resolve(STUB_DIR, 'verification_key.json');
 const WASM_PATH = resolve(
   __dirname,
   '..',
   '..',
   'build',
-  'v5-stub',
+  'v5_1-stub',
   'QKBPresentationV5_js',
   'QKBPresentationV5.wasm',
 );
 
-const haveStubArtifacts =
-  existsSync(ZKEY_PATH) && existsSync(VKEY_PATH) && existsSync(WASM_PATH);
+const PROOF_SAMPLE_PATH = resolve(STUB_DIR, 'proof-sample.json');
+const PUBLIC_SAMPLE_PATH = resolve(STUB_DIR, 'public-sample.json');
 
-(haveStubArtifacts ? describe : describe.skip)(
-  'V5 final E2E — groth16.prove + groth16.verify against stub zkey',
+// Heavy round-trip needs zkey + wasm (~2.1 GB + ~14 MB) and a 48 GB
+// systemd cap.  Skip on fresh checkouts / low-memory CI without the
+// large gitignored artifacts present.
+const haveHeavyArtifacts = existsSync(ZKEY_PATH) && existsSync(VKEY_PATH) && existsSync(WASM_PATH);
+
+// Cheap re-verify only needs the committed (vkey, proof, public) triple.
+// Always run on any checkout that includes ceremony/v5_1/ — that's the
+// project-docs invariant per CLAUDE.md V5.9.
+const haveLightArtifacts = existsSync(VKEY_PATH) && existsSync(PROOF_SAMPLE_PATH) && existsSync(PUBLIC_SAMPLE_PATH);
+
+(haveHeavyArtifacts ? describe : describe.skip)(
+  'V5.1 final E2E — groth16.prove + groth16.verify against stub zkey (heavy)',
   function () {
     this.timeout(600000);
 
@@ -81,13 +93,18 @@ const haveStubArtifacts =
       const ok: boolean = await snarkjs.groth16.verify(vkey, publicSignals, proof);
       expect(ok).to.equal(true);
     });
+  },
+);
+
+(haveLightArtifacts ? describe : describe.skip)(
+  'V5.1 sample-proof re-verify (lightweight, runs on any checkout with ceremony/v5_1/)',
+  function () {
+    this.timeout(60000);
 
     it('rejects a tampered public input (msgSender flip)', async () => {
       const vkey = JSON.parse(readFileSync(VKEY_PATH, 'utf8'));
-      const proof = JSON.parse(readFileSync(resolve(STUB_DIR, 'proof-sample.json'), 'utf8'));
-      const publicSignals = JSON.parse(
-        readFileSync(resolve(STUB_DIR, 'public-sample.json'), 'utf8'),
-      ) as string[];
+      const proof = JSON.parse(readFileSync(PROOF_SAMPLE_PATH, 'utf8'));
+      const publicSignals = JSON.parse(readFileSync(PUBLIC_SAMPLE_PATH, 'utf8')) as string[];
 
       expect(await snarkjs.groth16.verify(vkey, publicSignals, proof)).to.equal(true);
 
