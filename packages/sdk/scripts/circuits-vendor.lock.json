@@ -1,0 +1,21 @@
+{
+  "note": "SHA-256 fingerprints of @qkb/circuits source files vendored under packages/sdk/src/witness/v5/. Update via `pnpm -F @qkb/sdk drift-check:update-lock`.",
+  "circuitsRoot": "/data/Develop/qkb-wt-v5/arch-circuits/packages/circuits",
+  "patchesApplied": [
+    "1. node:crypto.createHash(\"sha256\")  →  @noble/hashes/sha2.sha256",
+    "2. require(\"ethers/lib/utils\").keccak256  →  @noble/hashes/sha3.keccak_256",
+    "3. require(\"circomlibjs\")  →  import { buildPoseidon } from \"circomlibjs\"",
+    "4. node:buffer (in imports)  →  buffer (resolves via vite-plugin-node-polyfills)",
+    "5. import { Buffer } from \"buffer\"  →  import { Buffer } from \"./_buffer-global\""
+  ],
+  "hashes": {
+    "src/types.ts": "5bda71c741ddda6327ed863726f69aaa83baf0884b1a0eb92690b54c3728620d",
+    "src/binding-offsets.ts": "68306c288108634427448f57b6de9ea39a5555e8cd89c8d9282699df38aaf6c9",
+    "src/leaf-cert-walk.ts": "26ec5d48ae3d51152c8ad2ecc99ab4c1bf710887584a3078d5f1bcaa74b7867c",
+    "src/limbs.ts": "fd047d3fc06e36dd10ae424cc9899097c3c35210e77c64fc76d46850f824e472",
+    "src/poseidon-chunk-hash.ts": "5a0f24671c89092eebccdcbcc222cc408111f8df248980391de676848f129d4f",
+    "src/parse-p7s.ts": "237eda0f04ae74eb347841a99976859e0ec14907bb619c8d2128424cc891f40c",
+    "src/build-witness-v5.ts": "aaa942027825baa1e40e1af9917f3bfabcd2847cee2ba225e20f640e316a99a6",
+    "scripts/spki-commit-ref.ts": "48229c49b667571f24c55c753bea70e324b9f23c8af29fde3571ee9b6cac5e7f"
+  }
+}

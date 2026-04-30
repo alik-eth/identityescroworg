@@ -25,7 +25,9 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "drift-check": "node scripts/check-circuits-vendor-drift.mjs",
+    "drift-check:update-lock": "node scripts/check-circuits-vendor-drift.mjs --update-lock"
   },
   "dependencies": {
     "@noble/hashes": "^1.4.0",
