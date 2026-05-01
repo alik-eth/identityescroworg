@@ -186,6 +186,28 @@ Fields written per route:
    `packages/sdk/src/abi/QKBRegistryV5_1.ts`. Do not re-create a
    `qkbRegistryV5Abi` symbol or add a parallel V5 ABI file.
 
+12. **Async strength gates need input-score parity proofs.** Any
+   client-side strength gate against an async oracle (zxcvbn, server
+   check, Argon2id pre-flight) MUST track which input string the score
+   belongs to. Submit gate's positive condition includes
+   `scoredInput === currentInput`. Clearing state on input change is
+   necessary but not sufficient — `useEffect` runs AFTER React commits
+   the render that consumed the new prop, so for one frame the user
+   sees a stale-but-strong score with the submit button still enabled.
+   The `ScwPassphraseModal` (`59b1a44`) ossifies this via its
+   `scoredPassphrase === passphrase` guard; codex caught the race in
+   pass 2 of the SCW review. Apply the pattern to any new async gate.
+
+13. **Modal state tears down through a single helper.** Every modal
+   that holds parent-side state (passphrase target, pending derivation
+   inputs, in-flight flags) MUST expose ONE `resetState()` helper.
+   Every exit branch (success, cancel, guard-fail, user-error,
+   network-error) calls it. Spread-out `setX(false)` calls across
+   branches statistically miss at least one path; codex finds them.
+   The catch-branch leak in pass 1 of the SCW review (modal stayed
+   open with stale `pendingSubjectSerial` after derive-error) is the
+   canonical example.
+
 ## What this package does NOT own
 
 - **Flattener outputs** (`trusted-cas.json`, `layers.json`, `root.json`).
