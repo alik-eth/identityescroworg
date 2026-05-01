@@ -6,6 +6,7 @@
 
 export {
   buildWitnessV5,
+  computeIdentityFingerprint,
   parseP7s,
   extractBindingOffsets,
   findTbsInCert,

@@ -424,6 +424,44 @@ export async function buildWitnessV5(
   };
 }
 
+/**
+ * Compute the V5.1 identityFingerprint off-chain from a subject-serial byte
+ * sequence. Same construction the witness builder applies internally:
+ *
+ *   subjectPack         = Poseidon₅(subjectSerialLimbs[0..3], subjectSerialLen)
+ *   identityFingerprint = Poseidon₂(subjectPack, FINGERPRINT_DOMAIN)
+ *
+ * The function is deterministic on the subject-serial bytes alone — no
+ * wallet signature required. Useful for the /account/rotate flow which
+ * needs to read `identityCommitments[fingerprint]` from the registry
+ * BEFORE the user signs anything (the on-chain read tells the UX what
+ * the prior commitment is, which is one of the public-signal inputs to
+ * the rotation proof).
+ *
+ * Subject-serial bytes are typically extracted via `findSubjectSerial`
+ * from the leaf-cert DER:
+ *
+ *   const cms = parseP7s(p7sBuffer);
+ *   const serial = findSubjectSerial(cms.leafCertDer);
+ *   const subjectSerialBytes = cms.leafCertDer.subarray(
+ *     serial.offset, serial.offset + serial.length,
+ *   );
+ *   const fp = await computeIdentityFingerprint(subjectSerialBytes);
+ */
+export async function computeIdentityFingerprint(
+  subjectSerialBytes: Uint8Array | Buffer,
+): Promise<bigint> {
+  const buf = Buffer.isBuffer(subjectSerialBytes)
+    ? subjectSerialBytes
+    : Buffer.from(subjectSerialBytes);
+  const limbs = subjectSerialBytesToLimbs(buf);
+  const subjectPack = await poseidon5([
+    ...limbs,
+    BigInt(buf.length),
+  ]);
+  return poseidon2(subjectPack, FINGERPRINT_DOMAIN);
+}
+
 // Re-exports for ergonomic consumer code.
 export { parseP7s } from './parse-p7s';
 export { extractBindingOffsets } from './binding-offsets';

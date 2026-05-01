@@ -16,6 +16,7 @@ import { CeremonyIndex } from './routes/ceremony/index';
 import { CeremonyContribute } from './routes/ceremony/contribute';
 import { CeremonyStatus } from './routes/ceremony/status';
 import { CeremonyVerify } from './routes/ceremony/verify';
+import { AccountRotateScreen } from './routes/account/rotate';
 
 function RootLayout() {
   return <Outlet />;
@@ -95,6 +96,12 @@ const integrationsRoute = createRoute({
   component: IntegrationsScreen,
 });
 
+const accountRotateRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/account/rotate',
+  component: AccountRotateScreen,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   cliRoute,
@@ -108,6 +115,7 @@ const routeTree = rootRoute.addChildren([
   ceremonyStatusRoute,
   ceremonyVerifyRoute,
   integrationsRoute,
+  accountRotateRoute,
 ]);
 
 export const router = createRouter({ routeTree });

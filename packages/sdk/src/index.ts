@@ -276,6 +276,7 @@ export {
 // are re-exported above; we only surface V5-specific symbols here.
 export {
   buildWitnessV5,
+  computeIdentityFingerprint,
   parseP7s,
   extractBindingOffsets,
   findTbsInCert,

@@ -88,6 +88,81 @@
     "awaitingDeploy": "Awaiting V5 registry deployment. Mint becomes available once orchestration §9.4 (Base Sepolia E2E) closes.",
     "awaitingRegistration": "Awaiting registration"
   },
+  "accountRotate": {
+    "title": "Rotate to a new wallet",
+    "lede": "Bind your verified identity to a different wallet without re-running the Diia signature flow against your old wallet. The old wallet authorises the rotation; the new wallet takes over going forward.",
+    "back": "Back",
+    "running": "Working…",
+    "steps": {
+      "connect": "Step 1 of 6 — Connect new wallet",
+      "diia": "Step 2 of 6 — Upload new Diia signature",
+      "derive-new": "Step 3 of 6 — Sign with new wallet",
+      "derive-old": "Step 4 of 6 — Sign with old wallet",
+      "prove": "Step 5 of 6 — Generate proof",
+      "submit": "Step 6 of 6 — Submit rotation",
+      "done": "Rotation complete"
+    },
+    "connect": {
+      "title": "Connect your new wallet",
+      "body": "The wallet you connect here will own the verified identity after rotation. It must be different from your current identity-bound wallet.",
+      "warningTitle": "This change is irreversible",
+      "warningBody": "After rotation the old wallet can no longer prove ownership of this identity. The IdentityEscrowNFT, if any, must be transferred separately via standard ERC-721 before you rotate.",
+      "newWallet": "New wallet:",
+      "noWallet": "No wallet connected. Please connect the wallet you want to rotate to.",
+      "advance": "Continue and lock this as the new wallet"
+    },
+    "diia": {
+      "title": "Upload your new Diia signature",
+      "body": "Generate a new QKB/2.0 binding pinned to your new wallet's public key, sign it via Diia, and upload the .p7s here together with the canonical binding bytes you signed.",
+      "bindingLabel": "Canonical binding (.json)",
+      "p7sLabel": "Diia signature (.p7s)",
+      "lockedNew": "New wallet locked:",
+      "filesRequired": "Both the canonical binding (.json) and the Diia signature (.p7s) must be uploaded.",
+      "noPriorIdentity": "No prior identity registered for this Diia certificate. There is nothing to rotate. Use /ua/registerV5 to register first.",
+      "advance": "Continue to new-wallet signature"
+    },
+    "deriveNew": {
+      "title": "Sign with your NEW wallet",
+      "body": "We need a signature from your new wallet to derive its wallet-secret via HKDF. This binds the new wallet to your identity in the rotation proof.",
+      "expected": "Expected signer:",
+      "cta": "Sign with new wallet",
+      "signing": "Awaiting new-wallet signature…",
+      "walletRequired": "A connected wallet is required to derive the new wallet secret.",
+      "wrongWallet": "The currently-connected wallet does not match the locked new-wallet address. Switch back to the new wallet you locked at step 1.",
+      "scwNotSupported": "Smart contract wallets are not yet supported for rotation. Please use an EOA wallet."
+    },
+    "deriveOld": {
+      "title": "Switch to your OLD wallet and sign",
+      "body": "Switch to your old (currently-identity-bound) wallet in your wallet extension. We need two signatures from it: one for HKDF (proves old-wallet ownership to the proof), and one over the rotation-authorisation hash (proves the old wallet consents to this exact new wallet).",
+      "switchHint": "Switch to your old wallet in MetaMask (or other wallet extension), then click Sign.",
+      "stillNewWallet": "Your wallet is still on the new-wallet address. Switch to your OLD wallet in the extension before signing.",
+      "authHashLabel": "Rotation authorisation hash (keccak256 of \"qkb-rotate-auth-v1\" ‖ chainId ‖ registry ‖ fingerprint ‖ newWallet)",
+      "cta": "Sign HKDF + auth hash with old wallet",
+      "signingHkdf": "Awaiting HKDF signature from old wallet…",
+      "signingAuth": "Awaiting auth-hash signature from old wallet…",
+      "walletRequired": "Wallet, fingerprint, and locked new-wallet address must all be present to sign."
+    },
+    "prove": {
+      "title": "Generate the rotation proof",
+      "body": "Building the V5.1 witness with rotation_mode=1 and producing a Groth16 proof in this browser. The proof binds the new wallet to the existing identity.",
+      "ceremonyPending": "Awaiting ceremony artifacts. The Phase 2 ceremony hasn't finished yet — proving stays disabled until the prover .zkey is published.",
+      "building": "Building witness with rotation_mode=1…",
+      "proving": "Running snarkjs Groth16 prover…",
+      "missingInputs": "Files, both wallet secrets, the locked new-wallet address, and the on-chain commitment read must all be present before proving.",
+      "noIntCert": "The .p7s does not contain an intermediate certificate. Re-export from Diia with the full chain."
+    },
+    "submit": {
+      "title": "Submit the rotation transaction",
+      "warningTitle": "Final confirmation",
+      "warningBody": "Submitting will permanently rotate the identity to the new wallet. This action cannot be undone on-chain.",
+      "switchBackHint": "Switch back to your new wallet to submit. New wallet:",
+      "currentlyConnected": "Currently connected:",
+      "switchToNew": "Your wallet is still on the old-wallet address. Switch back to the NEW wallet before submitting.",
+      "awaitingDeploy": "Awaiting V5 registry deployment. Submission becomes available once orchestration §9.4 (Base Sepolia E2E) closes.",
+      "cta": "Submit rotation",
+      "missingData": "Proof, public signals, old-wallet signature, and registry deployment must all be present to submit."
+    }
+  },
   "deviceGate": {
     "useDesktop": {
       "heading": "This device can't host the zero-knowledge prover.",
