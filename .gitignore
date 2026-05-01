@@ -74,3 +74,8 @@ fixtures/qie/agents/*.keys.json
 docs/2026-05-01-*.md
 docs/ceremony/2026-05-01-*.md
 docs/marketing/2026-05-01-*.md
+
+# Predecessor marketer's V5 launch drafts — codex flagged 3 P1 content
+# bugs (pre-V5.1-amendment claims). Keeping locally for reference; need
+# rewrite against current spec before commit. Block by date prefix.
+docs/marketing/2026-04-29-launch-drafts/

@@ -1,268 +1,125 @@
-# identityescroworg
+# QKB — Qualified Key Binding
 
-**Qualified Key Binding (QKB)** and **Qualified Identity Escrow (QIE)** — pseudonymous cryptographic identity with state-grade legal weight, built on [Regulation (EU) 2024/1183 (eIDAS 2.0)](https://eur-lex.europa.eu/eli/reg/2024/1183/oj) primitives.
+A zero-knowledge protocol that lets a holder of an EU-qualified electronic signature (eIDAS QES) authorize a wallet on chain without disclosing who they are.
 
-A Holder produces a self-generated keypair, signs a declaration binding that public key to their legal identity using any Qualified Electronic Signature (QES) issued by an EU-trusted QTSP, and then proves the binding under a zero-knowledge proof — revealing nothing about the QES, the certificate, or the QTSP, only that *some* qualified signature exists behind the key. An on-chain registry records the binding. A future escrow layer (Phase 2) adds threshold-held, post-quantum-encrypted recovery material so the binding can be deanonymized under formally-specified conditions.
+A holder signs a canonical binding statement with their qualified signature. The chain learns that **some** authorized signer has bound this wallet to themselves; it does not learn who. The first jurisdiction at launch is Ukraine, because [Diia](https://diia.gov.ua) is the most broadly deployed qualified-signature platform in the eIDAS perimeter today.
+
+The project line is named **Identity Escrow** for the broader research direction; the V1 protocol shipping at launch is QKB.
 
 ## Status
 
-- **Phase 1 — QKB:** in active development (see `docs/superpowers/plans/`). Real-QES validation passes against Ukrainian Diia QES (ECDSA-P256). Sepolia deployment + `identityescrow.org` static hosting pending the final ceremony.
-- **Phase 2 — QIE:** design frozen (`docs/superpowers/specs/2026-04-17-qie-phase2-design.md`) and amended for the MVP wedge (`docs/superpowers/specs/2026-04-17-qie-mvp-refinement.md`). MVP scope targets three Tier 1 segments — **inheritance / estate planning**, **regulated-entity crypto custody**, and **KYC-recovery in regulated DeFi** — shipping with `AuthorityArbitrator` only, dual-variant prover (RSA-PSS + ECDSA), an explicit escrow state machine, a notary-assisted heir recovery flow, and evidence envelopes on arbitrator releases. `TimelockArbitrator` and standalone recipient UX deferred post-pilot. Dispatch of the MVP amendment is in flight; full Phase 2 tag gated on Phase 1 deploy.
+- **V5.1 wallet-bound nullifier** — shipped, tagged [`v0.5.1-pre-ceremony`](https://github.com/alik-eth/identityescroworg/releases/tag/v0.5.1-pre-ceremony).
+- **Real-QES validation** — passes end-to-end against Ukrainian Diia QES (P-256 ECDSA + CAdES-BES).
+- **Phase B trusted setup ceremony** — recruiting now. See [Help with the ceremony](#help-with-the-ceremony).
+- **Base Sepolia deploy** — gated on ceremony.
+- **Mainnet** — gated on Sepolia E2E + audit.
+
+V5.1 is the alpha-ready protocol. Phase 2 (Qualified Identity Escrow — threshold-held QTSP recovery material with formally-specified disclosure conditions) is a future iteration in the project line, not part of V5.1 launch scope.
+
+## How it works
+
+1. Holder connects an EOA wallet.
+2. Holder generates a canonical binding statement (`binding.qkb2.json`) and signs it with their Diia QES (the QES private key never leaves the Diia app).
+3. The browser builds a Groth16 witness over the V5.1 circuit (~4 M constraints) and proves, in a Web Worker, that:
+   - the binding's intermediate certificate chains to a leaf in a Merkle root derived from the EU List of Trusted Lists
+   - the binding's `signedAttrs.messageDigest` matches the binding's hash
+   - the binding's policy hash is in the registry's accepted policy root
+   - the binding's `walletAddress` matches `msg.sender`
+   - the wallet-bound `walletSecret` is consistent with the published `identityCommitment` and `nullifier`
+4. The wallet submits `register(...)` to `QKBRegistryV5_1` on Base. The contract verifies the Groth16 proof, calls the EIP-7212 P-256 precompile twice for the ECDSA chain, checks Merkle inclusion against the trusted-list + policy roots, and writes:
+   - `nullifierOf[wallet]` = `Poseidon₂(walletSecret, ctxHash)`
+   - `identityCommitments[fingerprint]` = `Poseidon₂(subjectSerialPacked, walletSecret)`
+   - `identityWallets[fingerprint]` = `msg.sender`
+   - `usedCtx[fingerprint][ctxKey]` = `true`
+
+The chain stores a wallet-bound nullifier and (optionally) a transferable `IdentityEscrowNFT` certificate. Name, document number, and tax identifier never enter the chain.
+
+## Privacy properties
+
+What V5.1 buys, honestly:
+
+| Adversary | V5.1 nullifier value | Registration occurrence |
+|---|---|---|
+| External observer (no cert access) | uncomputable | uncomputable |
+| Different consuming app (cross-app correlation) | distinct per `ctxHash` | unlinkable |
+| Issuer with full cert DB | uncomputable | computable (fingerprint visible on-chain) |
+
+The issuer can still see that *some* wallet bound to a person they issued a certificate to — they cannot see which app(s) that wallet has registered against.
+
+Full issuer-blindness on registration occurrence requires Pedersen-set-membership commitments and is deferred to V6. See [`docs/superpowers/specs/2026-04-30-wallet-bound-nullifier-amendment.md`](docs/superpowers/specs/2026-04-30-wallet-bound-nullifier-amendment.md) for the threat model in full.
+
+## Try it
+
+- **Live demo** — pending Base Sepolia deploy. URL will land on `https://identityescrow.org/ua/registerV5` after the trusted setup ceremony completes.
+- **Wallet rotation** — `/account/rotate` lets a registered holder migrate to a new wallet under their existing identity. Three signatures: HKDF on the new wallet, HKDF + rotation-auth on the old wallet, register tx from the new wallet. The rotation-auth signature is bound to `chainId + registryAddress` to prevent cross-deployment replay.
+- **Local end-to-end** — see [Build & fork](#build--fork).
+
+## Help with the ceremony
+
+The Groth16 proving key for V5.1 is produced via a multi-party Phase 2 trusted setup. **As long as one contributor honestly destroys their entropy after contributing, the resulting key is sound.** Contributors do not need to trust each other or us.
+
+- **Coordination page** — `/ceremony` on the live site (status feed, attestation chain, in-browser verifier).
+- **Contributor flow** — 4 commands on a 32 GB-RAM machine, ~20 minutes wall time. See `/ceremony/contribute`.
+- **Cloud option** — [Fly.io cookbook](scripts/ceremony-coord/cookbooks/fly/README.md) runs the round on a Fly machine for ~$0.30/round (free-tier covered).
+- **Other clouds** — Cloudflare Containers (12 GiB cap) and Railway Pro (24 GB per replica) were evaluated and ruled out for the ~30 GB snarkjs peak. Hetzner CCX33 is the next viable cloud option for a contributor wanting an alternative.
+
+If you maintain ZK infrastructure (PSE, 0xPARC, Mopro, Anon Aadhaar, Polygon ID, ZK research labs) and would like to contribute a round, please reach out via the project's social channels.
 
 ## Documents
 
-- **Design specs:** [`docs/superpowers/specs/`](docs/superpowers/specs/)
-  - [Phase 1 QKB design](docs/superpowers/specs/2026-04-17-qkb-phase1-design.md)
-  - [Phase 2 QIE design](docs/superpowers/specs/2026-04-17-qie-phase2-design.md)
-  - [Phase 2 QIE MVP refinement](docs/superpowers/specs/2026-04-17-qie-mvp-refinement.md) — Tier 1 wedge scope deltas.
-- **Implementation plans:** [`docs/superpowers/plans/`](docs/superpowers/plans/) — per-phase orchestration + per-package plans, plus cross-worker amendments.
-- **QIE operational docs:** [`docs/qie/`](docs/qie/) — §15 legal instrument templates, §16 operational model (agent fees, SLA, liability).
-- **Ceremony:** [`docs/ceremony/`](docs/ceremony/) — trusted-setup transcript, artifact hashes.
+- **Specs** — [`docs/superpowers/specs/`](docs/superpowers/specs/)
+  - [V5 architecture design](docs/superpowers/specs/2026-04-29-v5-architecture-design.md)
+  - [V5.1 wallet-bound nullifier amendment](docs/superpowers/specs/2026-04-30-wallet-bound-nullifier-amendment.md)
+  - [V5.1 contracts independent review](docs/superpowers/specs/2026-04-30-issuer-blind-nullifier-contract-review.md)
+- **Plans** — [`docs/superpowers/plans/`](docs/superpowers/plans/)
+  - [V5 architecture orchestration](docs/superpowers/plans/2026-04-29-v5-architecture-orchestration.md)
+  - [Wallet-bound nullifier orchestration](docs/superpowers/plans/2026-04-30-wallet-bound-nullifier-orchestration.md)
+  - [V5 release plan](docs/superpowers/plans/2026-04-30-v5-release-plan.md)
+- **Handoffs** — [`docs/handoffs/`](docs/handoffs/) — worker context summaries from the V5.1 implementation rollout.
 
-## Architecture
+## Build & fork
 
-### Phase 1 — QKB
-
-```
-Holder                  Circuits (Groth16)         On-chain
-------                  ------------------         --------
-1. generate (sk, pk)    R_QKB witness:             QKBRegistry.register(pk, π)
-2. build binding B           B, σ_QES, cert,
-   { pk, declaration,        Merkle path to r_TL      ↓
-     timestamp, nonce }                             verifies π via
-3. sign B with QES →                                RSA- or ECDSA-verifier
-   σ_QES (detached                                  (library contract)
-   CAdES-BES)                ↓
-4. prove R_QKB →        Groth16 proof π           EscrowRegistered (Phase 2)
-   public pk, r_TL      ───────────────────────→
-```
-
-The `R_QKB` relation asserts in-circuit: QES verify, certificate Merkle inclusion in the EU trusted list, binding → signed-attributes digest chain, binding contains the claimed `pk`, certificate validity window covers `B.timestamp`. Nothing else leaks.
-
-### Forward Path — Modular DOB + age proof
-
-`QKB/1` does not currently prove adulthood. Some QES profiles expose DOB, but not in one pan-EU field. The intended successor path is:
-
-- keep trust-chain validation in the existing chain circuit
-- keep key-binding and nullifier logic in the leaf circuit
-- make DOB extraction profile-specific behind a uniform public output
-- make age qualification a separate proof over a committed DOB
-
-That keeps the contract surface stable while allowing jurisdiction- or QTSP-specific DOB decoders to be added incrementally.
-
-```
-signed .p7s / cert ----> Chain circuit
-                         - proves trust-chain inclusion under r_TL
-                         - outputs: rTL, algorithmTag, leafSpkiCommit
-                                      |
-binding.qkb.json ----------->         |
-leaf cert / signedAttrs ----> Leaf circuit (profile-specific)
-                         - proves binding signed by cert
-                         - derives nullifier from stable signer identifier
-                         - optionally extracts DOB from cert/profile-specific fields
-                         - outputs:
-                           pkX[4], pkY[4], ctxHash,
-                           policyLeafHash, policyRoot, timestamp,
-                           nullifier, leafSpkiCommit,
-                           dobCommit, dobSupported
-                                      |
-                                      v
-                               Age circuit
-                         - proves dobCommit opens to dobYmd
-                         - proves dobYmd <= ageCutoffDate
-                         - outputs: dobCommit, ageCutoffDate, ageQualified
-                                      |
-                                      v
-                               Smart contract
-                         - verifies chain proof
-                         - verifies leaf proof
-                         - optionally verifies age proof
-                         - checks leafSpkiCommit / dobCommit linkage
-```
-
-The DOB module boundary is by certificate profile, not by country in the abstract. Examples:
-
-- standard RFC/ETSI DOB field
-- Ukrainian `2.5.29.9` profile mapping
-- future German or French provider-specific mappings
-
-Every supported extractor must normalize DOB to the same internal representation before commitment:
-
-```text
-dobYmd     = YYYYMMDD as integer
-dobCommit  = Poseidon(dobYmd, dobSourceTag)
-```
-
-The recommended successor contract surface is:
-
-```solidity
-struct Proof {
-    uint256[2] a;
-    uint256[2][2] b;
-    uint256[2] c;
-}
-
-struct ChainSignals {
-    uint256 rTL;
-    uint256 algorithmTag;
-    uint256 leafSpkiCommit;
-}
-
-struct LeafSignals {
-    uint256[4] pkX;
-    uint256[4] pkY;
-    uint256 ctxHash;
-    uint256 policyLeafHash;
-    uint256 policyRoot;
-    uint256 timestamp;
-    uint256 nullifier;
-    uint256 leafSpkiCommit;
-    uint256 dobCommit;
-    uint256 dobSupported;
-}
-
-struct AgeSignals {
-    uint256 dobCommit;
-    uint256 ageCutoffDate;
-    uint256 ageQualified;
-}
-
-function verifyRegistration(
-    Proof calldata chainProof,
-    ChainSignals calldata chainSignals,
-    Proof calldata leafProof,
-    LeafSignals calldata leafSignals,
-    Proof calldata ageProof,
-    AgeSignals calldata ageSignals,
-    bool requireAgeQualification
-) external view returns (bool);
-```
-
-If `requireAgeQualification == true`, the registry should:
-
-- verify the age proof
-- require `leafSignals.dobSupported == 1`
-- require `leafSignals.dobCommit == ageSignals.dobCommit`
-- require `ageSignals.ageQualified == 1`
-
-This keeps "trusted signer" separate from "adult signer". The current QKB path provides the former only.
-
-### Proving topology — offline CLI, not browser
-
-Groth16 proofs for the UA V4 leaf circuit (6.54M constraints, ~3.4 GB zkey) are produced **offline on the Holder's machine** via [`@qkb/cli`](packages/qkb-cli) and submitted to `QKBRegistryV4.register(...)` via wallet — the SPA never sees the user's QES `.p7s`. This is both a privacy property (the legal-identity-bearing signature stays local) and a hard capacity reality.
-
-A Playwright benchmark at [`packages/web/tests/e2e/wasm-prover-benchmark.spec.ts`](packages/web/tests/e2e/wasm-prover-benchmark.spec.ts) documents the in-browser feasibility ceiling against the live R2-hosted UA V4 leaf artifacts:
-
-| Phase | Wall | Peak chromium RSS | Peak JS heap |
-|---|---|---|---|
-| witness gen (~110 s on 6.54M constraints) + zkey load | **119 s** | **2.65 GB** | 756 MB |
-| actual Groth16 prove compute | *never reached* | — | — |
-
-The renderer climbs past 2.65 GB **just to load the zkey** before any prove compute begins; on a typical 8 GB consumer laptop the renderer would OOM before the prove step starts. Run with `E2E_WASM_BENCH=1 pnpm exec playwright test --project=wasm-prover-benchmark` (cold first run downloads ~3.4 GB; cache survives across runs). See [`packages/web/tests/e2e/wasm-prover-benchmark.RESULTS.md`](packages/web/tests/e2e/wasm-prover-benchmark.RESULTS.md) for the full debug breakdown across five iterations.
-
-### Phase 2 — QIE
-
-```
-Holder                 QTSP Agents (k-of-n)         Recipient
-------                 --------------------          ---------
-R = {B, σ_QES, cert}   agent_i holds                release predicate
-  ↓ AES-256-GCM         wrapped_share_i             (on-chain Unlock event
-  with k_esc                (hybrid X25519 +         OR Holder QES countersig)
-  ↓ Shamir split         ML-KEM-768 KEM)
-  {s_1…s_n} over         → acks                     fetch ≥ t shares
-  GF(2^256)              →                          ────────────────→
-                                                     reconstruct k_esc → R
-QKBRegistry.registerEscrow(pk, hash(E))             Phase 1 verify on R
-```
-
-Qualified Trust Service Providers act as dumb custodians. Release yields the raw recovery material; the recipient independently re-verifies against Phase 1's chain. Escrow envelopes are post-quantum-safe by construction (hybrid KEM on every share + information-theoretic Shamir on the key). Release is gated by an on-chain state machine (`ACTIVE → RELEASE_PENDING → RELEASED`, with a 48 h Holder cancellation window) and by a typed evidence envelope the authority submits alongside its signature, so downstream parties can audit *why* a release was authorised.
-
-## Packages
-
-- [`packages/lotl-flattener`](packages/lotl-flattener) — offline CLI; EU LOTL → Poseidon Merkle CA set (`trusted-cas.json`, `root.json`). Phase 2 adds `qie-agents.json`.
-- [`packages/circuits`](packages/circuits) — Circom circuits for `R_QKB` (RSA + ECDSA-P256 variants), Groth16 artifacts, generated `Verifier.sol`.
-- [`packages/contracts`](packages/contracts) — `QKBVerifier` library + `QKBRegistry` reference contract (Foundry). Phase 2 adds `AuthorityArbitrator` (with evidence-envelope emission) and the escrow state machine (`ACTIVE → RELEASE_PENDING → RELEASED` + Holder cancellation window); `TimelockArbitrator` is stubbed and deferred post-MVP.
-- [`packages/web`](packages/web) — TanStack Router static SPA; binding generator + registry client at `/ua/*` (V4 country-scoped). Real Groth16 proving runs offline via [`@qkb/cli`](packages/qkb-cli) — see [Proving topology](#proving-topology--offline-cli-not-browser) above. EN + UK. Phase 2 adds `/escrow/setup` and the notary-assisted `/escrow/notary` recovery flow (standalone self-recovery remains reachable via `?mode=self`).
-- [`packages/qie-core`](packages/qie-core) *(Phase 2)* — hybrid KEM, Shamir, envelope codec, predicate evaluator. Pure TS, browser + Node.
-- [`packages/qie-agent`](packages/qie-agent) *(Phase 2)* — Fastify HTTP custodian reference implementation.
-- [`packages/qie-cli`](packages/qie-cli) *(Phase 2)* — operator/holder/recipient CLI.
-- [`deploy/mock-qtsps`](deploy/mock-qtsps) *(Phase 2)* — docker-compose harness: 3 mock QTSP agents + anvil + arbitrators for E2E testing.
-
-## Prerequisites
-
-- Node 20.11.x (see `.nvmrc`)
-- pnpm 9.1.x
-- Foundry (`forge`, `cast`, `anvil`)
-- circom 2.1.9
-- Docker + docker-compose (Phase 2 only)
-
-## Getting started
+Prerequisites: Node ≥20.19.0 (`.nvmrc`), pnpm 9.1.x, Foundry (`forge`/`cast`/`anvil`), circom 2.1.9, Docker (optional, for ceremony cookbook tests).
 
 ```bash
 pnpm install
-pnpm test        # run all package tests
-pnpm lint
-pnpm build
+pnpm test                                # all package suites
+pnpm build                               # production builds
 ```
 
-### Produce a binding to sign via a real QES
+Per-package:
 
 ```bash
-pnpm binding:admin                              # writes ./binding.qkb.json
-# Take binding.qkb.json to your QES provider (Diia Підпис, etc.)
-# Sign it as detached CAdES-BES (SHA-256).
-pnpm verify:real-qes binding.qkb.json binding.qkb.json.p7s
+pnpm -F @qkb/web typecheck && pnpm -F @qkb/web test
+cd packages/contracts && forge test -vv  # 376 tests, ~1 min
+pnpm -F @qkb/circuits test               # circuit + integration suite, ~10 min
 ```
 
-The verifier expects the signed `.p7s` alongside the public `.json` binding. Detached CAdES `.p7s` files are git-ignored globally — they are bound to a natural person's legal identity and must never be committed.
-
-### Demo mode (in-browser custodian)
-
-Phase 2 ships a single-SPA demo that exercises the full Holder → Custodian → Recipient/Notary flow against local anvil — no docker-compose agent fleet required. The SPA runs all three pseudo-custodians (`agent-a/b/c`) in the browser via `@qkb/qie-agent/browser`; state persists in `localStorage`.
+Local end-to-end (Anvil + V5.1 registry + browser proving):
 
 ```bash
-# 1. Bring up anvil + deploy QKBRegistry + AuthorityArbitrator,
-#    pump the manifest to packages/web/public/local.json.
-./scripts/dev-chain.sh
-
-# 2. Run the SPA.
-pnpm -F @qkb/web dev
-#    → http://localhost:5173
-#      · /escrow/setup          (Holder — blue)
-#      · /custodian/agent-a     (Custodian — amber)
-#      · /escrow/notary         (Recipient — emerald)
-
-# 3. When done:
-./scripts/dev-chain.sh stop
+./scripts/dev-chain.sh                   # Anvil + deploy QKBRegistryV5_1 + IdentityEscrowNFT
+pnpm -F @qkb/web dev                     # http://localhost:5173
 ```
 
-The role switcher in the top-right header hops between the three sections. Each role's palette is scoped via `data-role="holder|custodian|recipient"` on `<RoleShell>`; active role persists to `localStorage["qie.demo.role"]`.
+The V5.1 stub ceremony zkey is committed to the repo at `packages/circuits/ceremony/v5_1/qkb-v5_1-stub.zkey` (gitignored locally; lead hosts on R2 for browser fetch). The full prove + register flow takes ~75 seconds wall time on a 32 GB-RAM workstation; in-browser proving requires a flagship 2024+ phone or a desktop browser.
 
-To point the same SPA at the real Node agents from `deploy/mock-qtsps/docker-compose.yml` instead of the in-browser ones:
+## Packages
 
-```bash
-VITE_QIE_USE_REAL_HTTP=1 pnpm -F @qkb/web dev
-```
-
-The existing Node agent server + docker-compose fleet remain the path for integration testing and eventual real-QTSP deployment — the in-browser demo does NOT replace them.
-
-## Deployment
-
-- **Sepolia** is the primary testnet.
-- **`identityescrow.org`** serves the static SPA. The build output is host-agnostic; the specific hosting target is TBD.
-- Admin key at deploy-time lives in root `.env` (git-ignored). Never commit secrets.
-
-## Legal framing
-
-- **QKB** produces pseudonymous identities with legally binding effect — each binding declaration is a signed statement under Art. 25 of eIDAS accepting responsibility for actions cryptographically attributable to the key.
-- **QIE** is proposed as a qualified trust service under Art. 3(19) and Art. 47 of Regulation (EU) 2024/1183. Phase 2 ships mock QTSPs; production adoption requires real qualified providers and an ETSI-published service-type URI.
-
-Together, the constructions resolve the tension in eIDAS 2.0 between the unlinkability requirement of Art. 5a(16) and the static-signature assumptions of the current Architecture Reference Framework.
+- [`packages/circuits`](packages/circuits) — Circom V5.1 main circuit (4.02 M constraints, 19 frozen public signals), Groth16 stub artifacts, ceremony scripts (round-zero, contribute, finalize).
+- [`packages/contracts`](packages/contracts) — `QKBRegistryV5_1` registry, `IdentityEscrowNFT`, deploy scripts, real-pairing gas snapshot (2.10 M for `register()` against 2.5 M ceiling).
+- [`packages/sdk`](packages/sdk) — viem helpers, `qkbRegistryV5_1Abi`, witness builder, walletSecret derivation (EOA HKDF + SCW Argon2id).
+- [`packages/web`](packages/web) — TanStack Router static SPA. EN + UK i18n. Browser proving via Web Worker + snarkjs. Civic-monumental visual language.
+- [`packages/lotl-flattener`](packages/lotl-flattener) — EU LOTL → Poseidon Merkle CA set; combined EU LOTL + Ukrainian national TSL.
+- [`scripts/ceremony-coord`](scripts/ceremony-coord) — admin tooling for the Phase 2 ceremony (R2 + signed URLs with `If-None-Match: '*'` write-once + chain-prefix verification).
+- [`scripts/ceremony-coord/cookbooks/fly`](scripts/ceremony-coord/cookbooks/fly) — Fly.io contributor cookbook (Dockerfile + interactive launcher.sh).
 
 ## License
 
-**GPLv3** — see [`COPYING`](COPYING). The entire repository adopts GPLv3 because the ECDSA-P256 circuit vendor ([`privacy-scaling-explorations/circom-ecdsa-p256`](https://github.com/privacy-scaling-explorations/circom-ecdsa-p256)) is GPLv3 and its constraints propagate through the compiled `.zkey` and generated `Verifier.sol`. MIT-licensed upstream sub-components (zk-email RSA circuits, snarkjs, circomlib) remain under their original licenses within their vendor directories — see per-directory `PROVENANCE.md`.
+**GPLv3** — see [`COPYING`](COPYING). The ECDSA-P256 circuit vendor ([PSE's `circom-ecdsa-p256`](https://github.com/privacy-scaling-explorations/circom-ecdsa-p256)) is GPLv3 and its constraints propagate through the compiled `.zkey` and the generated `Verifier.sol`. MIT-licensed sub-components (zk-email RSA primitives, snarkjs, circomlib) remain under their original licenses within their vendor directories — see per-directory `PROVENANCE.md`.
 
 ## Acknowledgements
 
-Funding sought from NLNet NGI Zero Commons Fund for Phase 2 QIE implementation. Circuits built on [zk-email](https://github.com/zkemail) (RSA) and [PSE's circom-ecdsa-p256](https://github.com/privacy-scaling-explorations/circom-ecdsa-p256) (ECDSA). The Qualified Key Binding and Qualified Identity Escrow constructions are presented in full in [`docs/superpowers/specs/`](docs/superpowers/specs/).
+Circuits build on [zk-email](https://github.com/zkemail) (RSA primitives), [PSE's circom-ecdsa-p256](https://github.com/privacy-scaling-explorations/circom-ecdsa-p256) (ECDSA), and [bkomuves/hash-circuits](https://github.com/bkomuves/hash-circuits) (Keccak). Phase 2 trusted setup uses the Hermez `pot23` Powers of Tau. EU LOTL parsing follows ETSI TS 119 612.
+
+A pre-print of the construction will accompany the launch announcement.
