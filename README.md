@@ -102,7 +102,7 @@ Local end-to-end (Anvil + V5.1 registry + browser proving):
 pnpm -F @qkb/web dev                     # http://localhost:5173
 ```
 
-The V5.1 stub ceremony zkey is committed to the repo at `packages/circuits/ceremony/v5_1/qkb-v5_1-stub.zkey` (gitignored locally; lead hosts on R2 for browser fetch). The full prove + register flow takes ~75 seconds wall time on a 32 GB-RAM workstation; in-browser proving requires a flagship 2024+ phone or a desktop browser.
+The V5.1 stub ceremony zkey (~2.1 GB) is **not** committed to the repo — it's gitignored and produced locally via `pnpm -F @qkb/circuits ceremony:v5_1:stub`, or fetched at runtime from `prove.identityescrow.org/qkb-v5_1-stub.zkey` once the ceremony hosting is up. The smaller derived artifacts (`Groth16VerifierV5_1Stub.sol`, `verification_key.json`, sample proof triple) **are** committed under `packages/circuits/ceremony/v5_1/` and pumped to consumer worktrees during integration. The full prove + register flow takes ~75 seconds wall time on a 32 GB-RAM workstation; in-browser proving requires a flagship 2024+ phone or a desktop browser.
 
 ## Packages
 
