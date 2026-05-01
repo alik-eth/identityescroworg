@@ -10,6 +10,7 @@
     "snapshot": "forge snapshot --root ../.. --snap packages/contracts/snapshots/gas-snapshot.txt",
     "snapshot:check": "forge snapshot --root ../.. --check --snap packages/contracts/snapshots/gas-snapshot.txt",
     "fmt": "forge fmt --root ../..",
-    "fmt:check": "forge fmt --root ../.. --check"
+    "fmt:check": "forge fmt --root ../.. --check",
+    "check:poseidon": "tsx script/check-poseidon-reproducibility.ts"
   }
 }

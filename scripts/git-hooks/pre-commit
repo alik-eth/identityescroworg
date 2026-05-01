@@ -1,0 +1,166 @@
+#!/usr/bin/env bash
+# Pre-commit: run `codex exec` in read-only sandbox on the staged diff and
+# block the commit on [P1] findings or a missing/BLOCK verdict.
+#
+# Why `codex exec --sandbox=read-only` and not `codex review`:
+#   `codex review` has no --sandbox flag and (depending on app-server
+#   discovery) can run unsandboxed, which lets stray `git add` operations
+#   inside the review session corrupt the project's git index. `codex exec
+#   -s read-only` is the documented, sandbox-enforced primitive for hooks.
+#
+# Enable:    git config core.hooksPath scripts/git-hooks
+# Bypass:    git commit --no-verify   OR   SKIP_CODEX_REVIEW=1 git commit ...
+# Fail-open: CODEX_FAIL_OPEN=1 git commit ...   (allow when codex did not
+#            return a verdict, e.g. transient API outage; default is closed)
+
+set -euo pipefail
+
+git diff --cached --quiet --exit-code && exit 0
+
+git_dir=$(git rev-parse --git-dir)
+[ -f "$git_dir/MERGE_HEAD" ]        && exit 0
+[ -d "$git_dir/rebase-merge" ]      && exit 0
+[ -d "$git_dir/rebase-apply" ]      && exit 0
+[ -f "$git_dir/CHERRY_PICK_HEAD" ]  && exit 0
+[ -f "$git_dir/REVERT_HEAD" ]       && exit 0
+
+if [ "${SKIP_CODEX_REVIEW:-0}" = "1" ]; then
+  echo "[pre-commit] SKIP_CODEX_REVIEW=1 — skipping codex review." >&2
+  exit 0
+fi
+
+if ! command -v codex >/dev/null 2>&1; then
+  echo "[pre-commit] codex CLI not found on PATH — skipping review." >&2
+  exit 0
+fi
+
+echo "[pre-commit] codex review on staged changes…" >&2
+
+diff=$(git diff --cached)
+
+prompt=$(cat <<'EOF'
+You are a pre-commit code reviewer. A staged git diff is appended below.
+
+== Severity tags ==
+  P1 — must block the commit. Reserved for: security holes, secret
+       leakage, data loss, clearly broken logic, regressions in core
+       invariants. Be conservative. Do NOT use P1 for stylistic issues,
+       missing docs, opinionated refactors, type-coercion footguns,
+       speculative bugs, or "could be improved" concerns.
+  P2 — should fix soon but does not block.
+  P3 — nit / style.
+
+== Output rules (REQUIRED — a parser depends on them) ==
+
+  1. For each finding emit ONE line in EXACTLY this format:
+
+         - [P1] <short title> — <path>:<line-or-range>
+
+     (substitute P2 / P3 as appropriate). The dash bullet, the
+     square-bracketed tag, the em-dash separator (—), and the
+     `path:line` anchor are ALL mandatory.
+
+  2. Do NOT write the literal tokens "[P1]", "[P2]", "[P3]"
+     anywhere except as the leading tag of such a finding line.
+
+  3. End your response with a final line that is EXACTLY one of:
+
+         VERDICT: PASS
+         VERDICT: BLOCK
+
+     Use BLOCK if and only if there is at least one P1 finding.
+     Use PASS otherwise. No other words after the verdict line.
+     Do NOT use the literal "VERDICT:" anywhere else in the response.
+
+  4. If the diff is fine, you may write a one-line summary in prose,
+     emit zero finding lines, then the VERDICT: PASS line.
+
+== Diff ==
+
+EOF
+)
+
+# `--output-last-message` writes ONLY the model's final response (no session
+# preamble, no echoed prompt) to a file we can parse cleanly.
+out_file=$(mktemp)
+trap 'rm -f "$out_file"' EXIT
+
+if ! review=$(printf '%s\n%s\n' "$prompt" "$diff" | \
+    codex exec \
+      --sandbox read-only \
+      --skip-git-repo-check \
+      --ephemeral \
+      --output-last-message "$out_file" \
+      - 2>&1); then
+  echo "[pre-commit] codex exec failed to run:" >&2
+  echo "$review" >&2
+  echo "" >&2
+  if [ "${CODEX_FAIL_OPEN:-0}" = "1" ]; then
+    echo "[pre-commit] CODEX_FAIL_OPEN=1 — allowing commit through." >&2
+    exit 0
+  fi
+  echo "Retry the commit, set CODEX_FAIL_OPEN=1 for this commit, or" >&2
+  echo "bypass with: git commit --no-verify (or SKIP_CODEX_REVIEW=1)" >&2
+  exit 1
+fi
+
+# Show the full transcript so the user sees codex's reasoning + findings.
+echo "$review" >&2
+
+# The final response is in $out_file. Empty file ⇒ codex did not complete
+# (interrupted stream, rate limit, etc.) — fail closed unless overridden.
+final=$(cat "$out_file" 2>/dev/null || true)
+
+if [ -z "$final" ]; then
+  echo "" >&2
+  echo "[pre-commit] codex did not return a final message." >&2
+  echo "Likely cause: API outage, interrupted stream, or rate limit." >&2
+  if [ "${CODEX_FAIL_OPEN:-0}" = "1" ]; then
+    echo "[pre-commit] CODEX_FAIL_OPEN=1 — allowing commit through." >&2
+    exit 0
+  fi
+  echo "Retry the commit, set CODEX_FAIL_OPEN=1 for this commit, or" >&2
+  echo "bypass with: git commit --no-verify (or SKIP_CODEX_REVIEW=1)" >&2
+  exit 1
+fi
+
+# Backstop: if a real P1 finding (tag co-occurring with a `:line` anchor on
+# the same line) appears, block immediately even if the verdict disagrees.
+if printf '%s' "$final" | grep -qE '\[P1\][^[:cntrl:]]*:[0-9]'; then
+  echo "" >&2
+  echo "[pre-commit] [P1] finding detected — commit blocked." >&2
+  echo "Fix the issues, or bypass with: git commit --no-verify" >&2
+  exit 1
+fi
+
+# Verdict must be the literal LAST non-empty line of the final response.
+last_line=$(printf '%s\n' "$final" | awk 'NF{x=$0} END{print x}')
+verdict=""
+if printf '%s' "$last_line" | grep -qE '^VERDICT:[[:space:]]*(PASS|BLOCK)[[:space:]]*$'; then
+  verdict=$(printf '%s' "$last_line" | awk '{print $2}')
+fi
+
+case "$verdict" in
+  PASS)
+    echo "[pre-commit] codex review: VERDICT PASS." >&2
+    exit 0
+    ;;
+  BLOCK)
+    echo "" >&2
+    echo "[pre-commit] codex review: VERDICT BLOCK — commit blocked." >&2
+    echo "Fix the issues above, or bypass with: git commit --no-verify" >&2
+    exit 1
+    ;;
+  "")
+    echo "" >&2
+    echo "[pre-commit] codex did not return a valid VERDICT line as the" >&2
+    echo "final line of its response. Treating as malformed/incomplete." >&2
+    if [ "${CODEX_FAIL_OPEN:-0}" = "1" ]; then
+      echo "[pre-commit] CODEX_FAIL_OPEN=1 — allowing commit through." >&2
+      exit 0
+    fi
+    echo "Retry the commit, set CODEX_FAIL_OPEN=1 for this commit, or" >&2
+    echo "bypass with: git commit --no-verify (or SKIP_CODEX_REVIEW=1)" >&2
+    exit 1
+    ;;
+esac
