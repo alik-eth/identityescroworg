@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build `QKBPresentationV5.circom` (~1.3M-constraint single-circuit ZK proof) replacing the V4 leaf+chain split, plus all supporting primitives, the local Phase 2 ceremony, and the TS reference implementations needed for cross-package parity.
+**Goal:** Build `QKBPresentationV5.circom` (~4.0M-constraint empirical projection / 4.5M cap envelope, single-circuit ZK proof) replacing the V4 leaf+chain split, plus all supporting primitives, the local Phase 2 ceremony, and the TS reference implementations needed for cross-package parity.
 
 **Architecture:** ECDSA-P256 verification moves OUT of the circuit (handled on-chain by EIP-7212). The remaining circuit work is binding parsing, SHA-256 hashing of three byte streams (canonical binding, signedAttrs DER, leaf TBS), CAdES messageDigest binding, X.509 subject serial extraction, nullifier derivation, and SPKI commitments. Public signals follow the 14-field layout frozen in the orchestration plan §2.1. SpkiCommit construction is byte-equivalent across this circuit, the contract's `P256Verify.spkiCommit`, and the flattener's `spkiCommit.ts`.
 
@@ -1190,8 +1190,10 @@ For each of the following, the worker writes:
 
 **Task 6.9 — Final compile + constraint count**
 
+> _Updated 2026-04-29 to reflect spec amendment 9c866ad (review pass 5)._
+
 Run: `circom circuits/QKBPresentationV5.circom --r1cs --inspect -o build/v5/`
-Expected output ends with: `non-linear constraints: ~1.3M ± 200K`. **HARD GATE: if >1.5M, escalate to lead before continuing — must trim MAX bounds or revisit a primitive.**
+Expected output ends with: `non-linear constraints: ~4.0M (empirical projection)`. **HARD GATE: 4.5M cap (empirical projection ~4.0M, ~12% headroom). If >4.5M, escalate to lead before continuing — must trim MAX bounds or revisit a primitive.**
 
 **Task 6.10 — E2E witness + prove + verify against real Diia .p7s**
 
@@ -1280,7 +1282,7 @@ component main {public [
 EOF
 
 circom circuits/QKBPresentationV5Stub.circom --r1cs --wasm -o build/v5/stub/
-snarkjs zkey new build/v5/stub/QKBPresentationV5Stub.r1cs build/qkb-presentation/pot24_final.ptau build/v5/stub/qkb-v5-stub_0000.zkey
+snarkjs zkey new build/v5/stub/QKBPresentationV5Stub.r1cs build/qkb-presentation/powersOfTau28_hez_final_23.ptau build/v5/stub/qkb-v5-stub_0000.zkey
 echo "stub entropy" | snarkjs zkey contribute build/v5/stub/qkb-v5-stub_0000.zkey build/v5/stub/qkb-v5-stub_final.zkey
 snarkjs zkey export verificationkey build/v5/stub/qkb-v5-stub_final.zkey build/v5/stub/verification_key.json
 snarkjs zkey export solidityverifier build/v5/stub/qkb-v5-stub_final.zkey build/v5/stub/Groth16VerifierV5Stub.sol
@@ -1353,6 +1355,8 @@ git -C /data/Develop/qkb-wt-v5/arch-circuits commit -m "build(circuits): V5 npm 
 
 ## §10 — Documentation (~1 hour)
 
+> _Updated 2026-04-29 to reflect spec amendment 9c866ad (review pass 5)._
+
 Update `packages/circuits/CLAUDE.md` to add a V5 section. Append (don't replace V4 sections):
 
 ```markdown
@@ -1363,7 +1367,7 @@ Update `packages/circuits/CLAUDE.md` to add a V5 section. Append (don't replace 
 
 V5 moves ECDSA-P256 verification OUT of the circuit (handled on-chain via
 EIP-7212). Single circuit replaces V4's leaf+chain split. Constraint count
-~1.3M (down from V4's 6.54M). Zkey ~300-400 MB. Browser-friendly.
+~4.0M empirical (down from V4's 6.54M). Zkey ~2.0-2.4 GB (browser-loadable; mobile-browser is the hard acceptance gate per spec pass 5).
 
 ### V5 invariants
 
@@ -1389,8 +1393,9 @@ EIP-7212). Single circuit replaces V4's leaf+chain split. Constraint count
 
 ### Ceremony procedure
 
-Local-only execution (no Fly). ~5-10 min on a dev box for ~1.3M constraints
-on the Hermez ptau (reused, ~33M constraint capacity, more than enough).
+Local-only execution (no Fly). ~5-10 min on a dev box for ~4.0M empirical
+constraints on the Hermez pot23 ptau (8.4M cap, 110% headroom over the
+4.5M envelope).
 
 Phase 2 contributor protocol: see `docs/superpowers/plans/2026-04-29-v5-architecture-orchestration.md` §5.
 
@@ -1411,6 +1416,11 @@ git -C /data/Develop/qkb-wt-v5/arch-circuits commit -m "docs(circuits): V5 invar
 
 ## §11 — Real Phase 2 ceremony (gated on §6 + §7 complete)
 
+> _Updated 2026-04-29 to reflect spec amendment 9c866ad (review pass 5)._
+>
+> Phase 2 ceremony uses **`powersOfTau28_hez_final_23.ptau`** (pot23, ~1.2 GB,
+> 8.4M-constraint cap, ~110% headroom over the 4.5M envelope).
+
 Coordinated by lead per orchestration §5. Worker's role: produce initial zkey, then pause. Lead handles the contributor coordination.
 
 ### Task 11.1 — Initial zkey
@@ -1419,7 +1429,7 @@ Coordinated by lead per orchestration §5. Worker's role: produce initial zkey, 
 cd /data/Develop/qkb-wt-v5/arch-circuits/packages/circuits
 mkdir -p build/v5/ceremony
 snarkjs zkey new build/v5/QKBPresentationV5.r1cs \
-                 build/qkb-presentation/pot24_final.ptau \
+                 build/qkb-presentation/powersOfTau28_hez_final_23.ptau \
                  build/v5/ceremony/qkb-v5_0000.zkey
 sha256sum build/v5/ceremony/qkb-v5_0000.zkey > build/v5/ceremony/qkb-v5_0000.sha256
 echo "Initial zkey ready. SHA: $(cat build/v5/ceremony/qkb-v5_0000.sha256)"
@@ -1433,7 +1443,7 @@ After lead applies the beacon, worker:
 
 ```bash
 snarkjs zkey verify build/v5/QKBPresentationV5.r1cs \
-                    build/qkb-presentation/pot24_final.ptau \
+                    build/qkb-presentation/powersOfTau28_hez_final_23.ptau \
                     build/v5/ceremony/qkb-v5_final.zkey
 snarkjs zkey export verificationkey build/v5/ceremony/qkb-v5_final.zkey ceremony/v5/verification_key.json
 snarkjs zkey export solidityverifier build/v5/ceremony/qkb-v5_final.zkey ceremony/v5/Groth16VerifierV5.sol
@@ -1460,7 +1470,7 @@ ceremony/v5/urls.json once available."
 Per orchestration §9.4. Worker must demonstrate:
 
 - [ ] Real Diia .p7s → V5 witness → V5 prove → snarkjs.groth16.verify === true
-- [ ] Constraint count printed in `pnpm compile:v5` ≤ 1.5M
+- [ ] Constraint count printed in `pnpm compile:v5` ≤ 4.5M (empirical projection ~4.0M)
 - [ ] All §2-§9 unit tests green: `pnpm test:v5`
 
 When all three pass, this plan is complete from the worker's side. Lead opens A1 acceptance gate §9.2.

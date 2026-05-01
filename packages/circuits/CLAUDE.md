@@ -172,3 +172,378 @@ commit, or test suites in other packages will silently drift off it.
   URL artifacts.
 - LOTL Merkle root updates → `packages/lotl-flattener`.
 - QES attestation service (Phase 2) → `packages/qie-*`.
+
+---
+
+## V5 architecture (current — `feat/v5arch-circuits`)
+
+V5 collapses the V4 leaf+chain split into a **single ~4.02M-constraint
+circuit** (`circuits/QKBPresentationV5.circom`) that takes the QES
+verification on-chain via EIP-7212 P256Verify. **V5.1 amends V5 in-place
+on the same .circom file** — empirical envelope is now ~4.022M
+constraints with a **19-signal** public-input layout (V5 base shipped 14;
+V5.1 adds 5 — see §V5.11 below). The layout is FROZEN per V5 spec §0.1
++ V5.1 orchestration §1.1 — adding / reordering fields is a cross-worker
+breaking change.
+
+The V4 invariants above (`.p7s` hygiene, test cache stickiness,
+fixture provenance, etc.) remain in force. V5 adds the items below;
+where V5 numbers replace V4 numbers (memory cap, constraint envelope),
+prefer V5.
+
+### V5.1 — Memory caps for compile / ceremony / heavy tests
+
+V4 used `MemoryMax=28G`. **V5 uses 48G.** Empirical peaks:
+
+| Operation | Peak RSS | Why |
+|---|---|---|
+| `circom --r1cs --wasm` (cold compile) | ~14 GB | 4.02M-constraint R1CS construction in Rust binary |
+| `circom_tester.wasm()` (mocha cold compile) | ~32 GB | circom output + V8 holds the witness-calc graph in heap |
+| `snarkjs groth16 setup` (zkey new) | ~30 GB | 9.1 GB pot23 + R1CS matrices + G1/G2 scratch tables |
+| `snarkjs.groth16.fullProve` (mocha runtime) | ~26 GB | 2.2 GB zkey + V8 BigInt MSM scratch |
+
+V4's 28 GB cap was tight for V4-leaf (which compiled at ~6.5M
+constraints in ~22 GB) and **does not fit V5** — `circom_tester.wasm()`
+OOMs reproducibly at 28 GB. New pattern:
+
+```bash
+systemd-run --user --scope -p MemoryMax=48G -p MemorySwapMax=0 \
+  NODE_OPTIONS='--max-old-space-size=46080' \
+  <cmd>
+```
+
+For `circom` CLI direct (not `circom_tester.wasm()`), the cap can drop
+to 24G — the binary doesn't double-buffer the witness-calc graph.
+
+### V5.2 — `--exit` flag in mocha test scripts
+
+`snarkjs.groth16.fullProve` leaks Worker threads (open issue against
+snarkjs). mocha 4+ waits for the event loop to drain before exiting,
+so the runner hangs indefinitely after tests pass — observed an
+~85 s test session sit at 20 GB RSS for 8+ hours overnight without
+exiting until manually killed.
+
+**Fix: `mocha --exit`** in every script that runs heavy V5 tests.
+Already applied to package.json's `test` and `test:v5` scripts.
+
+### V5.3 — Cold-compile pattern (avoid `circom_tester.wasm()` for V5 main)
+
+For ad-hoc constraint-count probes, run circom directly:
+
+```bash
+circom circuits/QKBPresentationV5.circom --r1cs --wasm \
+  -l circuits -l node_modules -o build/qkb-presentation/
+pnpm exec snarkjs r1cs info build/qkb-presentation/QKBPresentationV5.r1cs
+```
+
+(`pnpm -F @qkb/circuits compile:v5` packages the above.)
+
+The mocha test path uses `circom_tester.wasm()` which is convenient
+but ~2× memory-heavier; it's fine for warm-cache replay (cheap) but
+the FIRST run (cache cold) will OOM under V4's 28 GB cap.
+
+### V5.4 — Constraint envelope
+
+- Empirical V5 base (post-§6.10): **4,020,936 constraints** (snarkjs r1cs info).
+- Empirical V5.1 (post-A6.1 wallet-bound nullifier): **4,022,171 constraints** (+1,235 vs V5: T1 +738, T3 +497).
+- Cap: **4,500,000** per spec amendment 9c866ad. Headroom ~10.6% (V5.1).
+- Wires (V5.1): ~3,956,793. Public inputs: **19** (V5: 14). Private inputs: 10,526 (V5: 9,756).
+- V4 hard cap was 8M; V5's tighter envelope reflects ECDSA-on-chain.
+
+**Don't widen the cap without surfacing.** A bigger envelope means
+slower prove time + larger zkey, both of which threaten the
+mobile-browser acceptance gate (web-eng spec-pass-5).
+
+### V5.5 — `MAX_LEAF_TBS = 1408` (1024 → 1408 empirical bump)
+
+Real Diia leaf TBSCertificate measures **1203 bytes** (admin-ecdsa
+fixture). Spec amendment eeb2f4a bumped from the original 1024
+(estimated assuming "~700-900 bytes") to 1408 to fit. ~17% headroom
+over the 1216 padded-length floor — matches the spec convention
+established by MAX_BCANON (real 849, ~21%) and MAX_SA (real 1388,
+~10%).
+
+### V5.6 — Vendored Keccak: bkomuves/hash-circuits @ `4ef64777` (MIT)
+
+V5 §6.8 needs in-circuit Keccak-256 for the `msgSender` ←
+`keccak256(uncompressed_pk[1:])[12:]` derivation. We vendor
+**bkomuves/hash-circuits** at commit `4ef64777cc9b78ba987fbace27e0be7348670296`
+(Faulhorn Labs / Balazs Komuves, MIT, last commit 2025-01-24).
+
+| Why bkomuves over alternatives | |
+|---|---|
+| vocdoni/keccak256-circom | GPL-3.0, 4-year stale, "WIP experimental" |
+| rarimo/passport-zk-circuits | MIT but pulls in transitive bitify+sha2 deps + bit-level API |
+| **bkomuves/hash-circuits** | **MIT, 4 self-contained files, byte-level `Keccak_256_bytes(input_len)` API** |
+
+PROVENANCE.md in `circuits/primitives/vendor/bkomuves-keccak/`
+documents the pin + sha256 of each vendored file. Updates require a
+new provenance entry, fresh checksums, and a new ceremony.
+
+### V5.7 — pot23 ptau
+
+Phase 2 ceremony uses `powersOfTau28_hez_final_23.ptau` (cap 8.39M
+constraints, ~110% headroom over the 4.5M circuit envelope).
+
+**Empirical file size: 9.1 GB** (Polygon zkEVM mirror at
+`https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_23.ptau`,
+sha256 `047f16d75daaccd6fb3f859acc8cc26ad1fb41ef030da070431e95edb126d19d`).
+Spec amendment 9c866ad's "~1.2 GB" estimate was wrong — that's
+roughly the size of pot21's "lite" form, not pot23's full Hermez
+ceremony output. **Cross-check pending** against canonical Hermez
+sha256 manifest before §11 real ceremony.
+
+Disk usage: 9.1 GB ptau + ~1 GB R1CS + ~2.2 GB zkey ≈ 13 GB scratch
+during ceremony. Goes into `build/qkb-presentation/` (gitignored).
+
+### V5.8 — `build-witness-v5` public API
+
+Witness construction lives in `src/build-witness-v5.ts` and exports
+the stable surface via `src/index.ts`:
+
+```ts
+import {
+  buildWitnessV5,
+  parseP7s,
+  type BuildWitnessV5Input,
+  type WitnessV5,
+} from '@qkb/circuits';
+
+const cms = parseP7s(p7sBuffer);
+const witness = await buildWitnessV5({
+  bindingBytes,
+  leafCertDer: cms.leafCertDer,
+  leafSpki, intSpki,
+  signedAttrsDer: cms.signedAttrsDer,
+  signedAttrsMdOffset: cms.signedAttrsMdOffset,
+});
+// `witness` is plain JSON ready for snarkjs.wtns.calculate.
+```
+
+CLI: `pnpm -F @qkb/circuits build-witness-v5 ...`. Two modes:
+`--p7s <path>` (real Diia ingestion) OR
+`--signed-attrs/--md-offset/--leaf-cert` (pre-extracted artifacts).
+
+**Subtle contract**: `signedAttrsMdOffset` is the offset of the
+**leading `0x30 0x2f` Attribute SEQUENCE byte** (the start of
+`SignedAttrsParser.circom`'s 17-byte EXPECTED_PREFIX walker), NOT
+the digest content offset. `parseP7s` byte-checks the leadIn
+before returning. Web-eng's vendored copy MUST preserve this
+convention or §6.4 breaks silently.
+
+### V5.9 — prove + verify resource envelope (test/integration/v5-prove-verify)
+
+`groth16.fullProve` on the V5 circuit + 2.2 GB zkey: peak RSS
+~26 GB, wall ~85 s. **Test gracefully `describe.skip`s** when the
+local zkey is missing (typical fresh checkout — `.zkey` is
+gitignored). CI runners with <32 GB available memory will OOM if
+the zkey IS present; ship the test only if a 48 GB cap is enforced.
+
+The committed sample artifacts (`ceremony/v5_1/proof-sample.json`
++ `public-sample.json`) re-verify against the stub vkey at near-zero
+cost — that's the second test in the suite, runs everywhere. Pre-A6.1
+artifacts at `ceremony/v5-stub/` are archived (V5 layout, 14 signals);
+the V5.1 test consumes `ceremony/v5_1/` exclusively.
+
+### V5.10 — Cross-package isomorphism (#25)
+
+`src/build-witness-v5.ts` and helpers MUST work in a browser bundle
+without polyfills. That means:
+
+- **No `node:crypto`** — use `@noble/hashes/sha2#sha256`.
+- **No `ethers/lib/utils.keccak256`** — use `@noble/hashes/sha3#keccak_256`.
+- **No CJS `require`** — `import { buildPoseidon } from 'circomlibjs'`.
+
+The web-eng vendored copy at `arch-web/sdk/src/witness/v5/` runs a
+SHA-256 fingerprint drift-check against this package; any divergence
+that requires a polyfill is a drift-check failure, not a "patch
+on re-sync" target.
+
+---
+
+## V5.1 — Wallet-bound nullifier amendment (current)
+
+V5.1 layers on top of V5 architecture per
+`docs/superpowers/specs/2026-04-30-wallet-bound-nullifier-amendment.md`
+(v0.6, user-approved). All V5 invariants (§V5.1–§V5.10 above) remain
+in force; the items below are additive. Spec was originally drafted as
+"Issuer-Blind Nullifier" through v0.5 and renamed in v0.6 — older
+commits still reference the original name; both refer to the same
+amendment.
+
+### V5.11 — Public-signal layout grows from 14 → 19 (FROZEN)
+
+V5.1 inherits the V5 14-signal core (slots 0-13) and appends 5 new
+public outputs at slots 14-18:
+
+| Slot | Signal | Source |
+|---|---|---|
+| 14 | `identityFingerprint` | `Poseidon₂(subjectSerialPacked, FINGERPRINT_DOMAIN)` |
+| 15 | `identityCommitment` | `Poseidon₂(subjectSerialPacked, walletSecret)` |
+| 16 | `rotationMode` | 0 = register, 1 = rotateWallet |
+| 17 | `rotationOldCommitment` | prior `identityCommitment` (rotate) / no-op equal to slot 15 (register) |
+| 18 | `rotationNewWallet` | new wallet (rotate) / no-op equal to `msgSender` (register) |
+
+**Slot 2 (`nullifier`) keeps its index but its construction changes**:
+V5 derived it from `Poseidon₂(subjectSerial-derived-secret, ctxHashField)`;
+V5.1 re-derives it as `Poseidon₂(walletSecret, ctxHashField)`. Slot
+position is preserved for forward-compat with V5 calldata indexing,
+but the value differs across the version boundary — fixtures from V5
+will NOT round-trip against the V5.1 stub vkey.
+
+This layout is **FROZEN** per orchestration §1.1. Reorderings or
+insertions are cross-worker breaking changes — the contracts-eng
+calldata indices (`uint[19] publicInputs[14..18]`) and web-eng SDK
+(`packages/sdk/fixtures/v5_1/verification_key.json`) both pin against
+this exact order.
+
+### V5.12 — `walletSecret` private input + mod-p reduction strategy
+
+V5.1 adds **one** new private input: `signal input walletSecret` —
+a single BN254 field element (NOT 2 limbs, NOT a 254-bit mask).
+
+**Why mod-p, not mask:** an earlier draft used `walletSecret = (input & ((1<<254)-1))`
+to keep values in `[0, 2^254)`. **This was unsound**: BN254's scalar
+field `p ≈ 0.756 × 2^254`, so values in `[p, 2^254)` silently wrap
+mod p in-circuit, allowing two distinct secrets `x` and `x+p` to
+collide on `identityCommitment` and `nullifier` while still passing
+`Num2Bits(254)`. **Codex pass 1 [P1] caught this** before T2 shipped.
+
+The correct approach is `walletSecret = u256 mod p_bn254` (canonical
+field element). Lives in `src/wallet-secret.ts:reduceTo254()` (function
+name preserved for backwards compat despite the semantics rename).
+This guarantees no aliasing collisions.
+
+The single-field-element (NOT two limbs) choice trades 2 bits of
+entropy for ~600 fewer constraints + simpler witness shape. Acceptable
+since the input is 256-bit HKDF/Argon2id output (uniformly random).
+
+**Don't change this back to a mask** — soundness loss is real.
+
+### V5.13 — `rotationMode` gate semantics
+
+`rotationMode` is a 1-bit boolean public input. Both modes are
+serviced by the SAME circuit (β-fold per spec §"Architecture decision");
+the mode flag gates branch-specific constraints via `ForceEqualIfEnabled`.
+
+**Register mode (`rotationMode = 0`):**
+- `rotationOldCommitment === identityCommitment` (no-op echo for downstream calldata uniformity).
+- `rotationNewWallet === msgSender` (no-op echo).
+- Both gates fire under `ForceEqualIfEnabled(rotationMode = 0 ? 1 : 0)` — i.e., enabled when mode is 0.
+
+**Rotate mode (`rotationMode = 1`):**
+- `rotationOldCommitment === Poseidon₂(subjectSerialPacked, oldWalletSecret)` — open gate against the prior wallet's secret. **Load-bearing soundness gate**: without it, anyone with cert + on-chain commitment value could craft a valid rotation proof to ANY new wallet. Codex pass 3 [P2] caught this gap in T1; fixed in T3 (+497 constraints).
+- `rotationNewWallet` is unconstrained by the circuit (consumer / contract supplies; the contract enforces `rotationNewWallet == new EOA`).
+- Old-wallet *authority* (i.e., proving the user controls the prior wallet's private key) is contract-side via a typed-message sig over (chainId, registry, oldCommit, newWallet) — NOT the circuit's job.
+
+The contract enforces the `rotationOldCommitment` matches the on-chain
+stored commitment for the caller's identity fingerprint — the circuit
+cannot enforce that (no on-chain state inside R1CS).
+
+### V5.14 — Wallet-uniqueness rule (anti-Sybil invariant)
+
+A user's `identityCommitment` is keyed by `(subjectSerialPacked, walletSecret)`.
+Per ETSI EN 319 412-1 semantics-identifier namespacing (carried forward
+from the V4 person-nullifier amendment), `subjectSerialPacked` is
+stable across cert renewals **inside** the identifier namespace
+(e.g., all `PNOUA-…` certs from any QTSP collapse to the same value).
+
+**Implication**: the same human holding both `PNOUA-…` and `PNODE-…`
+certs (different Member States) produces TWO distinct commitments
++ TWO distinct fingerprints. This is intentional — eIDAS does NOT
+require pan-EU identifier collapse; cross-namespace dedup belongs in
+a separate identity-escrow layer ABOVE QKB.
+
+**Implication**: a single user can derive multiple `walletSecret`s
+from the SAME identity (e.g., HKDF from different EOA keys), each
+producing a different `identityCommitment` for the same `identityFingerprint`.
+Wallet-uniqueness is therefore enforced contract-side by **two
+`nullifierOf` write-once gates** (per spec v0.6 §"Wallet uniqueness
+[v0.5]"):
+- `register()` first-claim path: `require(nullifierOf[msg.sender] == 0)`
+  before writing `nullifierOf[msg.sender] = nul`. Prevents a wallet
+  that already claimed identity X from claiming identity Y.
+- `rotateWallet()`: `require(nullifierOf[newWallet] == 0)`. Prevents
+  rotating to a wallet that already holds another identity.
+
+Repeat-claim paths against the SAME fingerprint go through `register()`'s
+repeat-claim branch (`identityCommitments[fp] != 0`); cross-wallet
+re-association on the same identity goes through `rotateWallet()`. The
+circuit alone does not detect the multi-wallet case — these gates are
+strictly contract-side. `usedFp` is NOT used; uniqueness lives entirely
+on `nullifierOf` + `identityCommitments[fp]` + `identityWallets[fp]`.
+
+### V5.15 — `usedCtx[fp][ctxKey]` is load-bearing for the no-reset stance
+
+Even without an `identityReset()` primitive (V5.1 ships none), the
+nullifier semantics are preserved across `rotateWallet()`: the
+`identityFingerprint` is wallet-independent (`subjectSerialPacked +
+FINGERPRINT_DOMAIN`), so `usedCtx[fp][ctxKey]` flags persist forever
+regardless of how many times the wallet rotates.
+
+This is the anti-Sybil load-bearing invariant. Future V6 reset paths
+(time-locked veto, social recovery via M-of-N guardians) MUST preserve
+`usedCtx[fp][*]` write-once semantics; otherwise a stolen-QES attacker
+who triggers reset can re-claim against a previously-used context.
+Out of scope for A6.1 — flagged in spec v0.5 §"identityReset() — V5
+decision".
+
+### V5.16 — Witness-builder API: `walletSecret` is required
+
+`buildWitnessV5` in `src/build-witness-v5.ts` REQUIRES `walletSecret:
+Buffer` (32 bytes) as a top-level input field. The rotate path requires
+`rotationMode: 1` PLUS three additional inputs (`rotationOldCommitment`,
+`rotationNewWalletAddress`, `oldWalletSecret`) — all three are required
+when `rotationMode === 1`; under register mode (default 0) they default
+to no-op self-equal values inside the witness builder.
+
+```ts
+const witness = await buildWitnessV5({
+  bindingBytes,
+  leafCertDer, leafSpki, intSpki,
+  signedAttrsDer, signedAttrsMdOffset,
+  walletSecret,                            // V5.1 required, 32 bytes
+  // -- rotate path (all three required when rotationMode === 1) --
+  rotationMode: 0,                         // V5.1 optional, default 0 (register)
+  rotationOldCommitment,                   // V5.1 required iff rotationMode=1
+  rotationNewWalletAddress,                // V5.1 required iff rotationMode=1 (NB: input field is …Address; the public-signal slot 18 name in the circuit is `rotationNewWallet`)
+  oldWalletSecret,                         // V5.1 required iff rotationMode=1
+});
+```
+
+**Caller responsibility**: derive `walletSecret` via HKDF over a
+`personal_sign` signature (EOA path) or Argon2id over a passphrase +
+domain-separated salt (SCW path). Per spec v0.6 §"SCW path", the SCW
+derivation is:
+
+```
+salt = SHA-256("qkb-walletsecret-v1" || chainId || smartWalletAddress)
+walletSecret = Argon2id(passphrase, salt, m=64MiB, t=3, p=1, L=32)
+walletSecret_field = bytesToField(walletSecret) % p_bn254
+```
+
+Web-eng owns the production derivation in `@qkb/sdk`; this package's
+`src/wallet-secret.ts` exports `reduceTo254()` + `packFieldToBytes32()`
+for circuit-level test fixtures only. **Both paths MUST produce
+byte-identical commitments** — cross-package fingerprint drift here
+breaks witness exchange.
+
+### V5.17 — Stub ceremony at `ceremony/v5_1/` supersedes `ceremony/v5-stub/`
+
+Task 4 of A6.1 produces V5.1-specific stub artifacts at
+`ceremony/v5_1/`:
+
+- `Groth16VerifierV5_1Stub.sol` — 19-public-input Solidity verifier.
+- `verification_key.json` — V5.1 vkey (no "-stub" suffix per pump
+  contract; web-eng pins to this filename).
+- `proof-sample.json` + `public-sample.json` + `witness-input-sample.json` —
+  the (witness, public, proof) triple for round-trip integration tests.
+- `qkb-v5_1-stub.zkey` — gitignored (~2.1 GB).
+
+The V5 stub at `ceremony/v5-stub/` is left as an archive (different
+circuit, 14 public signals). Downstream consumers (contracts-eng's
+register/rotateWallet, web-eng SDK fixtures) consume `ceremony/v5_1/`
+exclusively after the Task 4 pump.
+
+Reproduce: `bash ceremony/scripts/stub-v5_1.sh` (~20-30 min wall with
+pot23 cached, ~30-50 GB peak RSS).

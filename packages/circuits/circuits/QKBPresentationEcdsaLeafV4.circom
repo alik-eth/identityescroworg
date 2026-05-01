@@ -27,7 +27,7 @@ pragma circom 2.1.9;
 // docs/superpowers/specs/2026-04-24-per-country-registries-design.md §Circuit
 // family).
 
-include "./binding/BindingParseV2Core.circom";
+include "./binding/BindingParseV2CoreLegacy.circom";
 include "./primitives/Sha256Var.circom";
 include "./primitives/Sha256CanonPad.circom";
 include "./primitives/EcdsaP256Verify.circom";
