@@ -3,7 +3,7 @@ pragma solidity 0.8.24;
 
 import { Test, console2 } from "forge-std/Test.sol";
 import { QKBRegistryV5, IGroth16VerifierV5_1 } from "../../src/QKBRegistryV5.sol";
-import { Groth16VerifierV5Stub } from "../../src/Groth16VerifierV5Stub.sol";
+import { Groth16VerifierV5_1Stub } from "../../src/Groth16VerifierV5_1Stub.sol";
 import { P256Verify } from "../../src/libs/P256Verify.sol";
 import { Poseidon } from "../../src/libs/Poseidon.sol";
 
@@ -50,13 +50,20 @@ import { Poseidon } from "../../src/libs/Poseidon.sol";
 ///         the gas snapshot here is the load-bearing measurement.
 contract RealTupleGasSnapshotTest is Test {
     QKBRegistryV5 internal registry;
-    Groth16VerifierV5Stub internal verifier;
+    Groth16VerifierV5_1Stub internal verifier;
 
     address internal admin = address(0xA1);
 
     /// Fixture path roots.
-    string constant PROOF_PATH        = "./packages/contracts/test/fixtures/v5/groth16-real/proof.json";
-    string constant PUBLIC_PATH       = "./packages/contracts/test/fixtures/v5/groth16-real/public.json";
+    /// Proof + public signals come from circuits-eng's V5.1 stub ceremony
+    /// (`fixtures/v51/groth16-real/{proof,public,witness-input}-sample.json`),
+    /// produced against the V5.1 19-public-input main circuit.
+    /// signedAttrs + leafTbs binary fixtures and admin-ecdsa SPKIs are
+    /// REUSED from the V5 location — they're byte-identical between V5 and
+    /// V5.1 (slots 7-13 of the public-signal vector match across both
+    /// fixtures, validated by cross-check against legacy public.json).
+    string constant PROOF_PATH        = "./packages/contracts/test/fixtures/v51/groth16-real/proof-sample.json";
+    string constant PUBLIC_PATH       = "./packages/contracts/test/fixtures/v51/groth16-real/public-sample.json";
     string constant SIGNED_ATTRS_PATH = "./packages/contracts/test/fixtures/v5/groth16-real/signedAttrs.bin";
     string constant LEAF_TBS_PATH     = "./packages/contracts/test/fixtures/v5/groth16-real/leafTbs.bin";
     string constant LEAF_SPKI_PATH    = "./packages/contracts/test/fixtures/v5/admin-ecdsa/leaf-spki.bin";
@@ -72,11 +79,13 @@ contract RealTupleGasSnapshotTest is Test {
 
     /// Real (a, b, c, input) tuple — populated in setUp() from the pumped
     /// fixtures. Stored as state so each test can use them without
-    /// re-parsing JSON (vm.parseJson* are not free).
+    /// re-parsing JSON (vm.parseJson* are not free). 19 public inputs
+    /// per V5.1 spec / orchestration §1.1 (slots 14-18 are the V5.1
+    /// wallet-bound nullifier additions).
     uint256[2] internal pA;
     uint256[2][2] internal pB;
     uint256[2] internal pC;
-    uint256[14] internal pubInputs;
+    uint256[19] internal pubInputs;
 
     bytes internal leafSpki;
     bytes internal intSpki;
@@ -88,18 +97,12 @@ contract RealTupleGasSnapshotTest is Test {
 
     address internal constant P256_PRECOMPILE = address(0x0000000000000000000000000000000000000100);
 
-    /// @dev Whole suite skipped until lead pumps V5.1 stub-ceremony fixtures.
-    ///      The legacy fixtures at fixtures/v5/groth16-real/ are 14-field
-    ///      V5 outputs, incompatible with the V5.1 19-field verifier.
-    ///      Lead's plan §5 pumps `Groth16VerifierV5_1Stub.sol` +
-    ///      `verification_key.json` + `(proof, public, witness-input).json`
-    ///      from circuits-eng's V5.1 stub ceremony into this worktree.
-    ///      When those land:
-    ///        - swap fixture paths to fixtures/v51/groth16-real/
-    ///        - bump pubInputs to uint256[19]
-    ///        - update sanity-cross-check signal indices per orchestration §1.1
-    ///        - drop this skip
-    bool internal constant SKIP_PENDING_V51_FIXTURES = true;
+    /// @dev V5.1 stub-ceremony fixtures landed; suite is live.
+    ///      Sentinel kept (false) for one release as a documentation marker
+    ///      so historic git blame ties the V5→V5.1 fixture transition to a
+    ///      single named flag. Drop after Phase 2 ceremony lands the real
+    ///      production verifier.
+    bool internal constant SKIP_PENDING_V51_FIXTURES = false;
 
     function setUp() public {
         if (SKIP_PENDING_V51_FIXTURES) return; // tests inside also vm.skip(true) for clarity in -vv output
@@ -124,8 +127,8 @@ contract RealTupleGasSnapshotTest is Test {
         string memory publicRaw = vm.readFile(PUBLIC_PATH);
         // public.json is a top-level array — `.[i]` indexing per forge-std.
         uint256[] memory pub = vm.parseJsonUintArray(publicRaw, "");
-        require(pub.length == 14, "public.json length != 14");
-        for (uint256 i = 0; i < 14; i++) pubInputs[i] = pub[i];
+        require(pub.length == 19, "public.json length != 19");
+        for (uint256 i = 0; i < 19; i++) pubInputs[i] = pub[i];
 
         // -------- 2. Load matched calldata bytes --------
         signedAttrs = vm.readFileBinary(SIGNED_ATTRS_PATH);
@@ -148,7 +151,7 @@ contract RealTupleGasSnapshotTest is Test {
         require(uint256(ltbsHash) & ((uint256(1) << 128) - 1) == pubInputs[10], "ltbs lo drift");
 
         // -------- 4. Deploy registry wired to the REAL stub verifier --------
-        verifier = new Groth16VerifierV5Stub();
+        verifier = new Groth16VerifierV5_1Stub();
 
         // Warp to a timestamp that puts the proof's sig.timestamp within
         // [block.timestamp - MAX_BINDING_AGE, block.timestamp]. The
@@ -314,34 +317,35 @@ contract RealTupleGasSnapshotTest is Test {
 
     /* ------------ Helpers ------------ */
 
-    function _publicSignalsStruct() internal view returns (QKBRegistryV5.PublicSignals memory) {
-        // V5.1 19-field shape. The legacy `pubInputs` array (sized for V5's
-        // 14-field stub fixture) is read for slots [0..13]; slots [14..18]
-        // get zero-fill placeholders since this test suite is currently
-        // SKIP_PENDING_V51_FIXTURES — the real V5.1 fixtures will populate
-        // them when circuits-eng's stub ceremony lands.
-        return QKBRegistryV5.PublicSignals({
-            msgSender:             pubInputs[0],
-            timestamp:             pubInputs[1],
-            nullifier:             pubInputs[2],
-            ctxHashHi:             pubInputs[3],
-            ctxHashLo:             pubInputs[4],
-            bindingHashHi:         pubInputs[5],
-            bindingHashLo:         pubInputs[6],
-            signedAttrsHashHi:     pubInputs[7],
-            signedAttrsHashLo:     pubInputs[8],
-            leafTbsHashHi:         pubInputs[9],
-            leafTbsHashLo:         pubInputs[10],
-            policyLeafHash:        pubInputs[11],
-            leafSpkiCommit:        pubInputs[12],
-            intSpkiCommit:         pubInputs[13],
-            // V5.1 placeholders — populated when V5.1 fixtures arrive.
-            identityFingerprint:   0,
-            identityCommitment:    0,
-            rotationMode:          0,
-            rotationOldCommitment: 0,
-            rotationNewWallet:     pubInputs[0]  // = msgSender register-no-op bind
-        });
+    function _publicSignalsStruct() internal view returns (QKBRegistryV5.PublicSignals memory sig) {
+        // V5.1 19-field shape. All slots read from the V5.1 ceremony
+        // public-sample.json — slots 14-18 are the wallet-bound nullifier
+        // additions per orchestration §1.1.
+        //
+        // Field-by-field assignment (instead of struct-literal `return ({...})`)
+        // is deliberate: 19 storage SLOADs in one struct expression overflow
+        // the Yul-IR stack ("Cannot swap Variable _3 with Variable _19: too
+        // deep in the stack by 1 slots"). Splitting into sequential mstore
+        // emissions lets the optimizer reuse stack slots between fields.
+        sig.msgSender             = pubInputs[0];
+        sig.timestamp             = pubInputs[1];
+        sig.nullifier             = pubInputs[2];
+        sig.ctxHashHi             = pubInputs[3];
+        sig.ctxHashLo             = pubInputs[4];
+        sig.bindingHashHi         = pubInputs[5];
+        sig.bindingHashLo         = pubInputs[6];
+        sig.signedAttrsHashHi     = pubInputs[7];
+        sig.signedAttrsHashLo     = pubInputs[8];
+        sig.leafTbsHashHi         = pubInputs[9];
+        sig.leafTbsHashLo         = pubInputs[10];
+        sig.policyLeafHash        = pubInputs[11];
+        sig.leafSpkiCommit        = pubInputs[12];
+        sig.intSpkiCommit         = pubInputs[13];
+        sig.identityFingerprint   = pubInputs[14];
+        sig.identityCommitment    = pubInputs[15];
+        sig.rotationMode          = pubInputs[16];
+        sig.rotationOldCommitment = pubInputs[17];
+        sig.rotationNewWallet     = pubInputs[18];
     }
 
     /// Climb a 16-deep Poseidon tree from a leaf at index 0 (left at every

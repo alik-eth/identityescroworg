@@ -1,17 +1,38 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity 0.8.24;
 
-/// @title  Groth16VerifierV5_1Placeholder — accepts all proofs.
-/// @notice TEMPORARY placeholder while circuits-eng's V5.1 stub ceremony
-///         is in flight. Matches the snarkjs-generated 19-public-input
-///         verifier ABI so the registry compiles + tests can exercise the
-///         V5.1 register/rotateWallet flows against synthetic public
-///         signals.
+/// @title  Groth16VerifierV5_1Placeholder — accept-all gate for the
+///         contracts package's SYNTHETIC unit-test surface. NOT for
+///         production. Production uses a real ceremonied Groth16 verifier
+///         deployed separately and passed via GROTH16_VERIFIER_ADDR.
+/// @notice Three Groth16 verifier roles coexist intentionally:
+///           - This placeholder (always-true, 19-input shape) — wired
+///             into the synthetic unit tests (`QKBRegistryV5.t.sol`,
+///             `QKBRegistryV5.register.t.sol`, `QKBRegistryV5_1.t.sol`,
+///             `IdentityEscrowNFT.v5.t.sol`, `DeployV5.fork.t.sol`),
+///             which exercise register/rotateWallet flows against
+///             SYNTHETIC public signals computed off-circuit. Those
+///             signals don't satisfy the real BN254 pairing equation;
+///             accept-all is the only practical gate that keeps the
+///             unit-test surface focused on the contract logic the
+///             tests are actually verifying (mappings, gates,
+///             reverts, Merkle climbs).
+///           - `Groth16VerifierV5_1Stub.sol` (real BN254 pairing,
+///             snarkjs-generated from circuits-eng's V5.1 single-
+///             contributor STUB ceremony) — wired into the real-tuple
+///             integration test (`RealTupleGasSnapshot.t.sol`) for
+///             real-pairing gas measurement. Same shape as production
+///             but different verification key, so production proofs
+///             would reject under the stub and vice versa.
+///           - Production verifier (deployed separately after the
+///             multi-contributor Phase-2 ceremony at circuits-eng §11)
+///             — wired by setting GROTH16_VERIFIER_ADDR before running
+///             DeployV5.s.sol.
 ///
-///         Lead will pump `Groth16VerifierV5_1Stub.sol` (real ceremony
-///         output, 19-field public-input array) into this same `src/`
-///         directory; the registry's import flips one line, and this
-///         placeholder file is deleted in the same commit.
+///         The Deploy script (DeployV5.s.sol) uses THIS placeholder
+///         (always-true) ONLY when GROTH16_VERIFIER_ADDR is unset —
+///         dev/anvil convenience. Production deploys MUST pass
+///         GROTH16_VERIFIER_ADDR pointing at the real ceremonied verifier.
 ///
 /// @dev    DO NOT use in production deploys. The Deploy script logs a
 ///         loud warning when the placeholder is wired in, mirroring the
