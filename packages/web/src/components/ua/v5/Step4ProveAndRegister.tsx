@@ -25,9 +25,11 @@ import {
 } from '../../../lib/uaProofPipelineV5';
 import {
   deriveWalletSecretEoa,
+  deriveWalletSecretScw,
   isSmartContractWallet,
   type GetCodeClient,
 } from '../../../lib/walletSecret';
+import { ScwPassphraseModal } from './ScwPassphraseModal';
 
 export interface Step4Props {
   p7s: Uint8Array;
@@ -93,6 +95,56 @@ export function Step4ProveAndRegister({ p7s, bindingBytes, onBack }: Step4Props)
     null,
   );
 
+  // SCW path state. When SCW is detected, we open the passphrase modal
+  // and stash the subjectSerial bytes so the modal's onSubmit can derive
+  // the wallet-secret without re-parsing the .p7s.
+  const [scwModalOpen, setScwModalOpen] = useState(false);
+  const [pendingSubjectSerial, setPendingSubjectSerial] = useState<Uint8Array | null>(null);
+  const [scwDeriving, setScwDeriving] = useState(false);
+
+  /**
+   * Run the pipeline + write tx given an already-derived walletSecret.
+   * Shared between EOA and SCW paths so the post-derivation logic stays
+   * in one place.
+   */
+  const runPipelineAndSubmit = async (walletSecret: Uint8Array | undefined) => {
+    const { registerArgs } = await runV5Pipeline(p7s, {
+      useMockProver,
+      bindingBytes,
+      ...(walletSecret !== undefined ? { walletSecret } : {}),
+      onProgress: setStage,
+    });
+    setPipelineDone(true);
+    if (!v5Deployed) {
+      setSubmitSkippedReason(t('mintV5.awaitingDeploy'));
+      return;
+    }
+    if (useMockProver) {
+      setSubmitSkippedReason(
+        'Mock prover used — submit skipped to avoid contract revert.',
+      );
+      return;
+    }
+    writeContract({
+      address: dep!.registryV5,
+      abi: qkbRegistryV5_1Abi,
+      functionName: 'register',
+      args: [
+        registerArgs.proof,
+        registerArgs.sig,
+        registerArgs.leafSpki,
+        registerArgs.intSpki,
+        registerArgs.signedAttrs,
+        registerArgs.leafSig,
+        registerArgs.intSig,
+        registerArgs.trustMerklePath,
+        registerArgs.trustMerklePathBits,
+        registerArgs.policyMerklePath,
+        registerArgs.policyMerklePathBits,
+      ],
+    });
+  };
+
   const onProveAndRegister = async () => {
     setPipelineError(null);
     setPipelineDone(false);
@@ -109,20 +161,6 @@ export function Step4ProveAndRegister({ p7s, bindingBytes, onBack }: Step4Props)
         if (!address) {
           throw new Error(t('registerV5.step4.walletNotConnected'));
         }
-        // SCW detection — Task 5 adds the Argon2id passphrase modal;
-        // for now surface an informative error so the user knows to
-        // switch to an EOA. Cast to GetCodeClient: viem's PublicClient
-        // is structurally compatible but its exact return type differs
-        // from the minimal interface (Hex vs `0x${string}`).
-        if (publicClient) {
-          const scw = await isSmartContractWallet(
-            publicClient as unknown as GetCodeClient,
-            address,
-          );
-          if (scw) {
-            throw new Error(t('registerV5.step4.scwNotYetSupported'));
-          }
-        }
         // Quick parse to extract subjectSerial for HKDF signing.
         // The full parse happens again inside runV5Pipeline; this
         // pre-parse is fast (~1 ms) and keeps the derivation call
@@ -133,52 +171,67 @@ export function Step4ProveAndRegister({ p7s, bindingBytes, onBack }: Step4Props)
           serial.offset,
           serial.offset + serial.length,
         );
+
+        // SCW detection. If SCW, open passphrase modal and pause here —
+        // the modal's onSubmit handler resumes the flow with the
+        // Argon2id-derived secret. EOA path continues inline.
+        if (publicClient) {
+          const scw = await isSmartContractWallet(
+            publicClient as unknown as GetCodeClient,
+            address,
+          );
+          if (scw) {
+            setPendingSubjectSerial(subjectSerialBytes);
+            setScwModalOpen(true);
+            return;
+          }
+        }
         walletSecret = await deriveWalletSecretEoa(walletClient, subjectSerialBytes);
       }
 
-      const { registerArgs } = await runV5Pipeline(p7s, {
-        useMockProver,
-        bindingBytes,
-        // exactOptionalPropertyTypes: only spread when defined so we
-        // don't pass explicit `undefined` for an optional field.
-        ...(walletSecret !== undefined ? { walletSecret } : {}),
-        onProgress: setStage,
-      });
-      setPipelineDone(true);
-      // Submit only when V5 registry is actually deployed AND we trust
-      // the pipeline output (real prover). Mock-prover output gets
-      // surfaced for inspection but never sent to a live contract.
-      if (!v5Deployed) {
-        setSubmitSkippedReason(t('mintV5.awaitingDeploy'));
-        return;
-      }
-      if (useMockProver) {
-        setSubmitSkippedReason(
-          'Mock prover used — submit skipped to avoid contract revert.',
-        );
-        return;
-      }
-      writeContract({
-        address: dep!.registryV5,
-        abi: qkbRegistryV5_1Abi,
-        functionName: 'register',
-        args: [
-          registerArgs.proof,
-          registerArgs.sig,
-          registerArgs.leafSpki,
-          registerArgs.intSpki,
-          registerArgs.signedAttrs,
-          registerArgs.leafSig,
-          registerArgs.intSig,
-          registerArgs.trustMerklePath,
-          registerArgs.trustMerklePathBits,
-          registerArgs.policyMerklePath,
-          registerArgs.policyMerklePathBits,
-        ],
-      });
+      // Single submit path for EOA + mock — SCW path returned early above
+      // and resumes through onScwPassphraseSubmit.
+      await runPipelineAndSubmit(walletSecret);
     } catch (err) {
       setPipelineError(err instanceof Error ? err.message : String(err));
     }
+  };
+
+  /** Tear down all SCW-related state. Called from every exit branch
+   *  (success, cancel, guard-fail, derive-error) so we never leave the
+   *  modal mounted or `pendingSubjectSerial` orphaned across a retry. */
+  const resetScwState = () => {
+    setScwModalOpen(false);
+    setPendingSubjectSerial(null);
+    setScwDeriving(false);
+  };
+
+  /**
+   * Modal callback: user has entered a passphrase that meets the strength
+   * threshold. Run Argon2id to derive the SCW wallet-secret, close modal,
+   * resume the pipeline. Errors are surfaced as inline pipeline-error.
+   */
+  const onScwPassphraseSubmit = async (passphrase: string) => {
+    if (!address || !pendingSubjectSerial) {
+      setPipelineError(t('registerV5.step4.walletNotConnected'));
+      resetScwState();
+      return;
+    }
+    setScwDeriving(true);
+    try {
+      const secret = await deriveWalletSecretScw(passphrase, address);
+      resetScwState();
+      await runPipelineAndSubmit(secret);
+    } catch (err) {
+      resetScwState();
+      setPipelineError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  /** Modal cancel — user opted to switch to an EOA instead. */
+  const onScwPassphraseCancel = () => {
+    resetScwState();
+    setPipelineError(t('scwPassphrase.optedOut'));
   };
 
   // On successful registration tx, navigate to mint flow.
@@ -260,6 +313,18 @@ export function Step4ProveAndRegister({ p7s, bindingBytes, onBack }: Step4Props)
       >
         {t('registerV5.step4.back')}
       </button>
+      {/* SCW passphrase modal — only mounted when we've detected an SCW
+          and need a passphrase to derive the wallet-secret via Argon2id.
+          Hidden when `open=false` (no DOM cost on the EOA path). */}
+      {address && (
+        <ScwPassphraseModal
+          open={scwModalOpen}
+          walletAddress={address}
+          onSubmit={onScwPassphraseSubmit}
+          onCancel={onScwPassphraseCancel}
+          isDeriving={scwDeriving}
+        />
+      )}
     </section>
   );
 }

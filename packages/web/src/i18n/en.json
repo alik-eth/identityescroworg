@@ -88,6 +88,22 @@
     "awaitingDeploy": "Awaiting V5 registry deployment. Mint becomes available once orchestration §9.4 (Base Sepolia E2E) closes.",
     "awaitingRegistration": "Awaiting registration"
   },
+  "scwPassphrase": {
+    "title": "Smart contract wallet — passphrase required",
+    "body": "Smart contract wallets cannot use the deterministic personal_sign derivation (their on-chain signature logic can change between sessions). We instead derive your identity secret from a passphrase you choose, using Argon2id.",
+    "walletLabel": "Connected SCW:",
+    "warningTitle": "🚨 If you lose this passphrase, you cannot recover your identity",
+    "warningBody": "Your passphrase is the only protection against loss of your verified identity. If you forget it, no Diia QES can recover the secret. Store it offline (paper, hardware password manager) before continuing.",
+    "inputLabel": "Passphrase",
+    "reveal": "Show",
+    "hide": "Hide",
+    "computing": "Estimating strength…",
+    "strength": "Strength: ~{{bits}} bits guess-resistance (target: ≥{{target}})",
+    "deriving": "Deriving identity secret via Argon2id (this takes a few seconds)…",
+    "submit": "Use this passphrase",
+    "useEoaInstead": "Or: connect an EOA wallet (recommended for V5 alpha)",
+    "optedOut": "SCW path cancelled — please connect an EOA wallet (MetaMask, Rabby, Frame, etc.) and retry."
+  },
   "accountRotate": {
     "title": "Rotate to a new wallet",
     "lede": "Bind your verified identity to a different wallet without re-running the Diia signature flow against your old wallet. The old wallet authorises the rotation; the new wallet takes over going forward.",
