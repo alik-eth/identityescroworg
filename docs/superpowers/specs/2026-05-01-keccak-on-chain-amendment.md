@@ -1,6 +1,6 @@
 # Keccak-On-Chain — V5.2 Cross-Chain Portability Amendment
 
-> **Status:** Draft v0.3 — pending team-lead routing to contracts-eng for review, then user-review gate, then implementation phase.
+> **Status:** Draft v0.4 — incorporates contracts-eng v0.4 review (§3.2 rotateWallet defense-in-depth + §5 P-256 chain-dependency clarification + Option A/slot-reshuffle/Yul-stack-pressure endorsements). Pending user-review gate, then implementation phase.
 >
 > **Date:** 2026-05-01.
 >
@@ -24,6 +24,10 @@
 >   (2) Open Question 6 (browser bench follow-up) updated: V5.2 zkey size estimated at ~2.02 GB (using -200K constraint estimate); -100K conservative case yields ~2.07 GB; both within ±50 MB of V8 cap; Chrome viability genuinely uncertain pre-measurement; Firefox A6.4 empirical (93s wall, ~20 GB RAM, end-to-end success on V5.1) noted.
 >   (3) EVM soundness formula consolidated to `address(uint160(uint256(keccak256(uncompressedPk)))) == msg.sender` (Solidity's `uint160` cast naturally takes the low 160 bits) — the redundant `[12..32]` slice removed.
 >   (4) Stale `v0.1` labels in §Construction body and §End-of-spec marker updated.
+> - v0.4 (2026-05-01 ~16:00 UTC): contracts-eng v0.4 independent review (substantively endorses Option A + clean slot reshuffle + -200K constraint claim after Secp256k1PkMatch.circom:1-65 read-through; finds 2 substantive items I missed):
+>   (1) **§3.2 rotateWallet defense-in-depth (P2)**: V5.1's in-circuit keccak implicitly bound the binding's pk to the OLD wallet (msgSender) under rotate mode. V5.2 drops that. The auth sig from oldWallet (already enforced contract-side via the typed-message scheme) is load-bearing, so this is technically unchanged — but losing defense-in-depth is real. Contracts-eng recommends adding `derivedAddr == identityWallets[fp]` check inside `rotateWallet()` after the contract reconstructs the address from `bindingPkX/Y` limbs (~150 gas, single line). Spec now folds this into §"Construction delta — Contract changes" + §"Cost estimate".
+>   (2) **§5 cross-chain clarification (informational)**: P-256 verification (RIP-7212 / EIP-7951) is the OTHER EVM-portability dependency beyond keccak — V5.2 removes 1 of 3 chain-portability assumptions (keccak), NOT 1 of 1. The other two remain (Groth16-on-BN254 verifier; P-256 ECDSA primitive for the leaf-cert signature in §6.8 of the V5 architecture). Spec's cross-chain table now annotates this explicitly. Post-Pectra status: P-256 is on mainnet, Base, OP; **NOT yet on Arbitrum or Polygon zkEVM** (corrected from v0.3's "partial on zkEVM"). Spec's table updated.
+>   Plus contracts-eng's v0.4 endorsements (informational — fold into implementation phase): Option A (4 × 128-bit Hi/Lo limbs) over Option B unconditional; clean V5.1 → V5.2 slot reshuffle (vs hard-zero placeholder at slot 0); Yul stack pressure forecast — same fix pattern as V5.1's commit `04b4a71` (verifier-side public-input array unpacking; mention in implementation T2 commit message).
 
 ## Motivation — chain-binding the V5.1 design accidentally inherits
 
@@ -264,24 +268,27 @@ In practice, EVM-family chains (mainnet, all OP-stack rollups, Polygon zkEVM, zk
 
 ## Cross-chain portability claim — bounded
 
+V5.2 removes **1 of 3 EVM-portability assumptions** that V5.1 baked into the circuit (the in-circuit keccak gate). The other two — Groth16-on-BN254 verifier, and EIP-7212-style P-256 ECDSA verification — are NOT addressed by V5.2 and remain chain-portability gates in their own right. V5.2 is therefore a STEP TOWARD cross-chain portability, not a complete delivery.
+
 V5.2 zkey deployable on any chain providing ALL of:
 
 1. **Groth16 verifier on BN254**. Native or library: Ethereum (precompiles 0x06, 0x07, 0x08), Solana (Light Protocol's groth16-solana), Cosmos (cosmwasm-groth16 / `arkworks`-via-CosmWasm), Aptos (`aptos_std::groth16_algebra`), Sui (`sui::groth16`), Polygon zkEVM, zkSync, Linea (all EVM-equivalent).
 
-2. **Keccak256 primitive in contract logic**. Native opcode (Ethereum) or syscall (Solana `keccak`, Aptos `aptos_hash`, Sui `hash`) or std-lib (Cosmos cosmwasm).
+2. **Keccak256 primitive in contract logic**. Native opcode (Ethereum) or syscall (Solana `keccak`, Aptos `aptos_hash`, Sui `hash`) or std-lib (Cosmos cosmwasm). **THIS is the assumption V5.2 unlocks** by moving the gate from circuit (where it was hard-coded) to contract (where it becomes opt-in per host chain).
 
-3. **EIP-7212-style P256Verify or equivalent secp256r1 ECDSA primitive**. This is the OTHER chain-binding constraint inherited from V5 architecture (§6.8 leaf-cert ECDSA-P256 verification, separate from the wallet-pubkey gate). NOT addressed by V5.2. Currently implemented on Ethereum mainnet (post-Pectra), Optimism, Base, Arbitrum, all OP-stack rollups; partially on Polygon zkEVM; NOT yet on Solana (though `secp256r1` syscall is available), Cosmos, Aptos (`aptos_std::secp256r1` exists but is not P256Verify-compatible), Sui.
+3. **EIP-7212-style P256Verify or equivalent secp256r1 ECDSA primitive**. This is the OTHER chain-binding constraint inherited from V5 architecture (§6.8 leaf-cert ECDSA-P256 verification, separate from the wallet-pubkey gate). NOT addressed by V5.2. Post-Pectra status (corrected from v0.3 per contracts-eng v0.4 review): implemented on Ethereum mainnet, Base, Optimism (and other OP-stack chains where the precompile is included in the L1-sequenced opcodes); **NOT YET on Arbitrum, NOT YET on Polygon zkEVM** (v0.3 said "partial" for zkEVM and listed Arbitrum as ✓; both were inaccurate — see contracts-eng v0.4 §5). Solana has `secp256r1` syscall, Cosmos / Aptos / Sui need work for P256Verify-compatible primitives.
 
 4. **EVM-style secp256k1+keccak caller-auth** (FOR EVM CHAINS ONLY). Non-EVM chains need a custom auth shim — see Soundness §"non-EVM chains require additional design".
 
-**Practical scope of "cross-chain" today**:
+**Practical scope of "cross-chain" today** (table corrected per contracts-eng v0.4 §5 review):
 
 | Chain family | Groth16 | Keccak | P256 | secp256k1 caller-auth | V5.2 deployable? |
 |---|---|---|---|---|---|
-| Ethereum mainnet | ✓ precompile | ✓ opcode | ✓ Pectra | ✓ native | **YES** |
-| Optimism / Base / Arbitrum / all OP-stack | ✓ | ✓ | ✓ | ✓ | **YES** |
-| Polygon zkEVM | ✓ | ✓ | partial | ✓ | conditional on P256 |
-| zkSync / Linea / BSC / Avalanche-C | ✓ | ✓ | varies | ✓ | conditional on P256 |
+| Ethereum mainnet (post-Pectra) | ✓ precompile | ✓ opcode | ✓ | ✓ native | **YES** |
+| Base, Optimism (OP-stack with P256 precompile) | ✓ | ✓ | ✓ | ✓ | **YES** |
+| Arbitrum | ✓ | ✓ | **✗ not yet** | ✓ | **NO until P256 lands** |
+| Polygon zkEVM | ✓ | ✓ | **✗ not yet** | ✓ | **NO until P256 lands** |
+| zkSync / Linea / BSC / Avalanche-C | ✓ | ✓ | varies (check before deploy) | ✓ | conditional on P256 status |
 | Solana | ✓ Light Protocol | ✓ syscall | ✓ secp256r1 syscall | ✗ ed25519 | needs auth shim |
 | Cosmos / cosmwasm | ✓ | ✓ | needs work | ✗ bech32 | needs auth shim |
 | Aptos / Sui | ✓ | ✓ | needs work | ✗ ed25519 | needs auth shim |
@@ -293,7 +300,7 @@ The **immediate, free win** is "EVM-family with P256 support" — currently main
 | Worker | Scope | Estimate |
 |---|---|---|
 | circuits-eng | Drop §6.8 main primitives, retain SEC1 0x04 prefix check (~3 constraints), add 4-signal pkX/Y `signal input` packing with `Bits2Num` constraints, regenerate stub on pot22, re-run V5 §6.10 E2E suite | ~1.5 day |
-| contracts-eng | Add keccak gate to `register()`: reconstruct 64-byte uncompressed pk from 4 public-signal limbs, `keccak256(pk)[12..32] == msg.sender`. Add register-mode no-op gate `rotationNewWallet == msg.sender` (V5.1 had this in-circuit; V5.2 moves on-chain). `rotateWallet()` already enforces `rotationNewWallet == msg.sender` (no change there per V5.1's existing contract logic). Update Groth16VerifierV5_2Stub.sol's public-input array (22-element). Gas snapshot. | ~1 day |
+| contracts-eng | Add keccak gate to `register()`: reconstruct 64-byte uncompressed pk from 4 public-signal limbs, `address(uint160(uint256(keccak256(pk)))) == msg.sender`. Add register-mode no-op gate `rotationNewWallet == msg.sender` (V5.1 had this in-circuit; V5.2 moves on-chain). Add `rotateWallet()` defense-in-depth check: after computing `derivedAddr` from `bindingPkX/Y` limbs, assert `derivedAddr == identityWallets[fp]` — closes the regression where V5.1's in-circuit keccak implicitly tied binding pk to OLD wallet under rotate mode. ~150 gas, single line per contracts-eng v0.4 review. The auth sig from oldWallet (via the typed-message scheme) remains the load-bearing rotate-mode check; this is defense-in-depth. Update Groth16VerifierV5_2Stub.sol's public-input array (22-element). Forecast: Yul stack-pressure on the 22-element verifier follows V5.1's commit `04b4a71` fix pattern (verifier-side public-input array unpacking). Gas snapshot. | ~1 day |
 | web-eng | Drop keccak/pkBytes from witness builder; update `@qkb/sdk` v5_2 fixtures; update register() ABI | ~0.5 day |
 | Integration | Cross-package E2E; new stub ceremony pump; update CI gates | ~1 day |
 | **Total** | | **~3-5 days** |
@@ -326,4 +333,4 @@ These are flagged for the contract-review pass before user gate:
 
 ---
 
-End of v0.3 spec. Awaiting team-lead routing to contracts-eng for v0.4 review pass.
+End of v0.4 spec. Contracts-eng v0.4 review folded in. Awaiting user-review gate, then implementation phase fires (circuits-eng + contracts-eng + web-eng in parallel per §"Cost estimate").
