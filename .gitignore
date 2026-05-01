@@ -67,3 +67,10 @@ fixtures/qes/*.p7s
 # committed; the sk-bearing .keys.json files stay local.
 fixtures/qie/agents/*.keys.json
 !fixtures/qie/agents/*.keys.pub.json
+
+# Rejected exploratory drafts (Codex-generated, founder rejected
+# pre-recruitment 2026-05-01). Block at the dated-prefix level so any
+# future paste-in lands ignored by default.
+docs/2026-05-01-*.md
+docs/ceremony/2026-05-01-*.md
+docs/marketing/2026-05-01-*.md
