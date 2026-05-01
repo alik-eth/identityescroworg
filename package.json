@@ -5,7 +5,7 @@
   "description": "QKB + QIE — Qualified Key Binding with Qualified Identity Escrow. Phase 1: QKB core.",
   "packageManager": "pnpm@9.1.0",
   "engines": {
-    "node": ">=20.11.0 <21"
+    "node": ">=20.19.0"
   },
   "scripts": {
     "lint": "biome check .",
