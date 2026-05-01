@@ -1,0 +1,40 @@
+# Fly.io app config — zk-QES V5 Phase 2 ceremony contributor.
+#
+# BEFORE USE: replace "your-handle" in the `app` field with your actual handle.
+#
+# This is a one-shot job runner, not a persistent service.
+# There is no [http_service].  The machine runs, contributes, exits.
+# After your round completes, destroy the app:
+#
+#   flyctl apps destroy qkb-ceremony-<your-handle> --yes
+#
+# See README.md for the full contributor workflow.
+
+app = "qkb-ceremony-your-handle"
+primary_region = "fra"
+
+# One process group — the contribution job.
+# The command must match the ENTRYPOINT in the Dockerfile; explicit here for
+# clarity and to prevent Fly from injecting a default CMD.
+[processes]
+  contribute = "/entrypoint.sh"
+
+# performance-cpu-4x (4 dedicated vCPUs) with 32 GB RAM.
+# At the empirical ~4.0M-constraint envelope, snarkjs zkey contribute peaks
+# at ~30 GB resident.  16 GB (the max for performance-cpu-2x) would OOM.
+# performance-cpu-4x supports 8 GB–32 GB; we request the ceiling.
+[[vm]]
+  size       = "performance-cpu-4x"
+  memory     = "32gb"
+  processes  = ["contribute"]
+
+# Ephemeral scratch volume.  zkeys are ~2.2 GB each; three files land here
+# simultaneously (prev.zkey + circuit.r1cs + pot.ptau) before out.zkey is
+# written.  60 GB covers peak usage (~7 GB) with ample headroom.
+# initial_size triggers automatic volume creation on first deploy.
+# The volume is destroyed with the app.
+[[mounts]]
+  source       = "ceremony_scratch"
+  destination  = "/data"
+  initial_size = "60gb"
+  processes    = ["contribute"]
