@@ -55,7 +55,7 @@ function writeCache(d: ChainDeployment): void {
  *
  * Precedence:
  *   1. `localStorage["qie.demo.local.json"]` if present and parseable.
- *   2. `GET /local.json` served by vite / fly — written by dev-chain.sh.
+ *   2. `GET /local.json` served by vite / static host — written by dev-chain.sh.
  *   3. `missing` — UI should render an "Initialize chain" CTA.
  */
 export function useChainDeployment(): UseChainDeploymentReturn {

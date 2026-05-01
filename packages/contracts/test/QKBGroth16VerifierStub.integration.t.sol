@@ -202,7 +202,7 @@ contract QKBGroth16VerifierStubIntegrationTest is Test {
     //    value (the pumped leaf carries a real declHash; keep the
     //    whitelist predicate true). This is the lowest-level end-to-end
     //    test we can run pre-registry-integration (which follows once the
-    //    Fly ceremony verifiers land).
+    //    real ceremony verifiers land).
     // -------------------------------------------------------------------
 
     /// @dev Build LeafInputs from the pumped 13-signal public array,

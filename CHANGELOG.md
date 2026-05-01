@@ -25,7 +25,7 @@ Sepolia.
 - Full off-circuit X.509 + CAdES + BindingParseFull parsing; in-circuit
   leaf signature + subject SPKI + declaration-hash + Merkle membership
   check (depth 16).
-- Groth16 ceremony on Fly.io performance-10x (peak ~28 GB RAM, ~4 h);
+- Groth16 ceremony on a 40 GB host (peak ~28 GB RAM, ~4 h);
   Powers of Tau 2^23 (Hermez), Phase-2 contribution, `.zkey` +
   `Verifier.sol` emitted.
 - Artifacts hosted on Cloudflare R2 at `prove.identityescrow.org`
@@ -60,8 +60,8 @@ Sepolia.
   - `QKBGroth16Verifier`: [`0xB85ed0636c0b27A51773Fc15C50706bBB915e56f`](https://sepolia.etherscan.io/address/0xB85ed0636c0b27A51773Fc15C50706bBB915e56f)
   - Initial trusted-list root: `0x2aabe358…ff0228f` (synthetic flattener
     fixture; replaced in Phase 2 via `updateTrustedListRoot()`).
-- **Fly.io** — web SPA at https://identityescrow.fly.dev/ + custom
-  domain `identityescrow.org` (cert + DNS pending propagation).
+- **Web hosting** — static SPA published at custom domain
+  `identityescrow.org` (host TBD).
 
 ### Known Phase-1 debt (resolved in Phase 2 Sprint 0)
 

@@ -4478,7 +4478,7 @@ git commit -m "chore(deploy): Base mainnet — verifiers + registry + NFT"
 
 ---
 
-## M9 — Frontend repoint to Base + Fly redeploy
+## M9 — Frontend repoint to Base + static-host redeploy
 
 ### Task 38: Frontend to Base default + smoke on Sepolia retained
 
@@ -4524,57 +4524,42 @@ git commit -m "feat(web): default chain to Base mainnet (Sepolia via VITE_CHAIN=
 
 ---
 
-### Task 39: Fly.io redeploy + DNS confirm
+### Task 39: Static-host redeploy + DNS confirm
 
-**Files:**
-- Modify: `packages/web/fly.toml` (if needed)
+**Files:** host-specific config (decision pending)
 
 **Verification:** `https://identityescrow.org/` resolves to the new build with Base default
 
-- [ ] **Step 1: Audit current fly state**
+> Hosting target is out of scope for this plan; the build is host-agnostic
+> (`pnpm -F @qkb/web build` → `dist/`). Fill in host-specific commands
+> below once a host is chosen.
+
+- [ ] **Step 1: Build the SPA bundle**
 
 ```bash
-flyctl apps list
-# expected app: zk-eidas (or identityescrow per CLAUDE.md naming)
-flyctl status -a <app-name>
-flyctl certs list -a <app-name>
+pnpm install --frozen-lockfile
+pnpm -F @qkb/web build
 ```
 
-- [ ] **Step 2: Confirm fly.toml builds the right artifact**
+Production env vars (e.g. `VITE_WALLETCONNECT_PROJECT_ID`) must be set
+at build time; `VITE_CHAIN` is intentionally left unset to default to
+Base.
 
-Open `packages/web/fly.toml`. Ensure the build command runs `pnpm install --frozen-lockfile && pnpm -F @qkb/web build`. If the existing config still points at demo routes or env vars, update.
+- [ ] **Step 2: Deploy `packages/web/dist/` to the chosen host**
 
-- [ ] **Step 3: Set production env vars on the Fly machine**
+The host must SPA-fallback unknown paths to `/index.html` so deep
+links like `/escrow/notary` reload correctly.
 
-```bash
-flyctl secrets set \
-  VITE_WALLETCONNECT_PROJECT_ID=$WC_PROJECT_ID \
-  -a <app-name>
-# Do NOT set VITE_CHAIN — defaulting to Base.
-```
-
-- [ ] **Step 4: Deploy**
-
-```bash
-pnpm -F @qkb/web run deploy:fly
-flyctl logs -a <app-name>
-```
-
-Watch logs for clean boot + a real request hitting the landing.
-
-- [ ] **Step 5: DNS check + cert renewal if needed**
+- [ ] **Step 3: DNS check + cert renewal if needed**
 
 ```bash
 dig +short identityescrow.org
-# should resolve to a Fly anycast IP
-
-flyctl certs check identityescrow.org -a <app-name>
-# expected: configured + verified
+# should resolve to the host's IP/CNAME
 ```
 
-If DNS is misconfigured (e.g., still pointing at zk-eidas.com), update the apex/AAAA records at the registrar to the Fly anycast IP and wait for propagation.
+Confirm TLS is issued/renewed by the host.
 
-- [ ] **Step 6: Visual smoke**
+- [ ] **Step 4: Visual smoke**
 
 Open `https://identityescrow.org/` in a private window. Confirm:
 - Civic-monumental landing renders
@@ -4582,11 +4567,10 @@ Open `https://identityescrow.org/` in a private window. Confirm:
 - Connecting MetaMask on Base shows "Begin verification" CTA
 - Switching to Ethereum mainnet (or any non-Base chain) shows "Switch network"
 
-- [ ] **Step 7: Commit + tag**
+- [ ] **Step 5: Commit + tag**
 
 ```bash
-git add packages/web/fly.toml 2>/dev/null || true
-git commit --allow-empty -m "chore(deploy): Fly redeploy for Base — identityescrow.org live"
+git commit --allow-empty -m "chore(deploy): redeploy for Base — identityescrow.org live"
 git tag prod-frontend-v1.0.0
 ```
 

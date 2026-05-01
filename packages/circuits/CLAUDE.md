@@ -39,13 +39,11 @@ bash packages/circuits/ceremony/scripts/prove.sh           # witness + prove + v
 bash packages/circuits/ceremony/scripts/stub-ceremony.sh   # dev-only (for contracts/web wiring)
 ```
 
-**For the real setup** (7.6M constraints, ~30 GB peak), use Fly.io:
-
-```bash
-# See ceremony/scripts/fly-setup-remote.sh — spin up a throwaway
-# performance-10x (40 GB) machine, upload .r1cs (compressed 26×) + run.
-# Total wallclock: ~60 min setup + 10 min contribute + 3 min prove.
-```
+Setup runs locally; the constraint count of the V5 circuit (~1 M planned)
+fits comfortably on a dev box. The Phase-1 ECDSA-leaf legacy circuit
+(7.6 M constraints, ~30 GB peak) requires a 32+ GB machine to run
+`setup.sh` without OOM — bump `MEM_CAP=32G` and `NODE_HEAP=30720`
+accordingly when reproducing legacy artifacts.
 
 ## Invariants — do not violate
 
@@ -88,7 +86,7 @@ bash packages/circuits/ceremony/scripts/stub-ceremony.sh   # dev-only (for contr
 7. **Constraint count budget: 8 M hard cap, split at ~7 M.** The ECDSA
    leaf is already at 7.63 M. Any new constraints require either removing
    unused sub-circuits or splitting another proof (chain-style). A new
-   sub-circuit that pushes past 8 M will OOM even on 40 GB Fly machines
+   sub-circuit that pushes past 8 M will OOM even on 40 GB machines
    for the setup phase.
 
 8. **Snarkjs orders `public.json` as `[outputs…, public_inputs…]`**, not
@@ -112,7 +110,7 @@ bash packages/circuits/ceremony/scripts/stub-ceremony.sh   # dev-only (for contr
 
 ```
 compile.sh      → build/qkb-presentation/QKBPresentationEcdsaLeaf.{r1cs,wasm,sym}
-setup.sh / fly  → build/qkb-presentation/{qkb.zkey, verification_key.json,
+setup.sh        → build/qkb-presentation/{qkb.zkey, verification_key.json,
                                           QKBGroth16Verifier.sol, zkey.sha256}
 prove.sh        → build/qkb-presentation/{proof.json, public.json}
                   (round-trip test against real Diia fixture)

@@ -1,3 +1,7 @@
+// Read-side viem helpers (added M4 T14). The write-side calldata encoder
+// + revert classifier below stay as-is.
+export { isVerified, nullifierOf, trustedListRoot } from './reads.js';
+
 /**
  * Draft QKBRegistryV4 bindings — policy-root successor surface.
  *

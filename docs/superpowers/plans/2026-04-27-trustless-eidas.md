@@ -17,7 +17,7 @@
 
 **Architecture:** One Groth16 circuit (`TslUpdateEtsiV4.circom`) verifies ETSI TS 119 612 XML TSL signatures (covers ~33 ETSI-publishing countries). Off-chain, the existing `@qkb/lotl-flattener` gains a new `--emit-update-witness` flag that produces the witness bundle. The contract gains an append-only storage block (4 fields) and one new method gated on monotonicity, freshness, anchor match, and ZK proof. Admin path retained as timelocked emergency override.
 
-**Tech Stack:** Circom 2.x + snarkjs 0.7.6 (BN254) + rapidsnark (Groth16) + Solidity 0.8.24 + Foundry + TypeScript + Vitest + Playwright + Cloudflare R2 (artifact hosting) + Fly.io (ceremony compute).
+**Tech Stack:** Circom 2.x + snarkjs 0.7.6 (BN254) + rapidsnark (Groth16) + Solidity 0.8.24 + Foundry + TypeScript + Vitest + Playwright + Cloudflare R2 (artifact hosting). Ceremony runs on a local 64+ GB host.
 
 **Spec:** `docs/superpowers/specs/2026-04-27-trustless-eidas.md`
 
@@ -46,7 +46,7 @@
 | `packages/circuits/test/tslUpdate/integration/synthetic.test.ts` | Synthetic-fixture e2e |
 | `packages/circuits/test/tslUpdate/integration/real-tlua-ec.test.ts` | Real-fixture e2e |
 | `packages/circuits/fixtures/tsl-update/synthetic/` | Synthetic TSL + signing key + witness |
-| `packages/circuits/scripts/ceremony-tsl-update-v4.sh` | Fly perf-16x ceremony driver |
+| `packages/circuits/scripts/ceremony-tsl-update-v4.sh` | Local 64+ GB ceremony driver |
 | `packages/circuits/scripts/upload-tsl-update-r2.mjs` | R2 upload helper |
 | `packages/contracts/src/QKBVerifierV4Draft.sol:23-25` | `IGroth16TslUpdateVerifierV4` interface |
 | `packages/contracts/src/verifier/StubGroth16TslUpdateVerifier.sol` | Test-only stub |
@@ -1815,7 +1815,7 @@ Create `packages/circuits/scripts/ceremony-tsl-update-v4.sh`:
 
 ```bash
 #!/usr/bin/env bash
-# Run on Fly perf-16x machine (64 GB RAM, 16 vCPU). Expected wall: 12-18h.
+# Run on a local 64+ GB host (16 vCPU recommended). Expected wall: 12-18h.
 # Inputs (env): R2_BUCKET, R2_ACCESS_KEY, R2_SECRET_KEY, R2_ENDPOINT.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -1887,53 +1887,36 @@ git commit -m "feat(circuits): ceremony driver for TslUpdateEtsiV4"
 
 ## Task 14: Run ceremony + upload artifacts
 
-**Note:** This task takes ~12–18 hours wall time on a perf-16x Fly box. Run in background; revisit when complete.
+**Note:** This task takes ~12–18 hours wall time on a 64+ GB host. Run in background; revisit when complete.
 
-- [ ] **Step 1: Spin up Fly machine**
+- [ ] **Step 1: Run the ceremony locally**
 
-```bash
-fly machine run \
-  --app qkb-ceremony \
-  --vm-size performance-16x \
-  --vm-memory 65536 \
-  --image debian:bookworm \
-  --volume tsl_update_ceremony:/tmp/tsl-update-ceremony \
-  --env R2_BUCKET=$R2_BUCKET \
-  --env R2_ACCESS_KEY=$R2_ACCESS_KEY \
-  --env R2_SECRET_KEY=$R2_SECRET_KEY \
-  --env R2_ENDPOINT=$R2_ENDPOINT \
-  -- bash -c "
-    apt-get update && apt-get install -y curl git nodejs npm openssl &&
-    git clone https://github.com/identityescroworg/identityescroworg /repo &&
-    cd /repo && pnpm install --frozen-lockfile &&
-    pnpm -F @qkb/circuits build &&
-    bash packages/circuits/scripts/ceremony-tsl-update-v4.sh ||
-    sleep 86400
-  "
-```
-
-Watch progress:
+On a 64+ GB workstation or rented bare-metal:
 
 ```bash
-fly logs --app qkb-ceremony
+pnpm install --frozen-lockfile
+pnpm -F @qkb/circuits build
+NODE_OPTIONS='--max-old-space-size=61440' \
+  bash packages/circuits/scripts/ceremony-tsl-update-v4.sh
 ```
+
+Outputs land under `/tmp/tsl-update-ceremony/`:
+`tsl_update_final.zkey`, `tsl_update_vkey.json`,
+`QKBGroth16TslUpdateVerifier.sol`, plus the `.wasm` under
+`packages/circuits/build/tslUpdate/TslUpdateEtsiV4_js/`.
 
 - [ ] **Step 2: Upload artifacts to R2**
 
-Once ceremony completes, on the Fly box:
-
 ```bash
-fly ssh console --app qkb-ceremony --command "
-  aws s3 cp /tmp/tsl-update-ceremony/tsl_update_final.zkey \
-    s3://$R2_BUCKET/tsl-update-v4/tsl_update_final.zkey \
-    --endpoint-url $R2_ENDPOINT
-  aws s3 cp /repo/packages/circuits/build/tslUpdate/TslUpdateEtsiV4_js/TslUpdateEtsiV4.wasm \
-    s3://$R2_BUCKET/tsl-update-v4/TslUpdateEtsiV4.wasm \
-    --endpoint-url $R2_ENDPOINT
-  aws s3 cp /tmp/tsl-update-ceremony/tsl_update_vkey.json \
-    s3://$R2_BUCKET/tsl-update-v4/tsl_update_vkey.json \
-    --endpoint-url $R2_ENDPOINT
-"
+aws s3 cp /tmp/tsl-update-ceremony/tsl_update_final.zkey \
+  s3://$R2_BUCKET/tsl-update-v4/tsl_update_final.zkey \
+  --endpoint-url $R2_ENDPOINT
+aws s3 cp packages/circuits/build/tslUpdate/TslUpdateEtsiV4_js/TslUpdateEtsiV4.wasm \
+  s3://$R2_BUCKET/tsl-update-v4/TslUpdateEtsiV4.wasm \
+  --endpoint-url $R2_ENDPOINT
+aws s3 cp /tmp/tsl-update-ceremony/tsl_update_vkey.json \
+  s3://$R2_BUCKET/tsl-update-v4/tsl_update_vkey.json \
+  --endpoint-url $R2_ENDPOINT
 ```
 
 Verify the URLs respond:
@@ -1948,8 +1931,8 @@ Expected: `200 OK` on both.
 - [ ] **Step 3: Pump verifier Solidity into contracts**
 
 ```bash
-fly ssh console --app qkb-ceremony --command "cat /tmp/tsl-update-ceremony/QKBGroth16TslUpdateVerifier.sol" \
-  > packages/contracts/src/verifiers/QKBGroth16TslUpdateVerifier.sol
+cp /tmp/tsl-update-ceremony/QKBGroth16TslUpdateVerifier.sol \
+   packages/contracts/src/verifiers/QKBGroth16TslUpdateVerifier.sol
 sha256sum packages/contracts/src/verifiers/QKBGroth16TslUpdateVerifier.sol
 ```
 
@@ -1969,14 +1952,11 @@ Append to `fixtures/circuits/artifacts.json` (or create if missing):
 }
 ```
 
-- [ ] **Step 5: Destroy Fly machine immediately**
+- [ ] **Step 5: Wipe ceremony scratch directory**
 
-```bash
-fly machines list --app qkb-ceremony
-fly machines destroy <machine-id> --app qkb-ceremony --force
-```
-
-(Per `feedback_fly_destroy_immediately` memory: never leave a sticky-sleep machine idle.)
+Once R2 upload + commit are complete, remove
+`/tmp/tsl-update-ceremony/` and any large intermediate files to reclaim
+disk.
 
 - [ ] **Step 6: Commit**
 

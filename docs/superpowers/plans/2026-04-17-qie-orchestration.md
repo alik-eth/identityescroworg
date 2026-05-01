@@ -30,7 +30,7 @@ Sprint 0 deliverables (all must land + merge before QIE-core dispatch):
 | B | Unified single-proof ECDSA circuit + stub verifier   | circuits lead | contracts, web                |
 | C | 14-signal `QKBVerifier.sol` + dual-dispatch registry | contracts-eng | web, qie-eng                  |
 | D | Nullifier primitive end-to-end (circuit + contract + web helpers) | circuits lead + contracts-eng + web-eng | qie-eng |
-| E | Flyctl ceremony run ×2 (RSA + unified-ECDSA) + R2 upload | circuits lead | Sepolia deploy, web runtime   |
+| E | Local ceremony run ×2 (RSA + unified-ECDSA) + R2 upload | circuits lead | Sepolia deploy, web runtime   |
 | F | Sepolia redeploy of `QKBRegistry` with two real verifiers + nullifier mapping | contracts-eng | web runtime                   |
 
 Public signal layout (per spec §14.3 — **frozen** once Sprint 0 ships):

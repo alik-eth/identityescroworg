@@ -373,7 +373,7 @@ packages/circuits/circuits/
    ├─ Per-country build dispatches on URL segment
    │    /ua/ → loads UA leaf artifacts + UA registry address
    │    /ee/ → loads EE leaf artifacts + EE registry address
-   └─ Or separate Fly apps per country if jurisdiction DNS matters
+   └─ Or separate per-country deployments if jurisdiction DNS matters
 ```
 
 ### Trust-pump procedure
@@ -546,7 +546,7 @@ the right.
  └───────┬───────────────────────────────────────────────────────┘
          │
  ┌───────▼──────────────────────┐       ┌───────────────────────┐
- │ M10  Fly redeploy + DNS      │       │ M11+ Second country   │
+ │ M10  Web redeploy + DNS      │       │ M11+ Second country   │
  │      rebind                  │       │      (EE)             │
  └──────────────────────────────┘       └───────────────────────┘
 ```

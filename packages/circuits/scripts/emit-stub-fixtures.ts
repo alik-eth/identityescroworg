@@ -26,7 +26,8 @@
 // on-chain `QKBVerifier.verify` equality check depends on it.
 //
 // Scope: DEV-ONLY. Stub circuits assert nothing meaningful (quadratic
-// binding only). Real ceremony proofs arrive via C5/C6 on Fly.
+// binding only). Real ceremony proofs arrive via C5/C6 from a local
+// ceremony run.
 //
 // RAM footprint: stub circuits are ~5 constraints each, ptau-10 is 2 KB.
 // snarkjs peak RAM <200 MB per call, wall time <10 s for both circuits.

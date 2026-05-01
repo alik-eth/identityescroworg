@@ -12,7 +12,6 @@
     "test:e2e": "playwright test",
     "compute-policy-root": "node scripts/compute-policy-root.mjs",
     "package": "pnpm run build && node scripts/pack.mjs",
-    "deploy:fly": "cd ../.. && flyctl deploy --config packages/web/fly.toml --dockerfile packages/web/Dockerfile",
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {
@@ -22,8 +21,9 @@
     "@qkb/qie-agent": "workspace:*",
     "@qkb/qie-core": "workspace:*",
     "@qkb/sdk": "workspace:*",
+    "@rainbow-me/rainbowkit": "^2",
     "@tailwindcss/vite": "^4.2.2",
-    "@tanstack/react-query": "^5.51.0",
+    "@tanstack/react-query": "^5.99.0",
     "@tanstack/react-router": "^1.45.0",
     "asn1js": "^3.0.7",
     "buffer": "^6.0.3",
@@ -36,7 +36,8 @@
     "react-i18next": "^14.1.2",
     "snarkjs": "^0.7",
     "tailwindcss": "^4.2.2",
-    "viem": "^2.21.0"
+    "viem": "^2.21.0",
+    "wagmi": "^2"
   },
   "devDependencies": {
     "@playwright/test": "^1.45.0",

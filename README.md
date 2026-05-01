@@ -6,7 +6,7 @@ A Holder produces a self-generated keypair, signs a declaration binding that pub
 
 ## Status
 
-- **Phase 1 — QKB:** in active development (see `docs/superpowers/plans/`). Real-QES validation passes against Ukrainian Diia QES (ECDSA-P256). Sepolia deployment + `identityescrow.org` Fly.io hosting pending the final ceremony.
+- **Phase 1 — QKB:** in active development (see `docs/superpowers/plans/`). Real-QES validation passes against Ukrainian Diia QES (ECDSA-P256). Sepolia deployment + `identityescrow.org` static hosting pending the final ceremony.
 - **Phase 2 — QIE:** design frozen (`docs/superpowers/specs/2026-04-17-qie-phase2-design.md`) and amended for the MVP wedge (`docs/superpowers/specs/2026-04-17-qie-mvp-refinement.md`). MVP scope targets three Tier 1 segments — **inheritance / estate planning**, **regulated-entity crypto custody**, and **KYC-recovery in regulated DeFi** — shipping with `AuthorityArbitrator` only, dual-variant prover (RSA-PSS + ECDSA), an explicit escrow state machine, a notary-assisted heir recovery flow, and evidence envelopes on arbitrator releases. `TimelockArbitrator` and standalone recipient UX deferred post-pilot. Dispatch of the MVP amendment is in flight; full Phase 2 tag gated on Phase 1 deploy.
 
 ## Documents
@@ -249,7 +249,7 @@ The existing Node agent server + docker-compose fleet remain the path for integr
 ## Deployment
 
 - **Sepolia** is the primary testnet.
-- **`identityescrow.org`** serves the static SPA via Fly.io.
+- **`identityescrow.org`** serves the static SPA. The build output is host-agnostic; the specific hosting target is TBD.
 - Admin key at deploy-time lives in root `.env` (git-ignored). Never commit secrets.
 
 ## Legal framing

@@ -128,6 +128,7 @@ contract QKBRegistryV4 {
 
     mapping(bytes32 => Binding) public bindings;
     mapping(bytes32 => bool)    public usedNullifiers;
+    mapping(address => bytes32) public nullifierOf;
 
     error NotOnTrustedList();
     error InvalidLeafSpkiCommit();
@@ -190,9 +191,14 @@ contract QKBRegistryV4 {
             ageVerifiedCutoff: 0,
             revoked: false
         });
+        nullifierOf[msg.sender] = bindingId;
         emit BindingRegistered(
             bindingId, pkAddr, lp.ctxHash, lp.policyLeafHash, lp.timestamp, dobAvail
         );
+    }
+
+    function isVerified(address holder) external view returns (bool) {
+        return nullifierOf[holder] != bytes32(0);
     }
 
     /// @dev Reassemble 4x64-bit little-endian limbs into secp256k1 affine

@@ -4,7 +4,7 @@
 
 ## Motivation
 
-Phase 2's unified circuit — adding nullifier + chain-validation to the Phase-1 leaf — reaches 10.85 M constraints. snarkjs / ffjavascript fails `groth16 setup` on this size **deterministically** with `std::bad_alloc` inside the native tauG1/tauG2 section readers, at every Node heap budget we can provision on Fly (tested up to 80 GiB on `performance-12x:98304MB`, same failure at the same log line). Diagnosis: V8 ArrayBuffer 4 GiB per-object cap inside ffjavascript native bindings. Not fixable by more RAM.
+Phase 2's unified circuit — adding nullifier + chain-validation to the Phase-1 leaf — reaches 10.85 M constraints. snarkjs / ffjavascript fails `groth16 setup` on this size **deterministically** with `std::bad_alloc` inside the native tauG1/tauG2 section readers, at every Node heap budget we can provision (tested up to 80 GiB on a 96 GiB host, same failure at the same log line). Diagnosis: V8 ArrayBuffer 4 GiB per-object cap inside ffjavascript native bindings. Not fixable by more RAM.
 
 Phase 1's §5.4 fallback already specified the split: leaf-side circuit carrying credential-binding data + chain-side circuit carrying trusted-list membership, glued on-chain via `leafSpkiCommit` equality. `QKBPresentationEcdsaLeaf.circom` exists and compiles; `QKBPresentationEcdsaChain.circom` was never written. Phase 2 is reverting to this architecture.
 
@@ -27,7 +27,7 @@ Carries R_QKB constraints 1, 2, 5, 6 + the new nullifier primitive (§14.4). Wit
 [12]     leafSpkiCommit    — output; glue to chain proof
 ```
 
-Target size: ~7.68 M constraints (Phase-1 leaf at 7.63 M + ~50 k for X509SubjectSerial + Poseidon-5 + Poseidon-2). Ceremony: pow-24 ptau (2^24 = 16.77 M capacity), `performance-4x:16384MB` Fly machine.
+Target size: ~7.68 M constraints (Phase-1 leaf at 7.63 M + ~50 k for X509SubjectSerial + Poseidon-5 + Poseidon-2). Ceremony: pow-24 ptau (2^24 = 16.77 M capacity), local host with 16+ GB RAM.
 
 ### Chain circuit — `QKBPresentationEcdsaChain.circom`
 
@@ -111,11 +111,11 @@ Rewritten to emit two witness objects from the same CAdES input, compute both Gr
 | Constraints | 10.85 M | ~7.68 M | ~3.2 M |
 | Minimum ptau | 2^25 (37 GB) | 2^24 (18 GB) | 2^22 (4.5 GB) |
 | Setup peak RAM (measured / est) | >80 GB (fails) | ~30 GB | ~12 GB |
-| Fly VM | performance-12x:98304MB (fails) | performance-4x:16384MB | performance-4x:16384MB |
+| Host RAM | 96 GB (fails) | 16 GB | 16 GB |
 | Zkey size | ~8 GB | ~5.5 GB | ~2.3 GB |
 | .wasm size | ~44 MB | ~30 MB | ~14 MB |
 
-Both leaf + chain ceremonies succeed on a $0.20/hour VM. Prover wall time client-side: leaf ~40 s, chain ~20 s, total ~60 s, vs ~50 s for the unified proof — ~20 % slower for the user, but we actually get to ship.
+Both leaf + chain ceremonies succeed on a 16 GB host. Prover wall time client-side: leaf ~40 s, chain ~20 s, total ~60 s, vs ~50 s for the unified proof — ~20 % slower for the user, but we actually get to ship.
 
 ## Backwards compatibility
 

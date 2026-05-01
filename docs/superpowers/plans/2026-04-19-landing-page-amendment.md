@@ -6,7 +6,7 @@
 
 Review of the 2026-04-18 plan against reality surfaced eight problems:
 
-1. **Phase-1 "shipped end-to-end on Sepolia" is not yet true.** Trusted-setup ceremony is still running on Fly; no Sepolia V3 deploy has happened. Publishing the current claim would be a truth-in-advertising failure.
+1. **Phase-1 "shipped end-to-end on Sepolia" is not yet true.** Trusted-setup ceremony is still running locally; no Sepolia V3 deploy has happened. Publishing the current claim would be a truth-in-advertising failure.
 2. **"Single contributor" is not true.** Team: Ira (legal/notarization), Dima (product), Yana (design), plus the lead. Framing must reflect that.
 3. **No legal-agency headline.** ZKPassport, World ID, Human Passport all claim "proof of humanity". Our differentiator is **legal force under Art. 25(2) eIDAS** — that must be in the hero, not buried.
 4. **Recovery framing is premature.** Hero promises "never lose access" while QIE Phase 2 is still stubbed (real Groth16 verifiers not deployed). Claim must match ship state.
@@ -406,7 +406,7 @@ git commit -m "web(landing): hero screencast (real Diia QES → zk-proof → reg
 
 ## Priority gate for publication
 
-Do NOT `fly deploy` the landing until:
+Do NOT publish the landing to production until:
 
 1. Task 1 (truth-corrected i18n) committed.
 2. Task 1c screencast recorded and committed. No screencast = no launch.

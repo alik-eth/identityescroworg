@@ -468,8 +468,8 @@ above relax; they compose.
 
 Phase 1 shipped a 12-signal split-proof fallback (spec §5.4) because the
 unified ceremony hit 28 GB RAM on a dev box. Phase 2 runs the unified
-ceremony on `performance-12x` Fly machines (48 GB) and restores the
-original layout per QIE spec §14.3:
+ceremony on a 48+ GB local machine and restores the original layout per
+QIE spec §14.3:
 
 ```
 [0..3]   pkX limbs (4 × uint64 LE)

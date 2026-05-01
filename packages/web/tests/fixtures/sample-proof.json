@@ -1,0 +1,30 @@
+{
+  "version": "qkb/2.0",
+  "chainProof": {
+    "proof": {
+      "a": ["1", "2"],
+      "b": [["3", "4"], ["5", "6"]],
+      "c": ["7", "8"]
+    },
+    "rTL": "9",
+    "algorithmTag": 1,
+    "leafSpkiCommit": "10"
+  },
+  "leafProof": {
+    "proof": {
+      "a": ["1", "2"],
+      "b": [["3", "4"], ["5", "6"]],
+      "c": ["7", "8"]
+    },
+    "pkX": ["1", "2", "3", "4"],
+    "pkY": ["5", "6", "7", "8"],
+    "ctxHash": "9",
+    "policyLeafHash": "10",
+    "policyRoot": "11",
+    "timestamp": "12",
+    "nullifier": "13",
+    "leafSpkiCommit": "10",
+    "dobCommit": "14",
+    "dobSupported": "1"
+  }
+}

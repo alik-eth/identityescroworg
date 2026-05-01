@@ -45,53 +45,14 @@ E2E_REAL_PROVER=1 pnpm --filter @qkb/web exec playwright test
 
 CI runs it nightly via `.github/workflows/nightly-web-e2e.yml`.
 
-## Fly.io deployment
+## Deployment
 
-The static SPA is deployed to Fly.io app **`identityescrow`** (production
-domain: `identityescrow.org`). Container is `caddy:2-alpine` serving the
-built `dist/` on port 8080 with SPA fallback (`try_files {path} /index.html`)
-so TanStack Router deep-link reloads work.
+`pnpm -F @qkb/web build` produces a fully self-contained `dist/` tree —
+host on any static file server (`vite preview`, `python -m http.server`,
+GitHub Pages, S3 + CloudFront, etc.). The current production target is
+GitHub Pages via `.github/workflows/pages.yml`; switching hosts is a
+separate decision and intentionally not encoded in this package.
 
-First-time setup (once per Fly account):
-
-```sh
-flyctl auth login
-flyctl launch --no-deploy --name identityescrow --copy-config --config packages/web/fly.toml
-```
-
-Day-to-day deploy from a clean monorepo checkout:
-
-```sh
-pnpm deploy:fly                                 # from repo root
-# or
-pnpm --filter @qkb/web run deploy:fly           # from packages/web
-```
-
-Both invoke `flyctl deploy --config packages/web/fly.toml --dockerfile
-packages/web/Dockerfile` against the monorepo root as the docker build
-context (so the multi-stage Dockerfile can `COPY package.json
-pnpm-workspace.yaml packages/web ...`). The root `.dockerignore` keeps the
-context lean — only `packages/web`, `fixtures`, and the workspace
-manifests are sent.
-
-CI: `.github/workflows/deploy-web.yml` runs `flyctl deploy --remote-only`
-on `workflow_dispatch`. The workflow needs a repo secret `FLY_API_TOKEN`
-(`flyctl auth token` then add via `gh secret set FLY_API_TOKEN`).
-
-Custom domain (one-time, after the app is deployed):
-
-```sh
-flyctl certs add identityescrow.org
-flyctl certs add www.identityescrow.org
-```
-
-Then point your DNS at the values printed by `flyctl certs show
-identityescrow.org`.
-
-Local container smoke test (no Fly account needed):
-
-```sh
-docker build -f packages/web/Dockerfile -t qkb-web:dev .
-docker run --rm -p 8080:8080 qkb-web:dev
-# open http://localhost:8080
-```
+Whichever host you choose must SPA-fallback all unknown paths to
+`/index.html` so TanStack Router deep-link reloads work
+(`/escrow/notary`, `/ua/generate`, etc.).

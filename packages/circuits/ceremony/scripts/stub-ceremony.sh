@@ -4,7 +4,7 @@
 # shape as the real QKBPresentation{Ecdsa,Rsa} but assert nothing beyond the
 # algorithmTag literal. Exists so that contracts + web can integrate against
 # compilable Verifier.sol pair today while the real multi-megaconstraint
-# setups run on Fly.
+# setups run on a local 48+ GB host.
 #
 # Produces build/qkb-stub/<variant>/{qkb_stub.zkey, verification_key.json,
 # QKBGroth16VerifierStub<Variant>.sol, input.json, proof.json, public.json}.

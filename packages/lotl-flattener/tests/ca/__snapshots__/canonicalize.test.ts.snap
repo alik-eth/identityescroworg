@@ -1,3 +1,0 @@
-// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
-
-exports[`canonicalizeCertHash > hash of test-ca.der matches pinned snapshot 1`] = `"3343320682401079542006381927947751400566902976482490538395564021405243591237"`;
