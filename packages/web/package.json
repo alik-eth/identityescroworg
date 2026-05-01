@@ -25,6 +25,8 @@
     "@tailwindcss/vite": "^4.2.2",
     "@tanstack/react-query": "^5.99.0",
     "@tanstack/react-router": "^1.45.0",
+    "@types/zxcvbn": "^4.4.5",
+    "argon2-browser": "^1.18.0",
     "asn1js": "^3.0.7",
     "buffer": "^6.0.3",
     "canonicalize": "^3.0.0",
@@ -37,7 +39,8 @@
     "snarkjs": "^0.7",
     "tailwindcss": "^4.2.2",
     "viem": "^2.21.0",
-    "wagmi": "^2"
+    "wagmi": "^2",
+    "zxcvbn": "^4.4.2"
   },
   "devDependencies": {
     "@playwright/test": "^1.45.0",

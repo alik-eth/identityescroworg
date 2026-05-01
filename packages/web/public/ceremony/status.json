@@ -1,0 +1,9 @@
+{
+  "round": 0,
+  "totalRounds": 10,
+  "contributors": [],
+  "finalZkeySha256": null,
+  "beaconBlockHeight": null,
+  "beaconHash": null,
+  "_note": "Dev/build-time fixture. Production feed lives at https://prove.identityescrow.org/ceremony/status.json once R2 is live (post-§9.4). Override at runtime via VITE_CEREMONY_STATUS_URL."
+}

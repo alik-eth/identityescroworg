@@ -89,12 +89,13 @@ export function SubmitScreen() {
   return (
     <main className="relative min-h-screen">
       <div className="doc-grid pt-12">
-        <div className="text-mono text-xs pt-2 sticky top-12 self-start">
+        <div className="hidden md:block text-mono text-xs pt-2 sticky top-12 self-start">
           <Link to="/ua/cli" className="block mb-3">← back</Link>
           <StepIndicator current={2} />
         </div>
-        <div className="max-w-2xl">
-          <h1 className="text-5xl mb-6" style={{ color: 'var(--ink)' }}>
+        <div className="min-w-0 max-w-2xl">
+          <Link to="/ua/cli" className="md:hidden text-mono text-xs block mb-4">← back</Link>
+          <h1 className="text-4xl md:text-5xl mb-6" style={{ color: 'var(--ink)' }}>
             {t('submit.title', 'Submit your proof')}
           </h1>
           <p className="mb-8 text-lg">

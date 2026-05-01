@@ -6,6 +6,7 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
 } from 'wagmi';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useTranslation } from 'react-i18next';
 import { deploymentForChainId, qkbRegistryV4Abi, identityEscrowNftAbi } from '@qkb/sdk';
 import { CertificatePreview } from '../../components/CertificatePreview';
@@ -14,7 +15,7 @@ import { DocumentFooter } from '../../components/DocumentFooter';
 
 export function MintScreen() {
   const { t } = useTranslation();
-  const { address } = useAccount();
+  const { address, isConnected } = useAccount();
   const chainId = useChainId();
   const dep = deploymentForChainId(chainId);
 
@@ -55,17 +56,31 @@ export function MintScreen() {
   return (
     <main className="relative min-h-screen">
       <div className="doc-grid pt-12">
-        <div className="text-mono text-xs pt-2 sticky top-12 self-start">
+        <div className="hidden md:block text-mono text-xs pt-2 sticky top-12 self-start">
           <Link to="/" className="block mb-3">← back</Link>
           <StepIndicator current={3} />
         </div>
-        <div className="max-w-3xl">
-          <h1 className="text-5xl mb-6">
+        <div className="min-w-0 max-w-3xl">
+          <Link to="/" className="md:hidden text-mono text-xs block mb-4">← back</Link>
+          <h1 className="text-4xl md:text-5xl mb-6">
             {minted
               ? t('mint.titleHolder', 'Your certificate')
               : t('mint.title', 'Mint your certificate')}
           </h1>
           <hr className="rule" />
+          {dep && (
+            <p
+              className="text-mono text-xs mb-4"
+              style={{
+                color: 'var(--seal)',
+                fontVariant: 'small-caps',
+                letterSpacing: '0.12em',
+              }}
+            >
+              Issued by authority · {dep.registry.slice(0, 6)}…
+              {dep.registry.slice(-4)} · {chainLabel}
+            </p>
+          )}
           <div className={txMined ? 'cert-stamp-in' : ''}>
             <CertificatePreview
               tokenId={previewTokenId}
@@ -77,7 +92,15 @@ export function MintScreen() {
             />
           </div>
           <div className="mt-8">
-            {!minted && !txMined && (
+            {!minted && !txMined && !isConnected && (
+              <div className="flex flex-col items-start gap-3">
+                <p className="text-sm" style={{ color: 'var(--ink)', opacity: 0.7 }}>
+                  {t('mint.connectPrompt', 'Connect a wallet to mint your certificate.')}
+                </p>
+                <ConnectButton showBalance={false} accountStatus="address" chainStatus="icon" />
+              </div>
+            )}
+            {!minted && !txMined && isConnected && (
               <button
                 onClick={onMint}
                 disabled={isPending || !nullifier}

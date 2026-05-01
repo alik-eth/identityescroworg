@@ -2,7 +2,20 @@
   "landing": {
     "title": "Verified Identity. On-chain.",
     "lede": "Mint your Verified Ukrainian certificate. Your identity stays on your machine — only the proof reaches the chain.",
-    "subline": "Powered by Diia QES + Groth16. Your identity bytes never enter this browser."
+    "subline": "Powered by Diia QES + Groth16. Your identity bytes never enter this browser.",
+    "useCli": "Use the CLI instead →",
+    "viewCertificate": "View your certificate →",
+    "ceremonyLink": "Help with the trusted setup ceremony →",
+    "privacy": {
+      "heading": "Identity, escrowed.",
+      "onLedgerLabel": "What is on the ledger",
+      "onLedgerBody": "a nullifier — context-bound, one-way, unlinkable across applications.",
+      "notOnLedgerLabel": "What is not on the ledger",
+      "notOnLedgerBody": "name, address, document numbers, signature, certificate contents.",
+      "recoveryLabel": "What can be recovered, by whom, under what process",
+      "recoveryBody": "by the issuing authority, under lawful order, at meaningful compute cost. Not by third parties.",
+      "closing": "This is identity escrow. Every-day pseudonymity for the holder; recoverable accountability for the state. The same trust structure as the qualified electronic signature itself — preserved on-chain."
+    }
   },
   "cli": {
     "title": "Install the CLI",
@@ -22,9 +35,249 @@
   "mint": {
     "title": "Mint your certificate",
     "titleHolder": "Your certificate",
+    "connectPrompt": "Connect a wallet to mint your certificate.",
     "pending": "Minting…",
     "cta": "Mint Certificate",
     "opensea": "View on OpenSea",
     "share": "Share"
+  },
+  "registerV5": {
+    "title": "Register your identity",
+    "lede": "Four steps. Your private credentials never leave this browser — only a zero-knowledge proof reaches the chain.",
+    "indicator": {
+      "aria": "Progress",
+      "connect": "Connect",
+      "generate": "Generate",
+      "sign": "Sign",
+      "prove": "Prove + register"
+    },
+    "step1": {
+      "title": "Connect your wallet",
+      "body": "The wallet you connect here will own the Verified Ukrainian certificate on-chain. Use a wallet on Base mainnet — this binding is what your Diia signature certifies.",
+      "advance": "Continue to binding generation"
+    },
+    "step2": {
+      "title": "Generate your binding",
+      "generate": "Generate binding",
+      "recovering": "Awaiting wallet signature for pubkey recovery…",
+      "download": "Download binding (.json)",
+      "downloadHint": "Canonical JSON (RFC 8785). Attach this file to Diia (or your QTSP client) and produce a CAdES-BES signature over its bytes. The .p7s file you receive goes into Step 3.",
+      "advance": "Continue to Diia signing",
+      "back": "Back"
+    },
+    "step3": {
+      "title": "Sign with Diia",
+      "body": "Open the Diia client on your phone, attach the binding you just generated, and produce a CAdES-BES signature. Drop the resulting .p7s file here.",
+      "drop": "Drag your .p7s here, or click to browse",
+      "ready": "{{name}} loaded — ready for Step 4",
+      "readyLabel": "Loaded",
+      "replaceHint": "Click to replace, or continue to Step 4 below.",
+      "aria": "Diia .p7s upload",
+      "back": "Back"
+    },
+    "step4": {
+      "title": "Prove and register",
+      "ceremonyPending": "Awaiting ceremony artifacts. The Phase 2 ceremony hasn't finished yet — this button activates once the prover .zkey is published.",
+      "cta": "Generate proof + register",
+      "back": "Back",
+      "walletNotConnected": "Wallet not connected. Please connect your wallet before generating a proof.",
+      "scwNotYetSupported": "Smart contract wallets are not yet supported for registration. Please use an EOA (MetaMask, Rabby, Frame, etc.)."
+    }
+  },
+  "mintV5": {
+    "awaitingDeploy": "Awaiting V5 registry deployment. Mint becomes available once orchestration §9.4 (Base Sepolia E2E) closes.",
+    "awaitingRegistration": "Awaiting registration"
+  },
+  "scwPassphrase": {
+    "title": "Smart contract wallet — passphrase required",
+    "body": "Smart contract wallets cannot use the deterministic personal_sign derivation (their on-chain signature logic can change between sessions). We instead derive your identity secret from a passphrase you choose, using Argon2id.",
+    "walletLabel": "Connected SCW:",
+    "warningTitle": "🚨 If you lose this passphrase, you cannot recover your identity",
+    "warningBody": "Your passphrase is the only protection against loss of your verified identity. If you forget it, no Diia QES can recover the secret. Store it offline (paper, hardware password manager) before continuing.",
+    "inputLabel": "Passphrase",
+    "reveal": "Show",
+    "hide": "Hide",
+    "computing": "Estimating strength…",
+    "strength": "Strength: ~{{bits}} bits guess-resistance (target: ≥{{target}})",
+    "deriving": "Deriving identity secret via Argon2id (this takes a few seconds)…",
+    "submit": "Use this passphrase",
+    "useEoaInstead": "Or: connect an EOA wallet (recommended for V5 alpha)",
+    "optedOut": "SCW path cancelled — please connect an EOA wallet (MetaMask, Rabby, Frame, etc.) and retry."
+  },
+  "accountRotate": {
+    "title": "Rotate to a new wallet",
+    "lede": "Bind your verified identity to a different wallet without re-running the Diia signature flow against your old wallet. The old wallet authorises the rotation; the new wallet takes over going forward.",
+    "back": "Back",
+    "running": "Working…",
+    "steps": {
+      "connect": "Step 1 of 6 — Connect new wallet",
+      "diia": "Step 2 of 6 — Upload new Diia signature",
+      "derive-new": "Step 3 of 6 — Sign with new wallet",
+      "derive-old": "Step 4 of 6 — Sign with old wallet",
+      "prove": "Step 5 of 6 — Generate proof",
+      "submit": "Step 6 of 6 — Submit rotation",
+      "done": "Rotation complete"
+    },
+    "connect": {
+      "title": "Connect your new wallet",
+      "body": "The wallet you connect here will own the verified identity after rotation. It must be different from your current identity-bound wallet.",
+      "warningTitle": "This change is irreversible",
+      "warningBody": "After rotation the old wallet can no longer prove ownership of this identity. The IdentityEscrowNFT, if any, must be transferred separately via standard ERC-721 before you rotate.",
+      "newWallet": "New wallet:",
+      "noWallet": "No wallet connected. Please connect the wallet you want to rotate to.",
+      "advance": "Continue and lock this as the new wallet"
+    },
+    "diia": {
+      "title": "Upload your new Diia signature",
+      "body": "Generate a new QKB/2.0 binding pinned to your new wallet's public key, sign it via Diia, and upload the .p7s here together with the canonical binding bytes you signed.",
+      "bindingLabel": "Canonical binding (.json)",
+      "p7sLabel": "Diia signature (.p7s)",
+      "lockedNew": "New wallet locked:",
+      "filesRequired": "Both the canonical binding (.json) and the Diia signature (.p7s) must be uploaded.",
+      "noPriorIdentity": "No prior identity registered for this Diia certificate. There is nothing to rotate. Use /ua/registerV5 to register first.",
+      "advance": "Continue to new-wallet signature"
+    },
+    "deriveNew": {
+      "title": "Sign with your NEW wallet",
+      "body": "We need a signature from your new wallet to derive its wallet-secret via HKDF. This binds the new wallet to your identity in the rotation proof.",
+      "expected": "Expected signer:",
+      "cta": "Sign with new wallet",
+      "signing": "Awaiting new-wallet signature…",
+      "walletRequired": "A connected wallet is required to derive the new wallet secret.",
+      "wrongWallet": "The currently-connected wallet does not match the locked new-wallet address. Switch back to the new wallet you locked at step 1.",
+      "scwNotSupported": "Smart contract wallets are not yet supported for rotation. Please use an EOA wallet."
+    },
+    "deriveOld": {
+      "title": "Switch to your OLD wallet and sign",
+      "body": "Switch to your old (currently-identity-bound) wallet in your wallet extension. We need two signatures from it: one for HKDF (proves old-wallet ownership to the proof), and one over the rotation-authorisation hash (proves the old wallet consents to this exact new wallet).",
+      "switchHint": "Switch to your old wallet in MetaMask (or other wallet extension), then click Sign.",
+      "stillNewWallet": "Your wallet is still on the new-wallet address. Switch to your OLD wallet in the extension before signing.",
+      "authHashLabel": "Rotation authorisation hash (keccak256 of \"qkb-rotate-auth-v1\" ‖ chainId ‖ registry ‖ fingerprint ‖ newWallet)",
+      "cta": "Sign HKDF + auth hash with old wallet",
+      "signingHkdf": "Awaiting HKDF signature from old wallet…",
+      "signingAuth": "Awaiting auth-hash signature from old wallet…",
+      "walletRequired": "Wallet, fingerprint, and locked new-wallet address must all be present to sign."
+    },
+    "prove": {
+      "title": "Generate the rotation proof",
+      "body": "Building the V5.1 witness with rotation_mode=1 and producing a Groth16 proof in this browser. The proof binds the new wallet to the existing identity.",
+      "ceremonyPending": "Awaiting ceremony artifacts. The Phase 2 ceremony hasn't finished yet — proving stays disabled until the prover .zkey is published.",
+      "building": "Building witness with rotation_mode=1…",
+      "proving": "Running snarkjs Groth16 prover…",
+      "missingInputs": "Files, both wallet secrets, the locked new-wallet address, and the on-chain commitment read must all be present before proving.",
+      "noIntCert": "The .p7s does not contain an intermediate certificate. Re-export from Diia with the full chain."
+    },
+    "submit": {
+      "title": "Submit the rotation transaction",
+      "warningTitle": "Final confirmation",
+      "warningBody": "Submitting will permanently rotate the identity to the new wallet. This action cannot be undone on-chain.",
+      "switchBackHint": "Switch back to your new wallet to submit. New wallet:",
+      "currentlyConnected": "Currently connected:",
+      "switchToNew": "Your wallet is still on the old-wallet address. Switch back to the NEW wallet before submitting.",
+      "awaitingDeploy": "Awaiting V5 registry deployment. Submission becomes available once orchestration §9.4 (Base Sepolia E2E) closes.",
+      "cta": "Submit rotation",
+      "missingData": "Proof, public signals, old-wallet signature, and registry deployment must all be present to submit."
+    }
+  },
+  "deviceGate": {
+    "useDesktop": {
+      "heading": "This device can't host the zero-knowledge prover.",
+      "body": "The prover needs about 2.5 GB of cached storage on your device — most phone browsers cap web pages well below that, so the proof would fail mid-flight. Open this page on a desktop or laptop browser instead and pick up where you left off.",
+      "qrCaption": "Scan with another phone, or type the URL into a desktop browser."
+    }
+  },
+  "ceremony": {
+    "copy": {
+      "idle": "Copy",
+      "copied": "Copied",
+      "failed": "Copy failed",
+      "aria": "Copy command"
+    },
+    "landing": {
+      "heading": "A trusted setup. In public.",
+      "lede": "The V5 prover keys are produced by a multi-contributor ceremony. So long as one contributor honestly destroys their entropy, the ceremony is sound. We are publishing every step.",
+      "whyHeading": "Why a ceremony at all",
+      "whyBody": "Groth16 proofs require a structured reference string. The string is generated once, by a specific party, with private randomness that — if known to anyone — would let that party forge proofs. A multi-party ceremony randomises the string across many independent contributors. Each adds entropy and destroys their own. The final string is sound under the assumption that at least one contributor was honest.",
+      "trustHeading": "What we publish",
+      "publishChainLabel": "The contributor chain",
+      "publishChainBody": "Every contributor's handle, round number, and signed attestation hash. Anyone can independently verify each link.",
+      "publishBeaconLabel": "A public-randomness beacon",
+      "publishBeaconBody": "After the last contributor, we mix in a Bitcoin (or Ethereum mainnet) block hash. The block height is committed in advance — no one can predict the bytes.",
+      "publishHashLabel": "The final zkey hash",
+      "publishHashBody": "The SHA-256 of the final prover key, committed on chain alongside the verifier contract. Anyone can verify their downloaded zkey matches.",
+      "navAria": "Ceremony sections",
+      "contributeLink": "Contribute to the ceremony →",
+      "statusLink": "Live progress →",
+      "verifyLink": "Verify the final zkey →"
+    },
+    "contribute": {
+      "back": "back to overview",
+      "heading": "Contribute on your machine.",
+      "lede": "The actual contribution runs as a local snarkjs CLI invocation on your laptop or workstation. The browser cannot host it — V8 caps WebAssembly at 4 GB of heap and the prover key needs more than that to ingest.",
+      "requirementsHeading": "What you need",
+      "req32gb": "snarkjs holds the intermediate zkey + working memory in V8 heap; ~30 GB peak.",
+      "req5gb": "Download + working space + output zkey.",
+      "reqOS": "Node 20 or newer. snarkjs ≥ 0.7.4 (npm install -g snarkjs).",
+      "reqTime": "Download + contribute + verify + upload.",
+      "notSupported": "Phones, tablets, and Chromebooks cannot contribute — heap caps are too low and the disk requirement exceeds typical mobile-class storage.",
+      "commandsHeading": "The four commands",
+      "step1Title": "Download the previous contributor's intermediate zkey",
+      "step1Body": "About 2.2 GB. The download URL for your assigned round is sent at sign-up time.",
+      "step2Title": "Run the contribution",
+      "step2Body": "Around 5–10 minutes wall-clock. snarkjs holds the intermediate key + working memory in V8 heap; expect ~30 GB RAM peak. Use any high-quality entropy source.",
+      "step3Title": "Verify locally before uploading",
+      "step3Body": "Runs in seconds. Confirms your output zkey is structurally valid against the circuit r1cs and the Phase 1 powers-of-tau. If verify fails, do not upload.",
+      "step4Title": "Upload via your signed URL",
+      "step4Body": "The signed URL is single-use, time-bounded, and tied to your assigned round. Do not share it.",
+      "signupHeading": "Sign up",
+      "signupBody": "Email the admin with your handle, preferred contribution slot, and a short note on who you are. The admin assigns rounds in arrival order and replies with your download + signed-upload URLs.",
+      "flyForm": {
+        "openCta": "Or generate a launch command interactively →",
+        "openHint": "For contributors who would rather paste their values into a form than assemble the flyctl secrets-set line by hand.",
+        "heading": "Generate launch command",
+        "warningBrowser": "This form generates a command for you to paste into a terminal. The form runs entirely in your browser; nothing you type is sent anywhere. Your entropy stays local until you run the generated `flyctl secrets set` line.",
+        "warningReceipt": "Save the SHA-256 you'll see in `flyctl logs` — it's your contribution receipt.",
+        "signedUrlLabel": "Signed PUT URL",
+        "roundLabel": "Round number",
+        "nameLabel": "Contributor name",
+        "profileUrlLabel": "Profile URL (optional)",
+        "entropyLabel": "Entropy (32 bytes, hex)",
+        "entropyError": "Entropy must be exactly 64 lowercase hex characters.",
+        "generateEntropy": "Generate fresh entropy",
+        "outputHeading": "Your launch command",
+        "incompleteHint": "(fill in all required fields above for a complete command)"
+      }
+    },
+    "status": {
+      "back": "back to overview",
+      "heading": "Live progress.",
+      "lede": "Each round closes when the contributor uploads their attested intermediate zkey. We publish the chain here as it grows.",
+      "loading": "Loading status feed…",
+      "unavailable": "Status feed unavailable. The ceremony admin publishes the JSON manually after each round; transient outages are expected. Try again in a minute.",
+      "statePlanned": "Awaiting first contributor.",
+      "stateInProgress": "Ceremony in progress.",
+      "stateComplete": "Ceremony complete.",
+      "plannedBlurb": "The first contributor has not yet uploaded their round. Sign-ups are open.",
+      "inProgressBlurb": "Round {{round}} of {{total}}.",
+      "completeBlurb": "The final zkey is fixed. Anyone can verify their downloaded copy below.",
+      "chainHeading": "Contributor chain",
+      "chainEmpty": "No rounds yet.",
+      "roundLabel": "Round",
+      "finalHeading": "Final zkey",
+      "verifyLink": "Verify your downloaded zkey →"
+    },
+    "verify": {
+      "back": "back to overview",
+      "heading": "Verify your zkey.",
+      "lede": "Drop the prover key file you downloaded. The browser computes a SHA-256 of every byte and compares against the hash committed in the on-chain verifier contract — published below once the ceremony is complete.",
+      "publishedHeading": "Published final hash",
+      "published.pending": "Ceremony is not yet complete. The final zkey hash is published here once the last contributor uploads and the public-randomness beacon is mixed in.",
+      "uploadHeading": "Hash your downloaded zkey",
+      "fileAria": "Upload your downloaded qkb-v5-final.zkey",
+      "progress": "Hashing",
+      "matched": "Match. This file is the same prover key the verifier contract was deployed with.",
+      "mismatch": "No match. Do not use this file. Re-download from the canonical source.",
+      "noPublished": "Computed"
+    }
   }
 }

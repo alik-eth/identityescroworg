@@ -16,10 +16,9 @@ export function CertificatePreview(props: CertificatePreviewProps) {
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 800 600"
       width="100%"
-      height="auto"
       role="img"
       aria-label={`Certificate ${tokenId}`}
-      style={{ maxWidth: 640, display: 'block' }}
+      style={{ maxWidth: 640, height: 'auto', display: 'block' }}
     >
       <rect width="800" height="600" fill="#F4EFE6" />
       <rect x="12" y="12" width="776" height="576" fill="none" stroke="#1F2D5C" strokeWidth="1.5" />

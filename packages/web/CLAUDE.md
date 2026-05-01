@@ -156,6 +156,36 @@ Fields written per route:
    static `import 'snarkjs'`, the 20 MB dependency will end up in the
    static tarball.
 
+9. **V5.1 walletSecret derivation is byte-locked to the spec.** EOA path:
+   `personal_sign("qkb-wallet-secret-v1" || subjectSerialPacked)` over
+   raw bytes (NOT a hex string), then HKDF-SHA256, then **reduce mod
+   `p_bn254`** (canonical form, not mask-2-bits). SCW path: Argon2id with
+   the spec parameters (m=64MiB, t=3, p=1) and a salt of
+   `"qkb-scw-secret-v1" || walletAddressBytes`. Both implementations live
+   in `src/lib/walletSecret.ts` and must stay in lock-step with
+   `arch-circuits/.../wallet-secret.ts` — the SDK has a vendored copy
+   under `packages/sdk/src/witness/v5/wallet-secret.ts`. If you touch
+   either side, run the full `@qkb/sdk` + `@qkb/web` test suite and have
+   the lead cross-check before commit.
+
+10. **`/account/rotate` flow: newWalletAddress is LOCKED at the connect
+   step.** Every later stage must reference the React-state value, never
+   `useAccount().address` directly — the user switches between new and
+   old wallets between stages, and reading `connectedAddress` would bind
+   the rotation auth payload to whatever wallet is connected at that
+   moment (catastrophic — contract reverts `InvalidRotationAuth`). The
+   rotation auth hash MUST byte-match contracts-eng `_rotateAuthSig`:
+   `keccak256(abi.encodePacked("qkb-rotate-auth-v1", chainId, registry,
+   fingerprint, newWallet))`. The unit test at
+   `tests/unit/rotationAuthHash.test.ts` pins this against a manual
+   byte-level reconstruction; if you touch `computeRotationAuthHash`,
+   keep that test green and re-run codex against the diff.
+
+11. **V5.1 ABI is `qkbRegistryV5_1Abi` only.** The hand-patched V5 ABI was
+   deleted in `15f2064`; the canonical pump from contracts-eng lives at
+   `packages/sdk/src/abi/QKBRegistryV5_1.ts`. Do not re-create a
+   `qkbRegistryV5Abi` symbol or add a parallel V5 ABI file.
+
 ## What this package does NOT own
 
 - **Flattener outputs** (`trusted-cas.json`, `layers.json`, `root.json`).

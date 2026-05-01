@@ -210,6 +210,7 @@ export {
 export {
   MockProver,
   proveSplit,
+  proveV5,
   type AlgorithmArtifactUrls,
   type CircuitArtifactUrls,
   type IProver,
@@ -219,6 +220,8 @@ export {
   type ProofStage,
   type ProveOptions,
   type ProveResult,
+  type ProveV5Options,
+  type ProveV5Result,
   type SplitProgress,
   type SplitProveOptions,
   type SplitProveResult,
@@ -246,3 +249,51 @@ export {
 export { qkbRegistryV4Abi } from './abi/QKBRegistryV4.js';
 export { qkbRegistryV5_1Abi } from './abi/QKBRegistryV5_1.js';
 export { identityEscrowNftAbi } from './abi/IdentityEscrowNFT.js';
+
+export {
+  PUBLIC_SIGNALS_V5_LENGTH,
+  REGISTRY_V5_ERROR_SELECTORS,
+  assertRegisterArgsV5Shape,
+  classifyV5RegistryRevert,
+  encodeV5RegisterCalldata,
+  encodeV5RotateWalletCalldata,
+  publicSignalsFromArray,
+  publicSignalsToArray,
+  type Groth16ProofV5,
+  type PublicSignalsV5,
+  type RegisterArgsV5,
+  type RotateWalletArgsV5,
+} from './registry/registryV5.js';
+
+export {
+  bytes32ToHiLo,
+  hiLoToBytes32,
+} from './core/bytes32ToHiLo.js';
+
+// V5 witness builder — vendored from arch-circuits f0d5a73 with browser
+// patches (see `./witness/v5/build-witness-v5.ts` header). The lower-level
+// helpers (MAX_BCANON, pkCoordToLimbs etc.) live under `./core` already and
+// are re-exported above; we only surface V5-specific symbols here.
+export {
+  buildWitnessV5,
+  computeIdentityFingerprint,
+  parseP7s,
+  extractBindingOffsets,
+  findTbsInCert,
+  findSubjectSerial,
+  subjectSerialBytesToLimbs,
+  decomposeTo643Limbs,
+  parseP256Spki,
+  spkiCommit,
+  decodeEcdsaSigSequence,
+  bytes32ToHex,
+  MAX_CTX_PADDED,
+  MAX_LEAF_TBS,
+  MAX_POLICY_ID,
+  type BuildWitnessV5Input,
+  type CmsExtraction,
+  type V2CoreBindingOffsets,
+  type WitnessV5,
+  type ParsedSpki,
+  type EcdsaRS,
+} from './witness/v5.js';

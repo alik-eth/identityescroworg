@@ -8,7 +8,15 @@ import { IndexScreen } from './routes/index';
 import { CliInstall } from './routes/ua/cli';
 import { SubmitScreen } from './routes/ua/submit';
 import { MintScreen } from './routes/ua/mint';
+import { MintNftScreen } from './routes/ua/mintNft';
+import { RegisterV5Screen } from './routes/ua/registerV5';
+import { UseDesktopScreen } from './routes/ua/useDesktop';
 import { IntegrationsScreen } from './routes/integrations';
+import { CeremonyIndex } from './routes/ceremony/index';
+import { CeremonyContribute } from './routes/ceremony/contribute';
+import { CeremonyStatus } from './routes/ceremony/status';
+import { CeremonyVerify } from './routes/ceremony/verify';
+import { AccountRotateScreen } from './routes/account/rotate';
 
 function RootLayout() {
   return <Outlet />;
@@ -40,10 +48,58 @@ const mintRoute = createRoute({
   component: MintScreen,
 });
 
+const registerV5Route = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/ua/registerV5',
+  component: RegisterV5Screen,
+});
+
+const mintNftRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/ua/mintNft',
+  component: MintNftScreen,
+});
+
+const useDesktopRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/ua/use-desktop',
+  component: UseDesktopScreen,
+});
+
+const ceremonyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/ceremony',
+  component: CeremonyIndex,
+});
+
+const ceremonyContributeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/ceremony/contribute',
+  component: CeremonyContribute,
+});
+
+const ceremonyStatusRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/ceremony/status',
+  component: CeremonyStatus,
+});
+
+const ceremonyVerifyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/ceremony/verify',
+  component: CeremonyVerify,
+});
+
 const integrationsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/integrations',
   component: IntegrationsScreen,
+});
+
+const accountRotateRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/account/rotate',
+  component: AccountRotateScreen,
 });
 
 const routeTree = rootRoute.addChildren([
@@ -51,7 +107,15 @@ const routeTree = rootRoute.addChildren([
   cliRoute,
   submitRoute,
   mintRoute,
+  registerV5Route,
+  mintNftRoute,
+  useDesktopRoute,
+  ceremonyRoute,
+  ceremonyContributeRoute,
+  ceremonyStatusRoute,
+  ceremonyVerifyRoute,
   integrationsRoute,
+  accountRotateRoute,
 ]);
 
 export const router = createRouter({ routeTree });

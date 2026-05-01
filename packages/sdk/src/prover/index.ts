@@ -50,10 +50,11 @@ export interface ProveOptions {
   wasmUrl: string;
   zkeyUrl: string;
   algorithmTag?: AlgorithmTag;
-  /** Split-proof side — only consumed by MockProver to shape publicSignals
-   *  to the circuit-specific length (leaf=16, chain=3). Real provers ignore
-   *  it; the circuit emits the correct length natively. */
-  side?: 'leaf' | 'chain';
+  /** V4 split-proof side (leaf=16, chain=3) or V5 single proof (v5=14).
+   *  Only consumed by MockProver to shape publicSignals to the
+   *  circuit-specific length. Real provers ignore it; the circuit emits
+   *  the correct length natively. */
+  side?: 'leaf' | 'chain' | 'v5';
   onProgress?: (p: ProofProgress) => void;
   signal?: AbortSignal;
 }
@@ -127,6 +128,60 @@ export class MockProver implements IProver {
     if (!signals) return base;
     return { proof: base.proof, publicSignals: signals };
   }
+}
+
+// ===========================================================================
+// V5 single-proof driver — wraps IProver.prove() with V5-specific URL pinning
+// and public-signal-length validation. The V5 architecture collapses V4's
+// leaf+chain split into a single Groth16 proof emitting 14 public signals
+// (orchestration §0.1).
+// ===========================================================================
+
+export interface ProveV5Options {
+  /** Swappable IProver — MockProver in tests, SnarkjsProver+Worker in prod. */
+  readonly prover: IProver;
+  readonly artifacts: CircuitArtifactUrls;
+  readonly signal?: AbortSignal;
+  readonly onProgress?: (p: ProofProgress) => void;
+}
+
+export interface ProveV5Result {
+  readonly proof: Groth16Proof;
+  /** 14 decimal-string field elements per orchestration §0.1. */
+  readonly publicSignals: string[];
+}
+
+/**
+ * Run the V5 Groth16 prover once and assert the 14-signal output shape.
+ *
+ * Why a thin driver instead of calling `prover.prove()` directly:
+ *  - Pins `side: 'v5'` so MockProver projects the witness into the
+ *    V5 public-signal layout (callers don't have to remember the literal).
+ *  - Length-checks `publicSignals.length === 14` post-prove. A V4 zkey
+ *    sneaking into the V5 path would emit 16 signals; this fails fast
+ *    rather than letting the malformed array reach `register()`.
+ *  - Single seam for future V5-only behaviour (e.g., zkey signature
+ *    validation, contract pre-flight reads).
+ */
+export async function proveV5(
+  witness: Record<string, unknown>,
+  opts: ProveV5Options,
+): Promise<ProveV5Result> {
+  const result = await opts.prover.prove(witness, {
+    wasmUrl: opts.artifacts.wasmUrl,
+    zkeyUrl: opts.artifacts.zkeyUrl,
+    side: 'v5',
+    ...(opts.onProgress ? { onProgress: opts.onProgress } : {}),
+    ...(opts.signal ? { signal: opts.signal } : {}),
+  });
+  if (result.publicSignals.length !== 14) {
+    throw new QkbError('witness.fieldTooLong', {
+      reason: 'v5-public-signals-length',
+      got: result.publicSignals.length,
+      want: 14,
+    });
+  }
+  return { proof: result.proof, publicSignals: result.publicSignals };
 }
 
 // ===========================================================================
@@ -256,8 +311,35 @@ function checkAborted(signal?: AbortSignal): void {
  */
 function derivePublicSignalsFromWitness(
   input: Record<string, unknown>,
-  side: 'leaf' | 'chain' | undefined,
+  side: 'leaf' | 'chain' | 'v5' | undefined,
 ): string[] | null {
+  if (side === 'v5') {
+    // V5 single-circuit: 14 public signals per orchestration §0.1. The
+    // witness builder (Task 8) produces a `publicSignals` field whose
+    // values are bigints/decimal strings; we project them into the
+    // declared §0.1 order. If `publicSignals` isn't present (callers
+    // passing raw inputs to the mock), fall through to the canned
+    // default — same behaviour as the V4 leaf/chain mismatched-witness
+    // case.
+    const ps = input.publicSignals;
+    if (!ps || typeof ps !== 'object') return null;
+    const r = ps as Record<string, unknown>;
+    const order = [
+      'msgSender', 'timestamp', 'nullifier',
+      'ctxHashHi', 'ctxHashLo',
+      'bindingHashHi', 'bindingHashLo',
+      'signedAttrsHashHi', 'signedAttrsHashLo',
+      'leafTbsHashHi', 'leafTbsHashLo',
+      'policyLeafHash', 'leafSpkiCommit', 'intSpkiCommit',
+    ] as const;
+    const out: string[] = [];
+    for (const k of order) {
+      const v = stringify(r[k]);
+      if (v === null) return null;
+      out.push(v);
+    }
+    return out;
+  }
   if (side === 'leaf') {
     const pkX = input.pkX;
     const pkY = input.pkY;

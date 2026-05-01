@@ -12,6 +12,18 @@
     "./prover/snarkjs": {
       "types": "./dist/prover/snarkjs.d.ts",
       "import": "./dist/prover/snarkjs.js"
+    },
+    "./prover/snarkjsWorker": {
+      "types": "./dist/prover/snarkjsWorker.d.ts",
+      "import": "./dist/prover/snarkjsWorker.js"
+    },
+    "./prover/snarkjsWorkerEntry": {
+      "types": "./dist/prover/snarkjsWorkerEntry.d.ts",
+      "import": "./dist/prover/snarkjsWorkerEntry.js"
+    },
+    "./prover/verify": {
+      "types": "./dist/prover/verify.d.ts",
+      "import": "./dist/prover/verify.js"
     }
   },
   "main": "./dist/index.js",
@@ -25,7 +37,9 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "drift-check": "node scripts/check-circuits-vendor-drift.mjs",
+    "drift-check:update-lock": "node scripts/check-circuits-vendor-drift.mjs --update-lock"
   },
   "dependencies": {
     "@noble/hashes": "^1.4.0",

@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { MintButton } from '../components/MintButton';
 import { DocumentFooter } from '../components/DocumentFooter';
@@ -10,8 +11,11 @@ export function IndexScreen() {
       <PaperGrain />
       <div className="doc-grid pt-24 relative z-10">
         <div />
-        <div className="max-w-3xl">
-          <h1 className="text-7xl leading-none mb-8" style={{ color: 'var(--ink)' }}>
+        <div className="min-w-0 max-w-3xl">
+          <h1
+            className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl leading-none mb-8"
+            style={{ color: 'var(--ink)' }}
+          >
             {t('landing.title', 'Verified Identity. On-chain.')}
           </h1>
           <p className="text-xl mb-12 max-w-2xl" style={{ color: 'var(--ink)' }}>
@@ -27,6 +31,131 @@ export function IndexScreen() {
               'landing.subline',
               'Powered by Diia QES + Groth16. Your identity bytes never enter this browser.',
             )}
+          </p>
+
+          <hr
+            className="rule"
+            style={{
+              marginTop: '6rem',
+              marginBottom: '4rem',
+              borderTopColor: 'var(--seal)',
+            }}
+          />
+
+          <section aria-labelledby="privacy-heading">
+            <h2
+              id="privacy-heading"
+              className="text-4xl sm:text-5xl md:text-6xl leading-none mb-12"
+              style={{ color: 'var(--ink)' }}
+            >
+              {t('landing.privacy.heading', 'Identity, escrowed.')}
+            </h2>
+
+            <dl className="space-y-10">
+              <div>
+                <dt
+                  className="text-fine text-sm mb-2"
+                  style={{
+                    color: 'var(--sovereign)',
+                    fontVariant: 'small-caps',
+                    letterSpacing: '0.08em',
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{ color: 'var(--seal)', marginRight: '0.5em' }}
+                  >
+                    ·
+                  </span>
+                  {t('landing.privacy.onLedgerLabel', 'What is on the ledger')}
+                </dt>
+                <dd className="text-xl" style={{ color: 'var(--ink)' }}>
+                  {t(
+                    'landing.privacy.onLedgerBody',
+                    'a nullifier — context-bound, one-way, unlinkable across applications.',
+                  )}
+                </dd>
+              </div>
+
+              <div>
+                <dt
+                  className="text-fine text-sm mb-2"
+                  style={{
+                    color: 'var(--sovereign)',
+                    fontVariant: 'small-caps',
+                    letterSpacing: '0.08em',
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{ color: 'var(--seal)', marginRight: '0.5em' }}
+                  >
+                    ·
+                  </span>
+                  {t('landing.privacy.notOnLedgerLabel', 'What is not on the ledger')}
+                </dt>
+                <dd className="text-xl" style={{ color: 'var(--ink)' }}>
+                  {t(
+                    'landing.privacy.notOnLedgerBody',
+                    'name, address, document numbers, signature, certificate contents.',
+                  )}
+                </dd>
+              </div>
+
+              <div>
+                <dt
+                  className="text-fine text-sm mb-2"
+                  style={{
+                    color: 'var(--sovereign)',
+                    fontVariant: 'small-caps',
+                    letterSpacing: '0.08em',
+                  }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{ color: 'var(--seal)', marginRight: '0.5em' }}
+                  >
+                    ·
+                  </span>
+                  {t(
+                    'landing.privacy.recoveryLabel',
+                    'What can be recovered, by whom, under what process',
+                  )}
+                </dt>
+                <dd className="text-xl" style={{ color: 'var(--ink)' }}>
+                  {t(
+                    'landing.privacy.recoveryBody',
+                    'by the issuing authority, under lawful order, at meaningful compute cost. Not by third parties.',
+                  )}
+                </dd>
+              </div>
+            </dl>
+
+            <p
+              className="text-fine text-2xl mt-12 italic max-w-2xl"
+              style={{ color: 'var(--ink)', lineHeight: 1.45 }}
+            >
+              {t(
+                'landing.privacy.closing',
+                'This is identity escrow. Every-day pseudonymity for the holder; recoverable accountability for the state. The same trust structure as the qualified electronic signature itself — preserved on-chain.',
+              )}
+            </p>
+          </section>
+
+          <p
+            className="text-fine italic text-base mt-16"
+            style={{ color: 'var(--ink)' }}
+            data-testid="landing-ceremony-link"
+          >
+            <span aria-hidden="true" style={{ color: 'var(--seal)', marginRight: '0.5em' }}>
+              ·
+            </span>
+            <Link to="/ceremony" style={{ color: 'var(--sovereign)' }}>
+              {t(
+                'landing.ceremonyLink',
+                'Help with the trusted setup ceremony →',
+              )}
+            </Link>
           </p>
         </div>
       </div>
