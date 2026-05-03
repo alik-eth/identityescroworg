@@ -265,6 +265,28 @@ template QKBPresentationV5() {
     // Circuit treats it as an opaque field element + applies a 254-bit range check
     // (Num2Bits below) so an adversary witness cannot supply a value ≥ p that
     // wraps to a colliding value mod p with a different on-chain commitment.
+    //
+    // V5.3 F3 — walletSecret ↔ msgSender binding is INTENTIONALLY
+    // CONTRACT-SIDE, not circuit-side.  walletSecret is bound to the
+    // holder's identity in-circuit via:
+    //   nullifier            = Poseidon₂(walletSecret, ctxFieldHash)        — §6.7
+    //   identityCommitment   = Poseidon₂(subjectSerialPacked, walletSecret) — §V5.1
+    // But the circuit cannot prove "the prover holds the wallet at
+    // msg.sender" because the wallet-pubkey ↔ msg.sender relation
+    // requires the contract's storage gate at `identityWallets[fp]`
+    // (V5.1 invariant #2 — wallet-uniqueness; reads ALL prior
+    // identities for the same fingerprint, requiring on-chain
+    // storage that the circuit cannot see).
+    //
+    // See `docs/superpowers/specs/2026-04-30-wallet-bound-nullifier-amendment.md`
+    // §"Wallet-uniqueness gate location" for the full rationale.
+    //
+    // Future contributors: do NOT add a circuit-side check on
+    // msgSender's relation to walletSecret.  V5.2 dropped msgSender
+    // as a public signal entirely (see §6.8 wallet-pk limb packing
+    // for the keccak-on-chain construction); a circuit-side
+    // walletSecret↔msgSender binding would either be ineffective or
+    // break the rotation-mode storage semantics that V5.1 set up.
     signal input walletSecret;
 
     // V5.1 rotation-mode old-wallet-secret witness (private input). Required when
@@ -545,6 +567,56 @@ template QKBPresentationV5() {
     // Contract changes" of `2026-05-01-keccak-on-chain-amendment.md`.
 
     rotationMode * (rotationMode - 1) === 0;     // boolean range check
+
+    // V5.3 F2 — rotationNewWallet 160-bit range check (defense-in-depth).
+    //
+    // V5.2 left rotationNewWallet as a free 254-bit field element on
+    // the public-signal slot 17.  The contract enforces "fits in
+    // 160 bits" via address-cast equality (`uint256(uint160(slot17))
+    // == slot17`), so the runtime is safe — but the circuit's own
+    // statement of correctness was silent on the bound.  V5.3 adds
+    // a Num2Bits(160) at the circuit boundary so the proof
+    // ATTESTS to a valid Ethereum-address-shaped value, not just a
+    // field element the contract happens to mask.
+    //
+    // Fires UNCONDITIONALLY (both register and rotate modes).  In
+    // register mode the contract will additionally enforce
+    // `rotationNewWallet == msg.sender`, also a 160-bit value.
+    // In rotate mode the contract enforces `derivedAddr ==
+    // identityWallets[fp]`, again 160 bits.  Both modes have
+    // 160-bit semantics; range-checking unconditionally is
+    // simpler and safer.
+    //
+    // Cost: ~480 constraints (Num2Bits + 160 parent-level boolean
+    // constraints + 1 sum-equality).
+    //
+    // **circom -O1 optimizer note** (caught during V5.3 T2 cold-compile):
+    // both bare `Num2Bits(160).in <== rotationNewWallet` AND
+    // `LessThan(161)` against rotationNewWallet leave the constraint
+    // count flat, even though the latter reads its output bit.
+    // The optimizer prunes the lower-bit constraints inside Num2Bits
+    // because they're "unused observable" — the lc1 === in chain is
+    // satisfiable by free lower bits.
+    //
+    // Defeat the prune by re-asserting EACH bit's boolean range at
+    // the parent-template level + re-summing them and asserting
+    // equality with the public input.  Both checks are duplicates
+    // of Num2Bits's internal constraints, but at the parent level
+    // they reference parent-scope signals (rotationNewWallet,
+    // rotationNewWalletBits.out[i]) and can't be eliminated.
+    component rotationNewWalletBits = Num2Bits(160);
+    rotationNewWalletBits.in <== rotationNewWallet;
+    var rotationBitWeightedSum = 0;
+    for (var rnb = 0; rnb < 160; rnb++) {
+        // Boolean range check on each bit (parent-level dup of
+        // Num2Bits internal — keeps each bit observable).
+        rotationNewWalletBits.out[rnb] * (rotationNewWalletBits.out[rnb] - 1) === 0;
+        rotationBitWeightedSum += rotationNewWalletBits.out[rnb] * (1 << rnb);
+    }
+    // Sum equality: bit-decomposition reconstructs the public input.
+    // With each bit ∈ {0,1} (asserted above) AND the sum equal to
+    // rotationNewWallet, the value is forced to fit in 160 bits.
+    rotationBitWeightedSum === rotationNewWallet;
 
     // Register-mode (rotationMode == 0): rotation slot 16
     // (`rotationOldCommitment`) is no-op, pinned to `identityCommitment` so
