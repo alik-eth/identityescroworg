@@ -1,7 +1,10 @@
 // V5.2 witness builder — keccak-on-chain amendment.
+// V5.3 layered amendment — F1 OID-anchor for subject-serial offset.
 //
-// Spec ref: docs/superpowers/specs/2026-05-01-keccak-on-chain-amendment.md
-// (commit 5ba064e on feat/v5_2arch-circuits, v0.4 + contracts-eng review).
+// V5.2 spec ref: docs/superpowers/specs/2026-05-01-keccak-on-chain-amendment.md
+// V5.3 spec ref: docs/superpowers/specs/2026-05-03-v5_3-oid-anchor-amendment.md
+// (V5.3 v0.1, founder-approved minimal F1.2; circuits-eng T1 commit 25bf103
+//  on feat/v5_3-circuits.)
 //
 // Core delta vs V5.1 (`build-witness-v5.ts`):
 //   - Drop `msgSender` from the witness JSON (no longer a circuit input).
@@ -18,10 +21,27 @@
 //       pkYHi = sum_{i=0..15}  pkBytes[i+33] * 256^(15-i)   // BE
 //       pkYLo = sum_{i=16..31} pkBytes[i+33] * 256^(31-i)   // BE
 //
-// Public-signal layout (FROZEN per spec §"Public-signal layout V5.1
+// V5.3 delta (F1 OID-anchor, private input only):
+//   - Emit `subjectSerialOidOffsetInTbs` = `subjectSerialValueOffsetInTbs - 7`.
+//     The V5.3 circuit (commit 25bf103) constrains:
+//
+//       leafTbs[oid+0..oid+4] === [0x06, 0x03, 0x55, 0x04, 0x05]   // OID 2.5.4.5
+//       leafTbs[oid+5]        ∈ {0x13 PrintableString, 0x0c UTF8String}
+//       leafTbs[oid+6]        === subjectSerialValueLength
+//       subjectSerialValueOffsetInTbs === subjectSerialOidOffsetInTbs + 7
+//
+//     This closes the V5.2 Sybil vector where a prover could pick any
+//     32-byte window in the signed TBS that "looks like" a serial-number
+//     value. After F1 the OID prefix anchors the chosen offset to a real
+//     `AttributeTypeAndValue { type=2.5.4.5 }` ASN.1 frame, and the
+//     value-offset is fully determined by the OID-offset.
+//
+// Public-signal layout (FROZEN per V5.2 spec §"Public-signal layout V5.1
 // → V5.2"): 22 entries, V5.1 slots 1-18 shifted down by 1 (msgSender
 // removal frees slot 0), bindingPkXHi/Lo + bindingPkYHi/Lo appended at
-// 18-21.
+// 18-21. **V5.3 does NOT change the public layout** — `subjectSerialOidOffsetInTbs`
+// is a PRIVATE input (not a public signal), so verifyProof(uint[22])
+// keeps its signature and no SDK ABI re-pump is needed.
 //
 // Cross-package "byte-identical witness" contract: if circuits-eng
 // amends `build-witness-v5_2.ts` upstream, this copy MUST be re-synced.
@@ -44,12 +64,29 @@ import type {
  * and four `bindingPk*` limbs appended. Snarkjs witness JSON contract:
  * fields with public-signal slot mappings must be exactly the 22 names
  * the V5.2 circuit declares as `signal input` (in canonical order).
+ *
+ * V5.3 layered: one additional PRIVATE input (`subjectSerialOidOffsetInTbs`)
+ * is emitted alongside the V5.2 fields. snarkjs treats it as a private
+ * witness input that doesn't affect the 22 public-signal layout; the
+ * V5.3 circuit's §6.9b OID-anchor block consumes it.
  */
 export type WitnessV5_2 = Omit<WitnessV5, 'msgSender'> & {
   readonly bindingPkXHi: string;
   readonly bindingPkXLo: string;
   readonly bindingPkYHi: string;
   readonly bindingPkYLo: string;
+  /**
+   * V5.3 F1 OID-anchor — byte offset (inside `leafTbsBytes`) of the
+   * `AttributeTypeAndValue { type=OID 2.5.4.5 (id-at-serialNumber),
+   * value=DirectoryString }` ASN.1 frame. Equals
+   * `subjectSerialValueOffsetInTbs - 7` (5 OID bytes + 1 string-tag +
+   * 1 length-byte). Consumed by the V5.3 circuit's §6.9b block.
+   *
+   * Emitted as a string per snarkjs's witness JSON convention (all
+   * numeric inputs are decimal strings); the V5.3 circuit reads it as
+   * `signal input subjectSerialOidOffsetInTbs`.
+   */
+  readonly subjectSerialOidOffsetInTbs: string;
 };
 
 /** V5.2 builder input. Identical shape to V5.1 — the divergence is on
@@ -147,6 +184,110 @@ export async function buildWitnessV5_2(
   const pkYHi = bytesToBigIntBE(pkBytes.subarray(33, 49));
   const pkYLo = bytesToBigIntBE(pkBytes.subarray(49, 65));
 
+  // V5.3 F1 OID-anchor — derive the OID-offset from the value-offset.
+  //
+  // The V5.1 builder (delegated above) emits `subjectSerialValueOffsetInTbs`
+  // (TBS-relative offset of the DirectoryString value bytes) and
+  // `subjectSerialValueOffset` (absolute offset in leafCertDer). The
+  // V5.3 circuit needs `subjectSerialOidOffsetInTbs` such that
+  // `subjectSerialValueOffsetInTbs === subjectSerialOidOffsetInTbs + 7`.
+  // The 7-byte gap covers: 5 bytes OID prefix + 1 byte string-tag + 1
+  // byte length. Subtraction is the inverse.
+  //
+  // Defense-in-depth self-check: re-read the 7 OID-anchor bytes from
+  // the absolute cert DER and verify they match the expected ASN.1
+  // frame (`06 03 55 04 05 <13|0c> NN`). If the offset is wrong, this
+  // surfaces a clear SDK-side error at build time rather than a
+  // cryptic constraint failure ~10 s into the prove. Same condition
+  // the circuit's §6.9b block enforces; we duplicate at the SDK layer
+  // so misconfigurations fail fast.
+  const valueOffsetInTbsRaw = (v51Witness as Record<string, unknown>)
+    .subjectSerialValueOffsetInTbs;
+  if (typeof valueOffsetInTbsRaw !== 'number') {
+    throw new Error(
+      'V5.3 OID-anchor: V5.1 builder did not emit ' +
+        '`subjectSerialValueOffsetInTbs` as a number — V5.1 contract drift?',
+    );
+  }
+  const valueOffsetAbsRaw = (v51Witness as Record<string, unknown>)
+    .subjectSerialValueOffset;
+  if (typeof valueOffsetAbsRaw !== 'number') {
+    throw new Error(
+      'V5.3 OID-anchor: V5.1 builder did not emit ' +
+        '`subjectSerialValueOffset` as a number — V5.1 contract drift?',
+    );
+  }
+  if (valueOffsetInTbsRaw < 7) {
+    throw new Error(
+      `V5.3 OID-anchor: subjectSerialValueOffsetInTbs=${valueOffsetInTbsRaw} ` +
+        '< 7; cannot derive OID-offset (would underflow into TBS header).',
+    );
+  }
+  const oidOffsetInTbs = valueOffsetInTbsRaw - 7;
+  const oidOffsetAbs = valueOffsetAbsRaw - 7;
+
+  // Bounds guard: the 7-byte OID-anchor frame at oidOffsetAbs must fit
+  // entirely inside the cert DER. A short slice would silently
+  // compare-against-undefined in the loop below; fail fast with a
+  // pointed message instead.
+  if (oidOffsetAbs < 0 || oidOffsetAbs + 7 > input.leafCertDer.length) {
+    throw new Error(
+      `V5.3 OID-anchor: derived oidOffsetAbs=${oidOffsetAbs} (+7) out of ` +
+        `range for leafCertDer.length=${input.leafCertDer.length}; ` +
+        'subjectSerial parser produced an inconsistent value-offset.',
+    );
+  }
+
+  // ASN.1 self-check: leafCertDer[oidAbs..oidAbs+5] must equal
+  // `06 03 55 04 05` (DER-encoded OID 2.5.4.5 = id-at-serialNumber).
+  // The bounds guard above ensures the slice has the full 5 bytes, so
+  // the indexed accesses below are not actually `undefined`; we cast
+  // through `Uint8Array` once to satisfy `noUncheckedIndexedAccess`
+  // without scattering `!` assertions through the hot loop.
+  const oidPrefix = Uint8Array.from(
+    input.leafCertDer.subarray(oidOffsetAbs, oidOffsetAbs + 5),
+  );
+  const expectedPrefix = [0x06, 0x03, 0x55, 0x04, 0x05] as const;
+  for (let i = 0; i < 5; i++) {
+    if (oidPrefix[i] !== expectedPrefix[i]) {
+      const got = Array.from(oidPrefix, (b) =>
+        b.toString(16).padStart(2, '0'),
+      ).join(' ');
+      throw new Error(
+        `V5.3 OID-anchor: leafCertDer[${oidOffsetAbs}..${oidOffsetAbs + 5}] = ${got}; ` +
+          'expected `06 03 55 04 05` (DER OID 2.5.4.5 id-at-serialNumber). ' +
+          'subjectSerial parser may be off, or the cert lacks an explicit ' +
+          'subject.serialNumber RDN.',
+      );
+    }
+  }
+
+  // String-tag check: leafCertDer[oidAbs+5] must be 0x13 (PrintableString)
+  // or 0x0c (UTF8String). Other DirectoryString choices (BMPString 0x1e,
+  // UniversalString 0x1c, TeletexString 0x14) are theoretically valid
+  // X.520 but the V5.3 circuit only accepts the two QTSP-canonical tags
+  // per spec §F1.2. Surface as a build-time error so the user gets a
+  // clear "your cert encodes serialNumber as <foo>; only PrintableString
+  // and UTF8String are accepted by the QKB v5 verifier" message.
+  //
+  // The bounds guard (oidOffsetAbs + 7 ≤ length) guarantees this byte
+  // exists, but `noUncheckedIndexedAccess` types it as
+  // `number | undefined`; the explicit `=== undefined` branch satisfies
+  // both TS and a defence-in-depth narrative.
+  const stringTag = input.leafCertDer[oidOffsetAbs + 5];
+  if (stringTag === undefined || (stringTag !== 0x13 && stringTag !== 0x0c)) {
+    const tagDisplay =
+      stringTag === undefined
+        ? '<missing>'
+        : `0x${stringTag.toString(16).padStart(2, '0')}`;
+    throw new Error(
+      `V5.3 OID-anchor: subject.serialNumber DirectoryString tag at ` +
+        `offset ${oidOffsetAbs + 5} is ${tagDisplay}; ` +
+        'V5.3 circuit accepts only 0x13 (PrintableString) or 0x0c (UTF8String). ' +
+        'Spec §F1.2.',
+    );
+  }
+
   // Strip msgSender from the V5.1 witness (V5.2 circuit doesn't have it).
   // The other 18 V5.1 fields carry forward unchanged; we just append the
   // 4 new pkPK* limbs.
@@ -162,5 +303,8 @@ export async function buildWitnessV5_2(
     bindingPkXLo: pkXLo.toString(),
     bindingPkYHi: pkYHi.toString(),
     bindingPkYLo: pkYLo.toString(),
+    // V5.3 F1 — emit as decimal string per snarkjs's witness JSON
+    // numeric convention.
+    subjectSerialOidOffsetInTbs: oidOffsetInTbs.toString(),
   };
 }

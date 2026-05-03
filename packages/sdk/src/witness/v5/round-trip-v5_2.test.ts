@@ -10,6 +10,16 @@
 //   - `bindingPkXHi/Lo + bindingPkYHi/Lo` correctly equal the 4 × 16-byte
 //     big-endian splits of the binding's claimed wallet pk (pkBytes[1..65]).
 //
+// V5.3 layered assertions (added under "F1 OID-anchor private witness input"):
+//   - witness JSON contains `subjectSerialOidOffsetInTbs` as a decimal
+//     string equal to `subjectSerialValueOffsetInTbs - 7`.
+//   - The 5 OID-prefix bytes at the corresponding cert-DER offset
+//     equal `06 03 55 04 05` (DER OID 2.5.4.5 = id-at-serialNumber).
+//   - The string-tag byte at offset+5 is 0x13 (PrintableString) or
+//     0x0c (UTF8String) — the two QTSP-canonical DirectoryString
+//     choices the V5.3 §6.9b block accepts.
+//   - The length byte at offset+6 equals `subjectSerialValueLength`.
+//
 // The V5.1 round-trip test stays in place; both run in CI to guard
 // against drift in either direction. Pinned witness assertions
 // for V5.2 fields use the same admin-ecdsa fixture binding as V5.1 (pk
@@ -135,4 +145,88 @@ describe('V5.2 witness builder — synthetic-CAdES round-trip', () => {
       }),
     ).rejects.toThrow(/MAX_BCANON/);
   });
+
+  // V5.3 F1 OID-anchor — single new private witness input
+  // (`subjectSerialOidOffsetInTbs`). Public-signal layout UNCHANGED.
+  // Pins: SDK arithmetic + the four ASN.1 frame bytes the V5.3 §6.9b
+  // block enforces. Failure at this layer means the SDK and the
+  // circuit would disagree at prove time → ~10s wasted; assert here
+  // so misconfigurations fail fast.
+  it('emits subjectSerialOidOffsetInTbs pointing at OID 2.5.4.5 inside subject DN (V5.3 F1)', async () => {
+    const bindingBytes = readFixture('binding.qkb2.json');
+    const leafCertDer = readFixture('leaf.der');
+    const leafSpki = readFixture('leaf-spki.bin');
+    const intSpki = readFixture('intermediate-spki.bin');
+
+    const bindingDigest = Buffer.from(sha256(bindingBytes));
+    const synth = buildSynthCades({
+      contentDigest: bindingDigest,
+      leafCertDer,
+    });
+    const parsed = parseP7s(synth.p7sBuffer);
+
+    const witness = await buildWitnessV5_2({
+      bindingBytes,
+      leafCertDer: parsed.leafCertDer,
+      leafSpki,
+      intSpki,
+      signedAttrsDer: parsed.signedAttrsDer,
+      signedAttrsMdOffset: parsed.signedAttrsMdOffset,
+      walletSecret: Buffer.alloc(32),
+    });
+
+    // The SDK emits decimal strings for snarkjs witness JSON; convert
+    // to numbers for arithmetic.
+    const oidOffsetInTbs = Number(
+      (witness as Record<string, unknown>).subjectSerialOidOffsetInTbs,
+    );
+    const valueOffsetInTbs = Number(
+      (witness as Record<string, unknown>).subjectSerialValueOffsetInTbs,
+    );
+    expect(Number.isInteger(oidOffsetInTbs)).toBe(true);
+    expect(oidOffsetInTbs).toBeGreaterThanOrEqual(0);
+    // The locked algebraic invariant the V5.3 §6.9b block enforces:
+    // valueOffsetInTbs = oidOffsetInTbs + 7. Asserting it on the SDK
+    // side too means a future "let's just emit the value-offset" bug
+    // fails this test before reaching the circuit.
+    expect(valueOffsetInTbs - oidOffsetInTbs).toBe(7);
+
+    // ASN.1-frame self-check: the 7 bytes the SDK's emitted offset
+    // points at must form a real `AttributeTypeAndValue { type=2.5.4.5,
+    // value=DirectoryString }`. We don't re-scan the cert (a v3 cert
+    // with serialNumber attributes on BOTH the issuer DN and the
+    // subject DN contains two `06 03 55 04 05` byte sequences; only
+    // the second is the SUBJECT serial we want — which is precisely
+    // why the OID-anchor needs the subject-side offset, not a naive
+    // first-match). Instead we verify the bytes at the SDK-computed
+    // offset, which is independent verification of the SDK output:
+    // a buggy SDK that emitted a wrong offset would land on bytes
+    // that don't match the expected frame, failing this assertion.
+    const cert = parsed.leafCertDer;
+    const valueOffsetAbs = Number(
+      (witness as Record<string, unknown>).subjectSerialValueOffset,
+    );
+    const oidOffsetAbs = valueOffsetAbs - 7;
+    expect(oidOffsetAbs).toBeGreaterThanOrEqual(0);
+
+    // Frame at the absolute offset:
+    //   bytes[0..5]  = 06 03 55 04 05  (DER OID 2.5.4.5)
+    //   bytes[5]     ∈ {0x13, 0x0c}     (PrintableString | UTF8String)
+    //   bytes[6]     = subjectSerialValueLength
+    expect([
+      cert[oidOffsetAbs],
+      cert[oidOffsetAbs + 1],
+      cert[oidOffsetAbs + 2],
+      cert[oidOffsetAbs + 3],
+      cert[oidOffsetAbs + 4],
+    ]).toEqual([0x06, 0x03, 0x55, 0x04, 0x05]);
+    const stringTag = cert[oidOffsetAbs + 5];
+    expect(stringTag === 0x13 || stringTag === 0x0c).toBe(true);
+    const lenByte = cert[oidOffsetAbs + 6];
+    const subjectSerialValueLength = Number(
+      (witness as Record<string, unknown>).subjectSerialValueLength,
+    );
+    expect(lenByte).toBe(subjectSerialValueLength);
+  });
+
 });
