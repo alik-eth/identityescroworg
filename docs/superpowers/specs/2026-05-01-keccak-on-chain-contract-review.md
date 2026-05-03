@@ -280,6 +280,30 @@ msg.sender wallet identity
 
 ### §3.2 — `rotateWallet()` defense-in-depth gate (proposed enhancement, NOT a soundness gap)
 
+> **⚠ POST-IMPLEMENTATION CORRECTION (2026-05-03, after T1 commit `c47b5a5`):**
+> The proposed `derivedAddr == identityWallets[fp]` gate **was withdrawn during T1
+> implementation** because it would unconditionally REVERT every legitimate rotation:
+> in rotate mode, `derivedAddr` (computed from the proof's `bindingPkX/Y` limbs)
+> is the **NEW wallet's** address, not the OLD wallet's. The proof's binding pk is
+> bound to the new wallet (since the user's QES re-issue or fresh-binding flow
+> produces a binding declaring the new wallet pk). Equating that against the
+> stored `identityWallets[fp]` (which is the OLD wallet) is structurally wrong —
+> not just over-restrictive but always-false on any legitimate rotation.
+>
+> The keccak-on-chain amendment's spec at `8f5277f` §3.2 still describes the
+> proposed gate as a defense-in-depth recommendation. **That spec section is
+> stale and should be treated as withdrawn.** The contract correctly does NOT
+> implement the gate. See QKBRegistryV5_2.sol's `rotateWallet()` docstring
+> (commit `c47b5a5`) for the in-tree explanation.
+>
+> The reasoning that follows in this §3.2 was the v0.4 framing pre-implementation
+> (treating it as "defense-in-depth, not load-bearing"). Even that v0.4 framing
+> was too charitable: the gate isn't defense-in-depth, it's structurally-broken-
+> for-the-rotation-flow. Threat-model resolution stands on V5.1's existing
+> chain: rotation auth ECDSA sig from oldWallet's privkey (recovered via
+> ecrecover, must match `identityWallets[fp]`) is the load-bearing on-chain
+> binding. No additional contract gate is needed or appropriate.
+
 The spec's §"Cost estimate" says:
 
 > contracts-eng — Add keccak gate to `register()`: reconstruct 64-byte uncompressed pk from 4 public-signal limbs, `keccak256(pk)[12..32] == msg.sender`. Add register-mode no-op gate `rotationNewWallet == msg.sender` (V5.1 had this in-circuit; V5.2 moves on-chain). **`rotateWallet()` already enforces `rotationNewWallet == msg.sender` (no change there per V5.1's existing contract logic)**.
