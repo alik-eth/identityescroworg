@@ -1,8 +1,8 @@
 {
-  "name": "identityescroworg",
+  "name": "zkqes",
   "version": "0.0.0",
   "private": true,
-  "description": "QKB + QIE — Qualified Key Binding with Qualified Identity Escrow. Phase 1: QKB core.",
+  "description": "zkqes — a zero-knowledge proof of a qualified electronic signature (eIDAS QES).",
   "packageManager": "pnpm@9.1.0",
   "engines": {
     "node": ">=20.19.0"

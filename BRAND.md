@@ -1,38 +1,45 @@
 # Brand
 
-**Date locked:** 2026-05-03
-**Decision reference:** `docs/marketing/2026-05-03-branding-decision.md`
+**Date locked:** 2026-05-03 (rename baseline)
+**Decision reference:** `docs/superpowers/specs/2026-05-03-zkqes-rename-design.md` + `docs/superpowers/research/2026-05-03-zkqes-rename-analysis.md`
 
 A one-page reference for anyone writing public-facing copy, talks, slides, or third-party documentation about this project. Read once; carry forward.
 
-## Names
+## Name
 
-| Layer | Name | Use it as |
-|---|---|---|
-| Protocol noun | **QKB** (Qualified Key Binding) | The noun. The thing that ships at V1. The name in code, contracts, packages, specs, CLI, ceremony commands. |
-| Public-facing descriptor | **zk-QES** | The descriptor. What QKB *is* in two seconds for an outside reader. Use in opening lines, taglines, HN titles, conference abstracts. |
-| Project umbrella | **Identity Escrow** | The org-level name. The research line. The thing the .org domain points at. |
-| Phase 2 design line (parked) | **QIE** (Qualified Identity Escrow) | Internal codename only. Not for public copy until QIE either ships or is formally killed. |
+**`zkqes`** — lowercase noun, no expansion needed in casual use. Matches the domain (`zkqes.org`) and the descriptor.
 
-## The split, explained once
+When introducing the project to an outside reader who's seeing it for the first time, the two-second descriptor is **"a zero-knowledge proof of a qualified electronic signature"** (the literal expansion of zk-QES, eIDAS-aware audiences will recognize it). After the first use, just `zkqes`.
 
-`QKB` is the codename. It is structurally locked into shipped artifacts (`@qkb/*` packages, `QKBRegistry*` contracts, `QKBPresentationV5.circom`, `qkb` CLI, `qkb-v5.r1cs`). Renaming any of that surface mid-ceremony would be high-cost for zero functional gain. So we keep `QKB` as the working name.
+There is no protocol-vs-project-vs-descriptor split. The repo, the protocol, the website, the package scope, the CLI binary, the contract namespace — all named `zkqes`. One name, one thing.
 
-`zk-QES` is the descriptor — "zero-knowledge proof of a qualified electronic signature, in the eIDAS sense." It parses instantly for the audience this project is aimed at (PSE, 0xPARC, Mopro, Anon Aadhaar, ZK research). We use it as the descriptor any time we need outside legibility.
+## What this brand REVERSED
 
-`Identity Escrow` is the project umbrella. It does not refer to a specific contract feature; it refers to a property that any state-issued credential exhibits: the issuing authority retains the ability to identify a holder under lawful process. V1 (QKB) already exhibits this property by virtue of the Diia QES anchor. Future iterations may extend toward fuller escrow constructions, but nothing is promised on a timeline.
+The 2026-05-03 morning lock briefly used a three-tier hierarchy: `QKB` (protocol noun, structurally locked), `zk-QES` (descriptor), `Identity Escrow` (project umbrella). That decision was reversed the same day, on the explicit reasoning that:
+
+- Nothing was actually shipped under the QKB name yet (zero npm publishes, zero contracts deployed, zero ceremony rounds run).
+- The three-name split was confusing for a single-thing project.
+- The cost of renaming was strictly minimal at this point in the lifecycle.
+
+So the structural rename to a single noun happened before any of those names left the repo. Future readers seeing this section can ignore the prior brand split entirely; it never reached production.
 
 ## How to write about the project
 
 **Do:**
-- Lead with the descriptor: "QKB is a zero-knowledge protocol over qualified electronic signatures (zk-QES)."
-- Use `QKB` in install commands, code references, contract addresses, ceremony command paths.
-- Use `Identity Escrow` only when referring to the project as a whole, not to V1's feature set.
+- Lead with the single name: "zkqes is a zero-knowledge protocol over qualified electronic signatures."
+- Use `zkqes` in install commands, code references, contract addresses, ceremony command paths.
+- When invoking an outside reader, expand to "a zero-knowledge proof of a qualified electronic signature (zk-QES)" once at first introduction, then drop the expansion.
 
 **Don't:**
-- Don't market `QIE` as a near-term feature; it is parked.
-- Don't claim escrow as a V1 feature; V1 ships pure binding registration.
-- Don't introduce a fourth name. Three is enough.
+- Don't introduce additional names, sub-brands, or umbrella terms.
+- Don't reintroduce "QKB", "Qualified Key Binding", "Identity Escrow", "QIE", or "Qualified Identity Escrow" anywhere in public-facing copy. (The 9 frozen consensus byte strings inside the protocol — see invariant below — are not branding; they're protocol-internal hash inputs that predate the rename.)
+- Don't expand `zkqes` in headlines or branding except as one-shot context.
+
+## Frozen consensus bytes (NOT branding)
+
+A small set of string literals inside the codebase begin with `qkb-` and look like brand artifacts but are NOT branding. They are protocol-internal byte strings hashed (keccak256 / SHA-256 / Poseidon) into circuit publics, contract storage, or off-chain deterministically-derived values. Renaming them invalidates the V5 circuit + Phase B ceremony + every existing fixture.
+
+The frozen tags are documented in **`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md` §3** — keep them; never touch. Each occurrence in code carries a freeze comment pointing back at that spec section. If you're writing a new amendment that needs a new domain-separation tag, name it with a `zkqes-` prefix; existing tags stay frozen.
 
 ## Domains
 
@@ -41,10 +48,11 @@ The public-facing surface uses three subdomains under `zkqes.org`. Locked 2026-0
 | Subdomain | Purpose | Lifecycle |
 |---|---|---|
 | `zkqes.org` (root) | Pre-ceremony hero + ceremony recruitment CTA + three contribution paths (snarkjs local / VPS / Fly launcher) | Live pre-recruitment; persists post-launch as the project landing |
-| `app.zkqes.org` | The actual register flow — `/v5/registerV5` + `/account/rotate`. Hosts the SPA. End users come here only after Phase B ceremony completes + Sepolia E2E §9.4 green | Live post-ceremony |
+| `app.zkqes.org` | The actual register flow — `/ua/registerV5` + `/account/rotate`. Hosts the SPA. End users come here only after Phase B ceremony completes + Sepolia E2E §9.4 green | Live post-ceremony |
 | `docs.zkqes.org` | VitePress-rendered docs from the `docs/` tree — install instructions, specs, ceremony attestations, SDK reference, this BRAND.md | Live pre-recruitment |
-| `prove.zkqes.org` | Ceremony coordinator (R2-backed status feed + manifest hosting) — successor to `prove.identityescrow.org` | Live post-DNS migration |
-| `identityescrow.org` | 301 alias to `zkqes.org` | Permanent backwards-compat |
+| `prove.zkqes.org` | Ceremony coordinator (R2-backed status feed + manifest hosting) | Live post-DNS migration; bucket name `prove-zkqes-org` |
+
+Old `prove.identityescrow.org` host + `prove-identityescrow-org` R2 bucket remain frozen as a read-only mirror for V3/V4 historical artifacts; new ceremony rounds publish at `prove.zkqes.org`.
 
 The split exists because the three audiences are distinct: ceremony contributors (zkqes.org root), end users registering with their QES (app.zkqes.org, post-launch), and developers / integrators / researchers (docs.zkqes.org). Surfacing all three on one page would mute the call-to-action that matters at the current lifecycle stage.
 
@@ -53,12 +61,14 @@ The split exists because the three audiences are distinct: ceremony contributors
 | Asset | Status | Action |
 |---|---|---|
 | `zkqes.org` | Live, canonical | Keep — primary public domain |
-| `identityescrow.org` | Live | 301 alias → `zkqes.org` |
-| `identityescroworg` (GitHub) | Live | Keep — repo name (renaming breaks every link in already-published specs and orchestration plans) |
+| `identityescrow.org` | Held (never published a working public surface) | No 301 needed at present; can be added later if any traffic appears |
+| `alik-eth/zkqes` (GitHub) | Live | Repo (renamed 2026-05-03 from `identityescroworg`); GitHub auto-redirects the old URL |
 | `zkqes.com` | Open call | Recommended defensive buy + 301 → `zkqes.org` |
-| `@qkb` (npm) | Live, in use | Keep — protocol-noun scope |
-| `@zkqes` (npm) | Open call | Recommended defensive squat (no publishes) |
+| `@zkqes` (npm) | Open call — **claim before first publish** | Defensive squat + protocol scope |
+| `@qkb` (npm) | Open call (no publishes ever) | No action — names are not used after the rename |
 
 ## When this document changes
 
-This brand split is intentionally cheap to reverse. If founder later decides to flip the public noun from `QKB` to `zk-QES`, `zkqes.org` and `@zkqes` are already in hand and the flip is a marketing sweep rather than a code rename. Do not edit this document without founder sign-off; the cost of churn here is paid in audience confusion.
+This brand collapse is intentionally robust to future edits — the ship surface is single-name, the protocol is single-name, the domain is single-name. If founder later decides to introduce a sub-brand (e.g., a separate name for an EVM-native variant or a fork), it should land as a new noun under the same project, not a re-litigation of the three-tier split.
+
+Do not edit this document without founder sign-off.
