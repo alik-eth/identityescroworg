@@ -201,7 +201,12 @@ On `chore/zkqes-rename-train` directly.
 - [ ] **L.3** `.github/workflows/release-cli.yml` — sweep `@qkb/cli` → `@zkqes/cli`, brew formula references, GHCR image tag.
 - [ ] **L.4** `scripts/dev-chain.sh` — sweep contract name references.
 - [ ] **L.5** `scripts/sync-deployments.mjs` — sweep field names (`identityEscrowNftAbi` → `zkqesCertificateAbi`, etc.).
-- [ ] **L.6** `scripts/ceremony-coord/.env.example` — flip the bucket VALUE from `prove-identityescrow-org` to `prove-zkqes-org` (per Q5: new bucket is canonical for V5+; old bucket is a historical-only mirror). Add a comment block: `# Founder must provision this R2 bucket before next ceremony run; old prove-identityescrow-org bucket remains read-only for V3/V4 historical artifacts. See specs/2026-05-03-zkqes-rename-design.md §1.Q5.` This way any train-branch run blocks on missing bucket rather than silently writing to the wrong storage.
+- [ ] **L.6** `scripts/ceremony-coord/.env.example` — flip BOTH coupled values per Q5:
+  - `R2_BUCKET=prove-identityescrow-org` → `R2_BUCKET=prove-zkqes-org`
+  - `R2_PUBLIC_BASE=https://prove.identityescrow.org` → `R2_PUBLIC_BASE=https://prove.zkqes.org`
+  - Header comment line ("Scope: Read & Write on bucket `prove-identityescrow-org`") — update bucket name to match.
+  - Add a comment block: `# Founder must provision this R2 bucket + DNS subdomain before next ceremony run; old prove-identityescrow-org / prove.identityescrow.org remain read-only for V3/V4 historical artifacts. See specs/2026-05-03-zkqes-rename-design.md §1.Q5.`
+  - This way any train-branch run blocks on missing bucket rather than silently writing to the wrong storage AND any consumer reading a status-feed URL gets the correct host.
 - [ ] **L.7** `scripts/ceremony-coord/cookbooks/fly/{Dockerfile,launcher.sh,entrypoint.sh,README.md}` — sweep QKB references in docs/comments. Note: ceremony cookbook GHCR image references (`identityescroworg/qkb-ceremony` per spec §1.Q6 → `alik-eth/zkqes-ceremony`) — update tag references in launcher + README. **Do NOT update the digest pin** (still pointing at old image until founder rebuilds the image under new name).
 - [ ] **L.8** Verify: `act` or eyeball-only on workflows.
 
