@@ -314,3 +314,23 @@ export {
   type ParsedSpki,
   type EcdsaRS,
 } from './witness/v5.js';
+
+// V5.4 CLI-server client (browser-side helpers for the `qkb serve`
+// localhost prover). Dispatched by `useCliPresence` at /v5/registerV5
+// mount; called from the prove pipeline when a CLI is detected.
+export {
+  CLI_DETECT_TIMEOUT_MS,
+  CLI_EXPECTED_CIRCUIT,
+  CLI_STATUS_URL,
+  detectCli,
+} from './cli/detectCli.js';
+export {
+  CLI_PROVE_URL,
+  CliProveError,
+  proveViaCli,
+} from './cli/proveViaCli.js';
+export type {
+  CliProveResult,
+  CliStatus,
+  CliTimings,
+} from './cli/types.js';
