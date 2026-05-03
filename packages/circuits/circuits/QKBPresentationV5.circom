@@ -233,6 +233,17 @@ template QKBPresentationV5() {
     // subject-serial extraction to the intermediate-signed TBSCertificate.
     signal input subjectSerialValueOffsetInTbs;
 
+    // V5.3 F1 — OID-anchor offset.  Byte offset (inside leafTbs) of
+    // the leading `06 03 55 04 05` DER bytes for the
+    // `AttributeTypeAndValue { type=OID 2.5.4.5 (id-at-serialNumber),
+    // value=DirectoryString }` ASN.1 frame.  The §6.9b gate below
+    // anchors subjectSerialValueOffsetInTbs to this offset + 7,
+    // closing the V5.2 Sybil vector where a malicious prover could
+    // point the value-offset at any 32-byte window in the signed
+    // TBS that happens to look serial-number-shaped.  See V5.3 spec
+    // §F1.2 for the full attack analysis.
+    signal input subjectSerialOidOffsetInTbs;
+
     // SPKI limbs for both leaf and intermediate (witness side; on-chain
     // P256Verify.spkiCommit recomputes the SAME value from calldata bytes).
     signal input leafXLimbs[6];
@@ -667,6 +678,91 @@ template QKBPresentationV5() {
         // zero before packing into limbs anyway).
         activeMask69[i].out * (leafTbsByte[i].out[0] - subjectSerial.rawBytes[i]) === 0;
     }
+
+    // §6.9b — V5.3 F1 — OID-anchor for subject-serial offset.
+    //
+    // The §6.9 gate above pins the 32 bytes at
+    // subjectSerialValueOffsetInTbs (in leafTbs) to the same bytes at
+    // subjectSerialValueOffset (in leafCertBytes), but BOTH offsets
+    // were witness-supplied — nothing constrained them to point at
+    // an actual `subject.serialNumber` attribute.  A malicious prover
+    // could pick any 32-byte window in the signed TBS that happened
+    // to look serial-number-shaped (length 1-32, all bytes 0-255 —
+    // vacuous), combine with rotateWallet's slot-clear, and mint
+    // multiple identities from one cert (V5.2 spec §F1).
+    //
+    // V5.3 closes this by anchoring the value-offset to the actual
+    // ASN.1 frame at subjectSerialOidOffsetInTbs:
+    //   leafTbs[oid+0..oid+4] === 06 03 55 04 05    (DER OID 2.5.4.5)
+    //   leafTbs[oid+5]        ∈ {0x13 PrintableString, 0x0c UTF8String}
+    //   leafTbs[oid+6]        === subjectSerialValueLength
+    //   subjectSerialValueOffsetInTbs === subjectSerialOidOffsetInTbs + 7
+    //
+    // After these, the value-offset is fully determined by the
+    // OID-offset, and the OID-offset must point at a real
+    // `06 03 55 04 05 <13|0c> NN` attribute frame.  QTSP-issued
+    // production certs have ONE such attribute per cert (per X.520
+    // + ETSI EN 319 412-1 namespace conventions), so the prover's
+    // freedom collapses to "the actual subject.serialNumber."
+    //
+    // The stronger F1.4 variant (subject-DN bounds) is deferred to
+    // V5.4 — see V5.3 spec §F1.5 for the cost-benefit analysis.
+    //
+    // Cost: 7 × Multiplexer(1, MAX_LEAF_TBS=1408) + IsEqual sum +
+    // byte-eq + offset-eq.  Measured V5.3 minimal landed at +19.9K
+    // constraints over V5.2 (vs spec's ~10K projection — circomlib
+    // Multiplexer's per-mux cost is ~2.8K not 1.4K linear; spec
+    // estimate was off by 2x but the cap is still met with 7.1%
+    // headroom).
+
+    // Range pin: the OID frame must lie inside leafTbs.  The 7 bytes
+    // we read are at offset OID, OID+1, …, OID+6 — the leftmost is
+    // OID and the rightmost is OID+6, so we need
+    // OID + 6 < leafTbsLength, i.e. OID + 7 <= leafTbsLength.
+    component oidEndLeqTbs = LessEqThan(16);
+    oidEndLeqTbs.in[0] <== subjectSerialOidOffsetInTbs + 7;
+    oidEndLeqTbs.in[1] <== leafTbsLength;
+    oidEndLeqTbs.out === 1;
+
+    var EXPECTED_OID[5] = [0x06, 0x03, 0x55, 0x04, 0x05];
+
+    component oidByte[5];
+    for (var oi = 0; oi < 5; oi++) {
+        oidByte[oi] = Multiplexer(1, MAX_LEAF_TBS);
+        for (var oj = 0; oj < MAX_LEAF_TBS; oj++) {
+            oidByte[oi].inp[oj][0] <== leafTbsBytes[oj];
+        }
+        oidByte[oi].sel <== subjectSerialOidOffsetInTbs + oi;
+        oidByte[oi].out[0] === EXPECTED_OID[oi];
+    }
+
+    // String-tag: PrintableString (0x13) OR UTF8String (0x0c).  Sum
+    // of two IsEqual outputs must be exactly 1 — exactly one tag
+    // matches.  IsEqual returns 0/1, sum constraint forces XOR.
+    component stringTagByte = Multiplexer(1, MAX_LEAF_TBS);
+    for (var sj = 0; sj < MAX_LEAF_TBS; sj++) {
+        stringTagByte.inp[sj][0] <== leafTbsBytes[sj];
+    }
+    stringTagByte.sel <== subjectSerialOidOffsetInTbs + 5;
+    component isPrintable = IsEqual();
+    isPrintable.in[0] <== stringTagByte.out[0];
+    isPrintable.in[1] <== 0x13;
+    component isUtf8 = IsEqual();
+    isUtf8.in[0] <== stringTagByte.out[0];
+    isUtf8.in[1] <== 0x0c;
+    isPrintable.out + isUtf8.out === 1;
+
+    // Length byte equals subjectSerialValueLength (which X509SubjectSerial
+    // already range-checks to [1, 32]).
+    component oidLenByte = Multiplexer(1, MAX_LEAF_TBS);
+    for (var lj = 0; lj < MAX_LEAF_TBS; lj++) {
+        oidLenByte.inp[lj][0] <== leafTbsBytes[lj];
+    }
+    oidLenByte.sel <== subjectSerialOidOffsetInTbs + 6;
+    oidLenByte.out[0] === subjectSerialValueLength;
+
+    // Value-offset is OID-offset + 7 (5 OID bytes + 1 string-tag + 1 length).
+    subjectSerialValueOffsetInTbs === subjectSerialOidOffsetInTbs + 7;
 
     // §6.8 — V5.2 wallet-pk limb packing for on-chain keccak gate.
     //
