@@ -13,6 +13,7 @@
     "compile:v5": "mkdir -p build/qkb-presentation && circom circuits/QKBPresentationV5.circom --r1cs --wasm -l circuits -l node_modules -o build/qkb-presentation/ && pnpm exec snarkjs r1cs info build/qkb-presentation/QKBPresentationV5.r1cs",
     "ceremony:v5:stub": "bash ceremony/scripts/stub-v5.sh",
     "ceremony:v5_1:stub": "bash ceremony/scripts/stub-v5_1.sh",
+    "ceremony:v5_2:stub": "bash ceremony/scripts/stub-v5_2.sh",
     "lint": "biome check .",
     "extract:spkis": "ts-node scripts/extract-spkis.ts",
     "parity:v5": "vitest run test/SpkiCommitParity.vitest.ts",

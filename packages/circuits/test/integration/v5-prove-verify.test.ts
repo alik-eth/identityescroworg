@@ -1,7 +1,7 @@
-// V5.1 final E2E gate — `groth16.prove + groth16.verify` round-trip against
-// the V5.1 stub zkey + verification key (Task 4 of A6.1).  V5 stub at
-// ceremony/v5-stub/ is left as an archive; this test consumes V5.1
-// artifacts exclusively.
+// V5.2 final E2E gate — `groth16.prove + groth16.verify` round-trip against
+// the V5.2 stub zkey + verification key (T3 of A7.1). V5.1 stub at
+// ceremony/v5_1/ and V5 stub at ceremony/v5-stub/ are left as archives;
+// this test consumes V5.2 artifacts exclusively.
 
 import { expect } from 'chai';
 import { createHash } from 'node:crypto';
@@ -14,15 +14,15 @@ import { buildSynthCades } from '../helpers/build-synth-cades';
 import { buildWitnessV5, parseP7s } from '../../src/build-witness-v5';
 
 const FIXTURE_DIR = resolve(__dirname, '..', '..', 'fixtures', 'integration', 'admin-ecdsa');
-const STUB_DIR = resolve(__dirname, '..', '..', 'ceremony', 'v5_1');
-const ZKEY_PATH = resolve(STUB_DIR, 'qkb-v5_1-stub.zkey');
+const STUB_DIR = resolve(__dirname, '..', '..', 'ceremony', 'v5_2');
+const ZKEY_PATH = resolve(STUB_DIR, 'qkb-v5_2-stub.zkey');
 const VKEY_PATH = resolve(STUB_DIR, 'verification_key.json');
 const WASM_PATH = resolve(
   __dirname,
   '..',
   '..',
   'build',
-  'v5_1-stub',
+  'v5_2-stub',
   'QKBPresentationV5_js',
   'QKBPresentationV5.wasm',
 );
@@ -41,7 +41,7 @@ const haveHeavyArtifacts = existsSync(ZKEY_PATH) && existsSync(VKEY_PATH) && exi
 const haveLightArtifacts = existsSync(VKEY_PATH) && existsSync(PROOF_SAMPLE_PATH) && existsSync(PUBLIC_SAMPLE_PATH);
 
 (haveHeavyArtifacts ? describe : describe.skip)(
-  'V5.1 final E2E — groth16.prove + groth16.verify against stub zkey (heavy)',
+  'V5.2 final E2E — groth16.prove + groth16.verify against stub zkey (heavy)',
   function () {
     this.timeout(600000);
 
@@ -102,7 +102,7 @@ const haveLightArtifacts = existsSync(VKEY_PATH) && existsSync(PROOF_SAMPLE_PATH
 );
 
 (haveLightArtifacts ? describe : describe.skip)(
-  'V5.1 sample-proof re-verify (lightweight, runs on any checkout with ceremony/v5_1/)',
+  'V5.2 sample-proof re-verify (lightweight, runs on any checkout with ceremony/v5_2/)',
   function () {
     this.timeout(60000);
 

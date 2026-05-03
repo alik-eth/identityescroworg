@@ -1,6 +1,6 @@
 # Keccak-On-Chain — V5.2 Cross-Chain Portability Amendment
 
-> **Status:** Draft v0.4 — incorporates contracts-eng v0.4 review (§3.2 rotateWallet defense-in-depth + §5 P-256 chain-dependency clarification + Option A/slot-reshuffle/Yul-stack-pressure endorsements). Pending user-review gate, then implementation phase.
+> **Status:** Draft v0.5 — incorporates pot22 size correction (4.83 GB empirical, NOT 600 MB as v0.1–v0.4 claimed) + sha256 pin from T3 implementation. Pending user-review gate, then T3 stub ceremony lands + Phase B planning.
 >
 > **Date:** 2026-05-01.
 >
@@ -28,6 +28,11 @@
 >   (1) **§3.2 rotateWallet defense-in-depth (P2)**: V5.1's in-circuit keccak implicitly bound the binding's pk to the OLD wallet (msgSender) under rotate mode. V5.2 drops that. The auth sig from oldWallet (already enforced contract-side via the typed-message scheme) is load-bearing, so this is technically unchanged — but losing defense-in-depth is real. Contracts-eng recommends adding `derivedAddr == identityWallets[fp]` check inside `rotateWallet()` after the contract reconstructs the address from `bindingPkX/Y` limbs (~150 gas, single line). Spec now folds this into §"Construction delta — Contract changes" + §"Cost estimate".
 >   (2) **§5 cross-chain clarification (informational)**: P-256 verification (RIP-7212 / EIP-7951) is the OTHER EVM-portability dependency beyond keccak — V5.2 removes 1 of 3 chain-portability assumptions (keccak), NOT 1 of 1. The other two remain (Groth16-on-BN254 verifier; P-256 ECDSA primitive for the leaf-cert signature in §6.8 of the V5 architecture). Spec's cross-chain table now annotates this explicitly. Post-Pectra status: P-256 is on mainnet, Base, OP; **NOT yet on Arbitrum or Polygon zkEVM** (corrected from v0.3's "partial on zkEVM"). Spec's table updated.
 >   Plus contracts-eng's v0.4 endorsements (informational — fold into implementation phase): Option A (4 × 128-bit Hi/Lo limbs) over Option B unconditional; clean V5.1 → V5.2 slot reshuffle (vs hard-zero placeholder at slot 0); Yul stack pressure forecast — same fix pattern as V5.1's commit `04b4a71` (verifier-side public-input array unpacking; mention in implementation T2 commit message).
+> - v0.5 (2026-05-03 ~10:00 UTC): pot22 size correction during T3 implementation. circuits-eng (running T3 stub ceremony) HEAD-requested the canonical Polygon zkEVM mirror and discovered pot22 is **4.83 GB** (4,831,921,304 bytes), NOT ~600 MB as v0.1–v0.4 claimed (the source of the wrong number was likely confusion with a "lite" or compressed ptau format that Hermez does not publish). Implications:
+>   (a) §"pot22 vs pot23" rewritten with the empirical size + Phase B contributor download savings recalc: **4.6 GB savings** vs pot23 (NOT 8.5 GB as advertised). EU broadband download time pot22 ~30-90 min (NOT 5-15 min).
+>   (b) Open Question #5 (sha256 pin) PARTIALLY ANSWERED: T3 measured + pinned `68a21bef870d5d4a9de39c8f35ebcf04e18ef97e14b2cd3f4c3e39876821d362` for the stub ceremony, first-trust-on-use. Phase B ceremony still needs cross-validation against an independent Hermez manifest source before production dispatch.
+>   (c) The cross-chain portability win (the LOAD-BEARING reason for V5.2) is independent of pot file size — unaffected. Phase B contributor recruitment remains plausible at the corrected 4.6 GB savings.
+>   (d) Same drift affected the broader docs (V5 design doc lines 411/413/533, Fly cookbook entrypoint.sh:69); lead handles those post-T3 in a separate sweep.
 
 ## Motivation — chain-binding the V5.1 design accidentally inherits
 
@@ -207,13 +212,21 @@ The reshuffle (everything between slots 1-13 shifts down) is unfortunate but una
 
 **Empirical floor**: 4,025,000 — leaves zero headroom; if measurement lands here, V5.2 must stay on pot23 (defeating one of the amendment's stated wins).
 
-### pot22 vs pot23
+### pot22 vs pot23 (sizes corrected v0.5)
 
-V5.1 ceremony uses pot23 (8.39M constraint capacity, **9.1 GB** transcript file). V5.2 fits pot22 (4.19M capacity, **~600 MB** transcript file).
+V5.1 ceremony uses pot23 (8.39M constraint capacity, **9.1 GB** transcript file). V5.2 fits pot22 (4.19M capacity, **4.83 GB** transcript file — empirically measured 2026-05-03 against the canonical Polygon zkEVM mirror; HTTP HEAD reported `content-length: 4831921304` bytes).
 
-**Win**: 8.5 GB savings on every Phase B contributor's download. Material for users on home internet (a 9 GB download takes ~2-4 hours on typical EU residential broadband; 600 MB is ~5-15 minutes).
+**v0.1–v0.4 misstatement corrected**: prior versions of this spec (and the A7 dispatch) claimed pot22 = "~600 MB" — that figure was wrong, likely conflated with a "lite" or compressed ptau format that Hermez does NOT publish. The Hermez pot22 transcript exists only in its full 4.83 GB form. Lead surfaced cross-doc drift the same source affected V5 design doc (`docs/superpowers/specs/2026-04-29-v5-architecture-design.md`) and the Fly cookbook (`scripts/ceremony-coord/cookbooks/fly/entrypoint.sh:69`); lead handles the broader sweep post-T3.
 
-**Hermez pot22 file**: `powersOfTau28_hez_final_22.ptau`, available from the same Polygon zkEVM mirror as pot23. **Sha256 pin to be verified during implementation** — the V5.1 `stub-v5_1.sh` already pre-publishes against a pinned pot23 sha; V5.2 needs the equivalent pot22 sha pinned in `stub-v5_2.sh`.
+**Win**: **4.6 GB savings** on every Phase B contributor's download (9.1 GB pot23 → 4.83 GB pot22). Material but less dramatic than the originally-advertised 8.5 GB. On typical EU residential broadband (50-100 Mbps): pot23 takes ~75-150 min, pot22 takes ~30-90 min. Plus the zkey download (~2.0 GB for V5.2) which is ceremony-output, not pot-input.
+
+**Hermez pot22 file**: `powersOfTau28_hez_final_22.ptau`, available from the Polygon zkEVM mirror at `https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_22.ptau`. **sha256 pin (measured 2026-05-03 during T3 stub ceremony):**
+
+```
+68a21bef870d5d4a9de39c8f35ebcf04e18ef97e14b2cd3f4c3e39876821d362
+```
+
+This pin is **first-trust-on-use** as of 2026-05-03 — pinned against the downloaded file from the canonical Polygon zkEVM mirror, not yet against an independent Hermez announcement source. Phase B ceremony (real, multi-contributor) MUST cross-validate against the official Hermez ceremony manifest before dispatch — see Open Question #5 (now answered for the stub but pending for production).
 
 ## Soundness — keccak-on-chain ≡ keccak-in-circuit (on EVM-family chains)
 
@@ -327,10 +340,10 @@ These are flagged for the contract-review pass before user gate:
 
 4. **Constraint count empirical**: lead's task brief said "-100K"; circuit comments suggest "-200K". Implementation must measure and document. If actual savings <80K, V5.2 stays on pot23 and the pot-shrink win is forfeited (cross-chain portability remains).
 
-5. **Hermez pot22 sha256 pin**. Contracts-eng / fly-eng coordination on which mirror's pot22 we trust + sha cross-check.
+5. **Hermez pot22 sha256 pin** [PARTIALLY ANSWERED in v0.5, T3 implementation pass]. Stub ceremony pins to `68a21bef870d5d4a9de39c8f35ebcf04e18ef97e14b2cd3f4c3e39876821d362` measured against the Polygon zkEVM mirror (`https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_22.ptau`) — see §"pot22 vs pot23" above. **Still open for Phase B**: cross-validate this hash against the official Hermez announcement / ceremony manifest before production-grade ceremony. Stub uses first-trust-on-use; production needs independent attestation.
 
 6. **A6.4 browser-bench follow-up gating**: the V5.2 stub zkey is **~2.02 GB** (estimated, scaling linearly from V5.1's 2.12 GB at 4.022M / 3.82M-constraint ratio — per the §"Constraint envelope" estimate of -200K constraints). This sits RIGHT AT the V8 ~2.05 GB single-ArrayBuffer cap (per A6.4 empirical findings on V5.1). If actual savings come in lower (e.g., -100K per lead's conservative brief), the V5.2 zkey lands at ~2.07 GB and stays over the cap. **Either way, the V5.2 zkey is within ±50 MB of the cap** — Chrome browser-proving viability is genuinely uncertain until measured. Worth a measurement gate after stub lands, before user-review of V5.2 — adds context to the EVM-portability narrative ("V5.2 portable across all EVM-family chains AND fixes Chrome browser proving — or just unlocks EVM-family chains"). Firefox 64-bit users already have working browser proving on V5.1 today (per A6.4 user-empirical run, 93s wall, ~20 GB RAM, end-to-end success); V5.2 should remain ≥equivalent.
 
 ---
 
-End of v0.4 spec. Contracts-eng v0.4 review folded in. Awaiting user-review gate, then implementation phase fires (circuits-eng + contracts-eng + web-eng in parallel per §"Cost estimate").
+End of v0.5 spec. Contracts-eng v0.4 review folded in; T3 pot22 size correction + sha256 pin folded in. Implementation phase actively in progress on `feat/v5_2arch-circuits` (circuits T1 + T2 shipped at `9d6b305` + `15dd47f`; T3 stub ceremony in flight; T4 CLAUDE.md update pending T3).
