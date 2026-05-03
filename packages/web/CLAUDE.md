@@ -208,6 +208,36 @@ Fields written per route:
    open with stale `pendingSubjectSerial` after derive-error) is the
    canonical example.
 
+14. **V5.2 drops `msgSender` from circuit public signals; contract
+   derives it via keccak.** Spec ref:
+   `2026-05-01-keccak-on-chain-amendment.md`. The witness JSON for
+   V5.2 (`buildWitnessV5_2`) MUST NOT include a `msgSender` field —
+   the V5.2 circuit removed the in-circuit Keccak primitive and the
+   `signal input msgSender` declaration entirely. Instead, the witness
+   emits four 128-bit big-endian limbs (`bindingPkXHi/Lo +
+   bindingPkYHi/Lo`) carrying the binding's claimed wallet pubkey
+   (`pkBytes[1..65]` split 16-byte BE), and the on-chain
+   `QKBRegistryV5_2.register()` reconstructs `address(uint160(uint256(
+   keccak256(abi.encodePacked(pkXHi, pkXLo, pkYHi, pkYLo)))))` and
+   compares to `msg.sender`. Re-introducing `msgSender` to the witness
+   shape will fail the V5.2 verifier (extra/missing input). The
+   register-mode rotation no-op (`rotationNewWallet === msgSender`)
+   also moved on-chain — circuit no longer enforces it.
+
+15. **V5.2 public-signal layout is FROZEN at 22 fields.** Spec
+   §"Public-signal layout V5.1 → V5.2". V5.1 slots 1-18 shifted down
+   by 1 (msgSender removal frees slot 0); the four new pkLimb signals
+   append at slots 18-21. The order — timestamp, nullifier,
+   ctxHashHi/Lo, bindingHashHi/Lo, signedAttrsHashHi/Lo,
+   leafTbsHashHi/Lo, policyLeafHash, leafSpkiCommit, intSpkiCommit,
+   identityFingerprint, identityCommitment, rotationMode,
+   rotationOldCommitment, rotationNewWallet, bindingPkXHi, bindingPkXLo,
+   bindingPkYHi, bindingPkYLo — must match the V5.2 verifier and the
+   contracts-eng `_packPublicSignalsV52` helper byte-for-byte. Any
+   reorder is a cross-worker breaking change; surface to the lead
+   before touching `PublicSignalsV5_2` ordering or the witness output
+   property order in `build-witness-v5_2.ts`.
+
 ## What this package does NOT own
 
 - **Flattener outputs** (`trusted-cas.json`, `layers.json`, `root.json`).

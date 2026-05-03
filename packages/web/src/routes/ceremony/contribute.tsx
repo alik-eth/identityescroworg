@@ -48,7 +48,7 @@ export function CeremonyContribute() {
       ),
       body: t(
         'ceremony.contribute.step1Body',
-        'About 2.2 GB. The download URL for your assigned round is sent at sign-up time.',
+        'About 2.0 GB. The download URL for your assigned round is sent at sign-up time.',
       ),
       cmd: `curl -O https://prove.identityescrow.org/ceremony/${PREV_ZKEY}`,
       testIdSuffix: 'download',
@@ -61,7 +61,7 @@ export function CeremonyContribute() {
       ),
       body: t(
         'ceremony.contribute.step2Body',
-        'Around 5–10 minutes wall-clock. snarkjs holds the intermediate key + working memory in V8 heap; expect ~30 GB RAM peak. Use any high-quality entropy source.',
+        'Around 20–25 minutes wall-clock on a 32 GB-RAM machine. snarkjs holds the intermediate key + working memory in V8 heap; expect ~30 GB RAM peak. Use any high-quality entropy source.',
       ),
       cmd: `snarkjs zkey contribute ${PREV_ZKEY} ${MINE_ZKEY} \\
   --name="<your handle>" --entropy="<your random bytes>"`,
@@ -77,7 +77,7 @@ export function CeremonyContribute() {
         'ceremony.contribute.step3Body',
         'Runs in seconds. Confirms your output zkey is structurally valid against the circuit r1cs and the Phase 1 powers-of-tau. If verify fails, do not upload.',
       ),
-      cmd: `snarkjs zkey verify qkb-v5.r1cs powersOfTau28_hez_final_23.ptau ${MINE_ZKEY}`,
+      cmd: `snarkjs zkey verify qkb-v5.r1cs powersOfTau28_hez_final_22.ptau ${MINE_ZKEY}`,
       testIdSuffix: 'verify',
     },
     {
@@ -172,7 +172,7 @@ export function CeremonyContribute() {
                 <span style={{ color: 'var(--seal)', marginRight: '0.5em' }}>
                   ·
                 </span>
-                <strong>15–20 minutes.</strong>{' '}
+                <strong>30–40 minutes.</strong>{' '}
                 {t(
                   'ceremony.contribute.reqTime',
                   'Download + contribute + verify + upload.',

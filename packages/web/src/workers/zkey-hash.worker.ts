@@ -3,7 +3,9 @@
  * SHA-256 over a (potentially multi-GB) zkey blob.
  *
  * Runs in a Web Worker so the main thread doesn't freeze for the
- * minute-or-two it takes to digest 2.2 GB. We stream the file via
+ * minute-or-two it takes to digest ~2 GB (V5.2 stub zkey ~2.0 GB; V5.1
+ * was ~2.2 GB — V5.2's 146K-constraint shrink trims the artefact). We
+ * stream the file via
  * `Blob.stream() → ReadableStreamDefaultReader.read()` and feed each
  * chunk into a single-pass `@noble/hashes/sha2` digest, so peak heap
  * stays bounded by the chunk size (~64 KB) rather than the file size.

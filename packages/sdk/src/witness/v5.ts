@@ -8,6 +8,12 @@
 // landed since no consumer depended on them yet.
 
 export {
+  buildWitnessV5_2,
+  type WitnessV5_2,
+  type BuildWitnessV5_2Input,
+} from './v5/index.js';
+
+export {
   buildWitnessV5,
   computeIdentityFingerprint,
   parseP7s,

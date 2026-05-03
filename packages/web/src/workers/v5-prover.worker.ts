@@ -14,7 +14,7 @@
  * uses the SDK's standardised protocol so the wrap is reusable across
  * future provers.
  *
- * 2.2 GB stub zkey OOM mitigation (per circuits-eng's surfacing):
+ * ~2 GB stub zkey OOM mitigation (V5.2 stub ~2.0 GB; V5.1 was ~2.2 GB):
  *   Vite's worker bundling preserves URL-based fetch in snarkjs, which
  *   the SDK's entry forwards verbatim. snarkjs streams the zkey via
  *   ReadableStream rather than buffering whole — peak heap stays under

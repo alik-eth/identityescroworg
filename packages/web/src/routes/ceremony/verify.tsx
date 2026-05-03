@@ -1,9 +1,12 @@
-// V5 Phase 2 ceremony — verify-post-ceremony page.
+// V5.2 Phase B ceremony — verify-post-ceremony page.
 //
-// Public sanity check: drop the downloaded `qkb-v5-final.zkey`, the
-// browser computes sha256 in a Web Worker (bounded peak heap via
-// streaming), and compares against the published `finalZkeySha256` in
-// status.json. ✓ if match, ✗ if not.
+// Public sanity check: drop the downloaded zkey (`qkb-v5_2-stub.zkey`
+// pre-Phase-B; `qkb-v5_2-final.zkey` post-ceremony — the aria branches
+// on `status.finalZkeySha256!==null` since that's the field that drives
+// "stub" vs "ceremony complete" UI states from V5.1). The browser
+// computes sha256 in a Web Worker (bounded peak heap via streaming),
+// and compares against the published `finalZkeySha256` in status.json.
+// ✓ if match, ✗ if not.
 import { Link } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -22,21 +25,50 @@ type VerifyState =
   | { kind: 'no-published-hash'; sha256Hex: string; fileName: string }
   | { kind: 'error'; message: string };
 
+/**
+ * Tri-state for the upload-input's aria copy. Distinct from
+ * `expectedHash !== null` because the status-feed fetch can return
+ * `null` for two distinct reasons:
+ *   - genuine "ceremony incomplete, stub state" (we want stub filename)
+ *   - transient network failure / loading (we want NEUTRAL copy because
+ *     we don't yet know whether the published artefact is stub or final)
+ *
+ * The status page (`status.tsx`) already models this distinction via
+ * `loading | unavailable | ok` — verify.tsx adopts the same posture so
+ * a transient fetch failure post-Phase-B doesn't tell screen-reader
+ * users to upload `qkb-v5_2-stub.zkey` when the live artefact is
+ * actually `-final.zkey`.
+ */
+type AriaPhase = 'loading' | 'stub' | 'final';
+
 export function CeremonyVerify() {
   const { t } = useTranslation();
   const [expectedHash, setExpectedHash] = useState<string | null>(null);
+  const [ariaPhase, setAriaPhase] = useState<AriaPhase>('loading');
   const [state, setState] = useState<VerifyState>({ kind: 'idle' });
   const workerRef = useRef<Worker | null>(null);
 
-  // Pull the published final hash from status.json. If ceremony isn't
-  // complete yet, it'll be null; we surface that case so users don't
-  // think their match failed.
+  // Pull the published final hash from status.json. Three terminal
+  // states for the aria copy:
+  //   - fetch succeeded + finalZkeySha256 present → 'final'
+  //   - fetch succeeded + finalZkeySha256 null    → 'stub'  (genuine
+  //     pre-Phase-B state — we ARE in stub mode so stub filename is OK)
+  //   - fetch failed / threw                       → keep 'loading'
+  //     (we don't know; stay on neutral copy)
   useEffect(() => {
     let cancelled = false;
     const ac = new AbortController();
     void fetchCeremonyStatus(CEREMONY_STATUS_URL, ac.signal).then((p) => {
       if (cancelled) return;
-      setExpectedHash(p?.finalZkeySha256 ?? null);
+      if (p === null) {
+        // fetchCeremonyStatus returns null for both "incomplete" and
+        // "network/parse error" — treat null as "transient unknown" for
+        // aria, leaving the input on neutral copy. The published-hash
+        // section already shows its own pending message.
+        return;
+      }
+      setExpectedHash(p.finalZkeySha256 ?? null);
+      setAriaPhase(p.finalZkeySha256 ? 'final' : 'stub');
     });
     return () => {
       cancelled = true;
@@ -181,10 +213,22 @@ export function CeremonyVerify() {
             <input
               type="file"
               accept=".zkey,application/octet-stream"
-              aria-label={t(
-                'ceremony.verify.fileAria',
-                'Upload your downloaded qkb-v5-final.zkey',
-              )}
+              aria-label={
+                ariaPhase === 'final'
+                  ? t(
+                      'ceremony.verify.fileAriaFinal',
+                      'Upload your downloaded qkb-v5_2-final.zkey',
+                    )
+                  : ariaPhase === 'stub'
+                    ? t(
+                        'ceremony.verify.fileAriaStub',
+                        'Upload your downloaded qkb-v5_2-stub.zkey',
+                      )
+                    : t(
+                        'ceremony.verify.fileAriaNeutral',
+                        'Upload your downloaded zkey',
+                      )
+              }
               data-testid="ceremony-verify-file"
               onChange={onFile}
               disabled={state.kind === 'hashing'}

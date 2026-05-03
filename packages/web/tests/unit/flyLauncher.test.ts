@@ -116,7 +116,7 @@ describe('buildFlyLaunchCommand', () => {
       '  R1CS_URL="https://prove.identityescrow.org/ceremony/main.r1cs" \\',
     );
     expect(cmd).toContain(
-      '  PTAU_URL="https://prove.identityescrow.org/ceremony/pot/pot23.ptau" \\',
+      '  PTAU_URL="https://prove.identityescrow.org/ceremony/pot/pot22.ptau" \\',
     );
     expect(cmd).toContain(
       `  SIGNED_PUT_URL='${baseInputs.signedPutUrl}' \\`,

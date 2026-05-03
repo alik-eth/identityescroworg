@@ -98,23 +98,60 @@ describe('proveV5 — single-circuit driver', () => {
     expect(capturedSide).toBe('v5');
   });
 
-  it('rejects non-14 publicSignals (catches V4 zkey leaking into V5 path)', async () => {
-    // Simulate a V4 zkey emitting 16 signals where V5 expects 14. The
-    // V5 driver MUST fail loudly rather than passing the malformed
-    // array to register() — the contract's Gate 1 verifyProof would
-    // throw with a generic BadProof, losing the diagnostic.
-    const prover = {
-      prove: async (): Promise<{ proof: unknown; publicSignals: string[] }> => ({
-        proof: {} as unknown,
-        publicSignals: Array.from({ length: 16 }, (_, i) => String(i)),
-      }),
-    };
-    await expect(
-      proveV5({} as Record<string, unknown>, {
+  it('admits the V5 family — 14 (V5 baseline), 19 (V5.1), 22 (V5.2)', async () => {
+    // Regression guard: before this fix `proveV5` hardcoded `!== 14`,
+    // which silently broke the V5.1 mock pipeline (19 signals always
+    // threw witness.fieldTooLong) and would have broken the V5.2
+    // pipeline the same way (22 signals). The allowlist
+    // `ALLOWED_PUBLIC_SIGNAL_LENGTHS` is the named pin future readers
+    // grep for when adding the next amendment (V5.3).
+    for (const n of [14, 19, 22]) {
+      const prover = {
+        prove: async (): Promise<{ proof: unknown; publicSignals: string[] }> => ({
+          proof: {
+            pi_a: ['1', '2', '1'],
+            pi_b: [['3', '4'], ['5', '6'], ['1', '0']],
+            pi_c: ['7', '8', '1'],
+            protocol: 'groth16',
+            curve: 'bn128',
+          },
+          publicSignals: Array.from({ length: n }, (_, i) => String(i + 1)),
+        }),
+      };
+      const result = await proveV5({} as Record<string, unknown>, {
         prover: prover as unknown as Parameters<typeof proveV5>[1]['prover'],
         artifacts: V5_ARTIFACTS,
-      }),
-    ).rejects.toThrow(/v5-public-signals-length/);
+      });
+      expect(result.publicSignals.length).toBe(n);
+    }
+  });
+
+  it('rejects non-V5-family publicSignal counts (V4 leaf = 16, junk = 7)', async () => {
+    // Simulate a V4 zkey emitting 16 signals where the V5 family expects
+    // 14 (V5), 19 (V5.1), or 22 (V5.2). The V5 driver MUST fail loudly
+    // rather than passing the malformed array to register() — the
+    // contract's Gate 1 verifyProof would throw with a generic BadProof,
+    // losing the diagnostic.
+    //
+    // We also pin "junk" lengths (7) to make the rejection envelope
+    // explicit — anything not in the V5 family allowlist trips the
+    // guard, not just the historically-known V4 case. This catches
+    // drift from any layer that might reshape publicSignals (e.g. a
+    // future SDK refactor that accidentally drops a slot).
+    for (const n of [16, 7]) {
+      const prover = {
+        prove: async (): Promise<{ proof: unknown; publicSignals: string[] }> => ({
+          proof: {} as unknown,
+          publicSignals: Array.from({ length: n }, (_, i) => String(i)),
+        }),
+      };
+      await expect(
+        proveV5({} as Record<string, unknown>, {
+          prover: prover as unknown as Parameters<typeof proveV5>[1]['prover'],
+          artifacts: V5_ARTIFACTS,
+        }),
+      ).rejects.toThrow(/v5-public-signals-length/);
+    }
   });
 
   it('forwards onProgress callbacks', async () => {

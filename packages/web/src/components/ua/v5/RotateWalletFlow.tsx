@@ -1,9 +1,18 @@
 /**
- * /account/rotate — V5.1 wallet-rotation flow for registered identities.
+ * /account/rotate — V5.2 wallet-rotation flow for registered identities.
  *
- * Six-stage sequence (codex-corrected after the first draft surfaced 3 real
+ * V5.2 (keccak-on-chain amendment) deltas vs V5.1:
+ *   - public-signal layout drops msgSender and grows by four bindingPk*
+ *     16-byte BE limbs (slots 18-21) — see `buildWitnessV5_2`.
+ *   - rotateWallet() in `qkbRegistryV5_2Abi` accepts the new 22-field sig
+ *     tuple; selector shifts to `0x9849ff37` (vs V5.1 `0x07d19c50`).
+ *   - The auth-hash flow is byte-identical (no chain change to the EIP-191
+ *     wrapper). walletSecret derivation (HKDF for EOA / Argon2id for SCW
+ *     — SCW path remains gated here to V5.3 like in V5.1) is unchanged.
+ *
+ * Six-stage sequence (codex-corrected from the V5.1 first draft for 3
  * bugs around wallet-address capture, oldWalletSecret derivation, and
- * rotationOldCommitment sourcing):
+ * rotationOldCommitment sourcing — those fixes carry over verbatim):
  *
  *   1. connect      — connect NEW wallet and CAPTURE its address into state
  *                     so all subsequent steps reference the locked-in new
@@ -20,7 +29,7 @@
  *                     LOCKED newWalletAddress) — anti-replay across chains
  *                     and deploys, byte-identical to the contracts-eng
  *                     `_rotateAuthSig` helper.
- *   5. prove        — switch back to NEW wallet. Auto-runs buildWitnessV5
+ *   5. prove        — switch back to NEW wallet. Auto-runs buildWitnessV5_2
  *                     with rotationMode=1, both wallet secrets, and
  *                     rotationOldCommitment from the chain read; runs
  *                     snarkjs prove via Web Worker.
@@ -29,7 +38,7 @@
  * IRREVERSIBILITY WARNING is displayed at stages 1 and 6.
  *
  * Spec reference: orchestration §1.3 + contracts-eng `_rotateAuthSig` test
- * helper at `arch-contracts/packages/contracts/test/QKBRegistryV5_1.t.sol`.
+ * helper at `arch-contracts/packages/contracts/test/QKBRegistryV5_2.t.sol`.
  */
 import { useEffect, useState } from 'react';
 import { Buffer } from 'buffer';
@@ -47,16 +56,16 @@ import {
 } from 'wagmi';
 import {
   deploymentForChainId,
-  qkbRegistryV5_1Abi,
+  qkbRegistryV5_2Abi,
   parseP7s,
   findSubjectSerial,
   computeIdentityFingerprint,
-  publicSignalsFromArray,
+  publicSignalsV5_2FromArray,
   proveV5,
-  buildWitnessV5,
+  buildWitnessV5_2,
   MockProver,
-  type Groth16ProofV5,
-  type PublicSignalsV5,
+  type Groth16ProofV5_2,
+  type PublicSignalsV5_2,
   type CircuitArtifactUrls,
 } from '@qkb/sdk';
 import { SnarkjsWorkerProver } from '@qkb/sdk/prover/snarkjsWorker';
@@ -160,8 +169,8 @@ export function RotateWalletFlow() {
   const [oldWalletSecret, setOldWalletSecret] = useState<Uint8Array | null>(null);
   const [oldWalletAuthSig, setOldWalletAuthSig] = useState<`0x${string}` | null>(null);
 
-  const [proof, setProof] = useState<Groth16ProofV5 | null>(null);
-  const [publicSignals, setPublicSignals] = useState<PublicSignalsV5 | null>(null);
+  const [proof, setProof] = useState<Groth16ProofV5_2 | null>(null);
+  const [publicSignals, setPublicSignals] = useState<PublicSignalsV5_2 | null>(null);
 
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -180,7 +189,7 @@ export function RotateWalletFlow() {
   const fingerprintHex = fingerprint !== null ? bigIntToBytes32Hex(fingerprint) : ZERO_BYTES32;
   const { data: rotationOldCommitmentHex } = useReadContract({
     address: dep?.registryV5,
-    abi: qkbRegistryV5_1Abi,
+    abi: qkbRegistryV5_2Abi,
     functionName: 'identityCommitments',
     args: [fingerprintHex],
     query: {
@@ -358,7 +367,7 @@ export function RotateWalletFlow() {
       const leafSpki = extractSpki(cms.leafCertDer);
       const intSpki = extractSpki(cms.intCertDer);
 
-      const witness = await buildWitnessV5({
+      const witness = await buildWitnessV5_2({
         bindingBytes: Buffer.from(bindingBytes),
         leafCertDer: cms.leafCertDer,
         leafSpki,
@@ -380,8 +389,8 @@ export function RotateWalletFlow() {
         zkeySha256: V5_PROVER_ARTIFACTS.zkeySha256,
       };
 
-      let proofResult: Groth16ProofV5;
-      let signals: PublicSignalsV5;
+      let proofResult: Groth16ProofV5_2;
+      let signals: PublicSignalsV5_2;
 
       if (useMockProver) {
         const mockProver = new MockProver({ delayMs: 30, result: {
@@ -391,23 +400,26 @@ export function RotateWalletFlow() {
             pi_c: ['0x7', '0x8', '0x1'],
             protocol: 'groth16', curve: 'bn128',
           },
-          // 19-signal canned output — slot 14 (identityFingerprint) is the
-          // off-chain-computed value; slot 16 is rotationMode=1.
+          // 22-signal canned output (V5.2 FROZEN layout). Deltas vs V5.1:
+          //   - msgSender removed (slot 0 in V5.1) — slots 1-18 shift to 0-17.
+          //   - bindingPk* limbs added at slots 18-21 (synthetic <2^128).
+          // Slot 13 holds identityFingerprint (was slot 14 in V5.1);
+          // slot 15 is rotationMode=1; slot 17 is rotationNewWallet.
           publicSignals: [
-            String(BigInt(newWalletAddress)),                // 0  msgSender (new wallet)
-            String(Math.floor(Date.now() / 1000)),           // 1  timestamp
-            '0',                                              // 2  nullifier (unused under rotation mode)
-            '0', '0',                                         // 3-4 ctxHashHi/Lo (unused)
-            '6', '7', '8', '9', '10', '11', '12', '13', '14', // 5-13 unchanged
-            String(fingerprint),                              // 14 identityFingerprint
-            '16',                                             // 15 identityCommitment (new)
-            '1',                                              // 16 rotationMode
-            String(rotationOldCommitment),                    // 17 rotationOldCommitment
-            String(BigInt(newWalletAddress)),                 // 18 rotationNewWallet
+            String(Math.floor(Date.now() / 1000)),           // 0  timestamp
+            '0',                                              // 1  nullifier (unused under rotation mode)
+            '0', '0',                                         // 2-3 ctxHashHi/Lo (unused)
+            '6', '7', '8', '9', '10', '11', '12', '13', '14', // 4-12 unchanged
+            String(fingerprint),                              // 13 identityFingerprint
+            '16',                                             // 14 identityCommitment (new)
+            '1',                                              // 15 rotationMode
+            String(rotationOldCommitment),                    // 16 rotationOldCommitment
+            String(BigInt(newWalletAddress)),                 // 17 rotationNewWallet
+            '100', '101', '102', '103',                       // 18-21 bindingPk* limbs (synthetic)
           ],
         }});
         const r = await proveV5(witness as Record<string, unknown>, { prover: mockProver, artifacts });
-        signals = publicSignalsFromArray(r.publicSignals);
+        signals = publicSignalsV5_2FromArray(r.publicSignals);
         proofResult = unpackProof(r.proof);
       } else {
         const proverWorker = new Worker(
@@ -416,7 +428,7 @@ export function RotateWalletFlow() {
         );
         const prover = new SnarkjsWorkerProver({ worker: proverWorker, terminateAfterProve: true });
         const r = await proveV5(witness as Record<string, unknown>, { prover, artifacts });
-        signals = publicSignalsFromArray(r.publicSignals);
+        signals = publicSignalsV5_2FromArray(r.publicSignals);
         proofResult = unpackProof(r.proof);
       }
 
@@ -444,7 +456,7 @@ export function RotateWalletFlow() {
     setErrorMsg(null);
     writeContract({
       address: dep.registryV5,
-      abi: qkbRegistryV5_1Abi,
+      abi: qkbRegistryV5_2Abi,
       functionName: 'rotateWallet',
       args: [proof, publicSignals, oldWalletAuthSig],
     });
@@ -824,7 +836,7 @@ function extractSpki(certDer: Buffer): Buffer {
   return Buffer.from(new Uint8Array(cert.subjectPublicKeyInfo.toSchema().toBER(false)));
 }
 
-function unpackProof(p: { pi_a: readonly string[]; pi_b: readonly (readonly string[])[]; pi_c: readonly string[] }): Groth16ProofV5 {
+function unpackProof(p: { pi_a: readonly string[]; pi_b: readonly (readonly string[])[]; pi_c: readonly string[] }): Groth16ProofV5_2 {
   return {
     a: [BigInt(p.pi_a[0] ?? '0'), BigInt(p.pi_a[1] ?? '0')] as const,
     b: [

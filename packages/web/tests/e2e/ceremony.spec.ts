@@ -343,7 +343,7 @@ test.describe('/ceremony', () => {
       'R1CS_URL="https://prove.identityescrow.org/ceremony/main.r1cs"',
     );
     await expect(out).toContainText(
-      'PTAU_URL="https://prove.identityescrow.org/ceremony/pot/pot23.ptau"',
+      'PTAU_URL="https://prove.identityescrow.org/ceremony/pot/pot22.ptau"',
     );
     await expect(out).toContainText(`SIGNED_PUT_URL='${url}'`);
     await expect(out).toContainText(`CONTRIBUTOR_NAME='alice'`);
