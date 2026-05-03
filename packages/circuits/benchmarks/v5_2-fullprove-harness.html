@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>V5.2 in-browser fullProve benchmark (A6.4)</title>
+    <style>
+      :root {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+      body {
+        max-width: 980px;
+        margin: 24px auto;
+        padding: 0 16px;
+        color: #1a1a1a;
+        background: #fafafa;
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0 0 4px 0;
+      }
+      .sub {
+        color: #666;
+        margin: 0 0 16px 0;
+      }
+      button {
+        font: inherit;
+        padding: 6px 12px;
+        margin: 0 4px 8px 0;
+        background: #fff;
+        border: 1px solid #888;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: wait;
+      }
+      .results {
+        background: #fff;
+        border: 1px solid #ddd;
+        padding: 12px;
+        border-radius: 4px;
+        white-space: pre-wrap;
+        font-family: ui-monospace, monospace;
+        font-size: 12.5px;
+        max-height: 480px;
+        overflow: auto;
+      }
+      .phase-row {
+        display: grid;
+        grid-template-columns: 24px 200px 100px 110px;
+        gap: 6px;
+        align-items: center;
+      }
+      .ok {
+        color: #060;
+      }
+      .err {
+        color: #b00;
+      }
+      .pending {
+        color: #888;
+      }
+      details {
+        margin-top: 12px;
+      }
+      summary {
+        cursor: pointer;
+        font-weight: 600;
+      }
+      .meta {
+        color: #555;
+        font-size: 11.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>V5.2 in-browser <code>snarkjs.groth16.fullProve</code> benchmark</h1>
+    <p class="sub">
+      A6.4 (V5.2 re-run) — feasibility test for desktop direct proving against the V5.2 stub
+      ceremony artifacts (3.876 M constraints, ~21 MB wasm + 2.01 GB zkey, 22 public
+      signals).  V5.2 drops the in-circuit keccak chain (-146K constraints vs V5.1)
+      and uses pot22 (4.83 GB) instead of pot23 (9.1 GB).  Compare against the
+      V5.1 baseline at <code>benchmarks/v5_1-browser-fullprove-2026-05-01.md</code>
+      (Firefox 64-bit cleared; Chrome OOM at the 2.05 GB ArrayBuffer cap).
+    </p>
+
+    <div>
+      <button id="btn-default">Run (default — fullProve)</button>
+      <button id="btn-persist">Run (after navigator.storage.persist())</button>
+      <button id="btn-verify-only">Run (verify-only, no fullProve)</button>
+      <button id="btn-clear">Clear log</button>
+    </div>
+    <p class="meta" id="env">env: pending…</p>
+
+    <div id="phases" class="results">
+      <div class="phase-row" data-phase="fetchWasm">
+        <span class="pending">·</span><span>fetch wasm</span><span></span><span></span>
+      </div>
+      <div class="phase-row" data-phase="fullProve">
+        <span class="pending">·</span><span>fullProve (witness+zkey+prove)</span><span></span><span></span>
+      </div>
+      <div class="phase-row" data-phase="verify">
+        <span class="pending">·</span><span>verify</span><span></span><span></span>
+      </div>
+      <div class="phase-row" data-phase="total">
+        <span class="pending">·</span><span><strong>total</strong></span><span></span><span></span>
+      </div>
+    </div>
+    <p class="meta">
+      Note: snarkjs's <code>fullProve</code> wraps witness gen + zkey load
+      + groth16 prove without surfacing sub-phase callbacks, so we report
+      it as one combined wall.  Per-phase split would require a custom
+      snarkjs build (see V5.1 baseline doc §"Workarounds").
+    </p>
+
+    <details open>
+      <summary>Log (raw)</summary>
+      <pre id="log" class="results"></pre>
+    </details>
+
+    <details>
+      <summary>Final result (JSON, machine-parseable)</summary>
+      <pre id="result-json" class="results">[no run yet]</pre>
+    </details>
+
+    <script src="/snarkjs.min.js"></script>
+    <script>
+      'use strict';
+
+      const $ = (id) => document.getElementById(id);
+      const log = (msg) => {
+        const ts = new Date().toISOString().slice(11, 23);
+        $('log').textContent += `[${ts}] ${msg}\n`;
+        console.log(msg);
+      };
+
+      function setEnv() {
+        const ua = navigator.userAgent;
+        const cores = navigator.hardwareConcurrency ?? 'unknown';
+        const dm = navigator.deviceMemory ?? 'unknown';
+        $('env').textContent =
+          `env: cores=${cores}  navigator.deviceMemory=${dm} GB  ua=${ua.slice(0, 100)}…`;
+      }
+      setEnv();
+
+      // --- phase tracking -------------------------------------------------
+      const PHASE_IDS = ['fetchWasm', 'fullProve', 'verify', 'total'];
+      function setPhase(id, status, wallMs, peakHeapMB) {
+        const row = document.querySelector(`[data-phase="${id}"]`);
+        if (!row) {
+          console.warn('setPhase: unknown id', id);
+          return;
+        }
+        row.children[0].textContent =
+          status === 'ok' ? '✔' : status === 'err' ? '✘' : '…';
+        row.children[0].className =
+          status === 'ok' ? 'ok' : status === 'err' ? 'err' : 'pending';
+        if (typeof wallMs === 'number') {
+          row.children[2].textContent = `${(wallMs / 1000).toFixed(2)} s`;
+        }
+        if (typeof peakHeapMB === 'number') {
+          row.children[3].textContent = `${peakHeapMB.toFixed(0)} MB heap`;
+        }
+      }
+      function resetPhases() {
+        for (const id of PHASE_IDS) setPhase(id, 'pending');
+      }
+
+      // --- memory sampler -------------------------------------------------
+      // Methodology mirrors V5.1 baseline: poll performance.memory at 250ms
+      // intervals, retain peak.  Per lead's A6.4 dispatch, "5s intervals" is
+      // too coarse to catch the sharp G1 MSM allocation spike.  We keep the
+      // 250 ms cadence from V5.1 to retain comparability.
+      let sampler = null;
+      let peakHeapMB = 0;
+      const heapSamples = [];
+      function startSampling() {
+        peakHeapMB = 0;
+        heapSamples.length = 0;
+        sampler = setInterval(() => {
+          const mem = performance.memory;
+          if (mem) {
+            const mb = mem.usedJSHeapSize / 1024 / 1024;
+            heapSamples.push({ t: performance.now(), mb });
+            if (mb > peakHeapMB) peakHeapMB = mb;
+          }
+        }, 250);
+      }
+      function stopSampling() {
+        if (sampler) {
+          clearInterval(sampler);
+          sampler = null;
+        }
+        return peakHeapMB;
+      }
+
+      // --- the actual benchmark --------------------------------------------
+      // V5.2: 22 public signals (slots 0-21).  Slot 0 is `timestamp`
+      // (V5.1 had `msgSender` there); slot 15 is `rotationMode`
+      // (V5.1 had it at slot 16); slots 18-21 are bindingPkXHi/Lo/YHi/Lo
+      // (V5.2 NEW).  See spec §"Public-signal layout V5.1 → V5.2".
+      async function runBenchmark(opts = {}) {
+        const { persist = false, verifyOnly = false } = opts;
+        const result = {
+          mode: persist ? 'persist-granted' : 'default',
+          verifyOnly,
+          version: 'v5_2',
+          startTs: new Date().toISOString(),
+          phases: {},
+        };
+        $('log').textContent = '';
+        resetPhases();
+
+        try {
+          if (persist) {
+            const granted = await navigator.storage.persist();
+            log(`navigator.storage.persist() returned ${granted}`);
+            result.persistGranted = granted;
+          }
+
+          // ---------- 1. fetch witness input + verification key ----------
+          const winRes = await fetch('/witness-input.json');
+          const witnessInput = await winRes.json();
+          log(`witness input: ${Object.keys(witnessInput).length} top-level fields`);
+          const vkeyRes = await fetch('/verification_key.json');
+          const vkey = await vkeyRes.json();
+          log(`verification key: nPublic=${vkey.nPublic}, protocol=${vkey.protocol}`);
+          if (vkey.nPublic !== 22) {
+            log(`⚠ vkey.nPublic=${vkey.nPublic} expected 22 (V5.2)`);
+          }
+
+          // ---------- 2. fetch wasm (timed) ----------
+          startSampling();
+          setPhase('fetchWasm', 'pending');
+          const t_wasm0 = performance.now();
+          const wasmRes = await fetch('/v5_2.wasm');
+          const wasmBuf = await wasmRes.arrayBuffer();
+          const t_wasm1 = performance.now();
+          result.phases.fetchWasm = {
+            wallMs: t_wasm1 - t_wasm0,
+            sizeMB: wasmBuf.byteLength / 1024 / 1024,
+          };
+          setPhase('fetchWasm', 'ok', t_wasm1 - t_wasm0, stopSampling());
+          log(`fetched wasm: ${result.phases.fetchWasm.sizeMB.toFixed(1)} MB`);
+
+          if (verifyOnly) {
+            startSampling();
+            const t_v0 = performance.now();
+            const proofRes = await fetch('/proof-sample.json');
+            const proof = await proofRes.json();
+            const pubRes = await fetch('/public-sample.json');
+            const publicSignals = await pubRes.json();
+            const ok = await snarkjs.groth16.verify(vkey, publicSignals, proof);
+            const t_v1 = performance.now();
+            result.phases.verify = {
+              wallMs: t_v1 - t_v0,
+              ok,
+              peakHeapMB: stopSampling(),
+            };
+            setPhase('verify', ok ? 'ok' : 'err', t_v1 - t_v0, peakHeapMB);
+            log(`verify (committed sample): ${ok}`);
+            result.ok = ok;
+            result.phases.total = {
+              wallMs: result.phases.fetchWasm.wallMs + (t_v1 - t_v0),
+              ok,
+            };
+            setPhase('total', ok ? 'ok' : 'err', result.phases.total.wallMs);
+            result.endTs = new Date().toISOString();
+            return result;
+          }
+
+          // ---------- 3. fullProve (witness gen + zkey load + prove) ----------
+          startSampling();
+          const tFull0 = performance.now();
+          let proof, publicSignals;
+          try {
+            ({ proof, publicSignals } = await snarkjs.groth16.fullProve(
+              witnessInput,
+              '/v5_2.wasm',
+              '/v5_2.zkey',
+            ));
+          } catch (err) {
+            const peak = stopSampling();
+            const elapsed = performance.now() - tFull0;
+            log(`✘ fullProve failed at ${(elapsed / 1000).toFixed(1)}s: ${err.message}`);
+            setPhase('fullProve', 'err', elapsed, peak);
+            result.phases.fullProve = {
+              wallMs: elapsed,
+              error: { name: err.name, message: err.message },
+              peakHeapMB: peak,
+            };
+            result.phases.total = {
+              wallMs: result.phases.fetchWasm.wallMs + elapsed,
+              ok: false,
+            };
+            setPhase('total', 'err', result.phases.total.wallMs);
+            result.ok = false;
+            result.error = { name: err.name, message: err.message };
+            throw err;
+          }
+          const tFull1 = performance.now();
+          const peakAfterProve = stopSampling();
+          result.phases.fullProve = {
+            wallMs: tFull1 - tFull0,
+            peakHeapMB: peakAfterProve,
+          };
+          setPhase('fullProve', 'ok', tFull1 - tFull0, peakAfterProve);
+          log(
+            `fullProve: ${((tFull1 - tFull0) / 1000).toFixed(1)} s, peak heap ${peakAfterProve.toFixed(0)} MB`,
+          );
+
+          // ---------- 4. verify ----------
+          startSampling();
+          const tV0 = performance.now();
+          const ok = await snarkjs.groth16.verify(vkey, publicSignals, proof);
+          const tV1 = performance.now();
+          const verifyPeak = stopSampling();
+          result.phases.verify = {
+            wallMs: tV1 - tV0,
+            ok,
+            peakHeapMB: verifyPeak,
+          };
+          setPhase('verify', ok ? 'ok' : 'err', tV1 - tV0, verifyPeak);
+          log(`verify: ${ok} (in ${(tV1 - tV0).toFixed(0)} ms)`);
+
+          // ---------- 5. shape sanity ----------
+          if (!Array.isArray(publicSignals) || publicSignals.length !== 22) {
+            throw new Error(
+              `expected 22 public signals (V5.2), got ${publicSignals?.length}`,
+            );
+          }
+          // V5.2 fixture: rotationMode at slot 15 (V5.1 had it at 16; shifted
+          // up by 1 after msgSender removal from slot 0). Sample is register
+          // mode (rotationMode === 0).
+          if (publicSignals[15] !== '0') {
+            throw new Error(
+              `expected publicSignals[15]=='0' (register mode), got ${publicSignals[15]}`,
+            );
+          }
+          log(
+            `publicSignals[0]=timestamp=${publicSignals[0]}  publicSignals.length=${publicSignals.length}  publicSignals[18..21]=bindingPk-limbs`,
+          );
+
+          result.ok = ok;
+          result.publicSignals = publicSignals;
+          result.phases.total = {
+            wallMs: performance.now() - tFull0 + result.phases.fetchWasm.wallMs,
+            ok,
+          };
+          setPhase('total', ok ? 'ok' : 'err', result.phases.total.wallMs);
+        } catch (err) {
+          stopSampling();
+          log(`✘ benchmark error: ${err.message}`);
+          result.ok = false;
+          result.error = result.error ?? {
+            name: err.name,
+            message: err.message,
+          };
+          if (!result.phases.total) {
+            result.phases.total = { wallMs: 0, ok: false };
+          }
+        }
+
+        result.endTs = new Date().toISOString();
+        // Embed a sparse subset of heap samples (~50 evenly-spaced) so the
+        // report can illustrate the heap-over-time curve without dumping
+        // 1000s of points.
+        if (heapSamples.length > 0) {
+          const stride = Math.max(1, Math.floor(heapSamples.length / 50));
+          result.heapSamples = heapSamples
+            .filter((_, i) => i % stride === 0)
+            .map(({ t, mb }) => ({ t: Math.round(t), mb: Number(mb.toFixed(1)) }));
+        }
+        return result;
+      }
+
+      async function run(opts) {
+        for (const b of document.querySelectorAll('button')) b.disabled = true;
+        $('result-json').textContent = '[running…]';
+        try {
+          const result = await runBenchmark(opts);
+          $('result-json').textContent = JSON.stringify(result, null, 2);
+          window.__BENCH_RESULT__ = result;
+          window.__BENCH_DONE__ = true;
+          log(`done. window.__BENCH_DONE__ = true`);
+        } finally {
+          for (const b of document.querySelectorAll('button')) b.disabled = false;
+        }
+      }
+
+      $('btn-default').addEventListener('click', () => run({}));
+      $('btn-persist').addEventListener('click', () =>
+        run({ persist: true }),
+      );
+      $('btn-verify-only').addEventListener('click', () =>
+        run({ verifyOnly: true }),
+      );
+      $('btn-clear').addEventListener('click', () => {
+        $('log').textContent = '';
+        $('result-json').textContent = '[cleared]';
+        resetPhases();
+        window.__BENCH_DONE__ = false;
+      });
+    </script>
+  </body>
+</html>
