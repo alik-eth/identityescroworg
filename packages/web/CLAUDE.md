@@ -238,6 +238,53 @@ Fields written per route:
    before touching `PublicSignalsV5_2` ordering or the witness output
    property order in `build-witness-v5_2.ts`.
 
+16. **CLI is OPTIONAL. Browser prove must remain a working path for
+   every flow that uses prove.** V5.4 added a CLI fast-path
+   (`runCliFirstProver` in `lib/cliFallbackProver.ts`); the browser
+   in-Worker snarkjs prover is the canonical fallback and must stay
+   functional. Any optimization that breaks the browser path (e.g.
+   removing `proveV5` callers, unrequiring the `runBrowser` closure,
+   defaulting `cliPresent: true` everywhere) violates the §1.6
+   contract: users without the CLI must still complete register +
+   rotate flows.
+
+17. **Origin-pinned `localhost:9080` is the only CLI integration
+   channel.** No other ports, no other origins. Both `detectCli`
+   (`@qkb/sdk` `cli/detectCli.ts`) and `proveViaCli`
+   (`cli/proveViaCli.ts`) hardcode `http://127.0.0.1:9080`; the CLI
+   server side enforces `Access-Control-Allow-Origin:
+   https://identityescrow.org` (configurable via
+   `--allowed-origin` for tests only). Adding a fallback port,
+   accepting another origin, or moving the integration off
+   localhost is a design change requiring lead sign-off — Chrome
+   PNA enforcement is contingent on the loopback binding.
+
+18. **CLI 4xx errors do NOT trigger fallback. 5xx and network errors
+   DO.** Per orchestration §1.6, encoded by
+   `CliProveError.shouldFallback` in
+   `@qkb/sdk` `cli/proveViaCli.ts`. 4xx → witness invalid or config
+   error; browser would also fail — surface verbatim instead of
+   wasting ~90 s on a doomed browser prove. 429 specifically is
+   bucketed with 5xx (transient busy; browser succeeds against the
+   same witness). Do NOT collapse 429 into the no-fallback branch
+   "for consistency with 4xx" — that strands users on a "CLI busy"
+   toast when the obvious recovery (browser prove) just works. A
+   standalone test pinning 429 → `shouldFallback: true` lives in
+   `proveViaCli.test.ts`.
+
+19. **`useCliPresence` polls only on mount + visibilitychange. No
+   timer-driven polling.** Setting up `setInterval(detectCli,
+   N_ms)` would pollute the CLI server's `busy` flag for any UI
+   watching it via `/status`. Mount-once + tab-focus re-probes are
+   bounded by user activity and don't stack. The hook also enforces
+   sequencing via `latestProbeIdRef` (out-of-order resolutions
+   discarded) and `mountedRef` (post-unmount setStates dropped) —
+   removing either invariant re-introduces a flicker race that
+   codex caught in the T2 review pass. The `recheck()` return
+   value's per-call freshness caveat is documented in JSDoc;
+   callers that need the freshest observation should re-render on
+   `status` rather than chain on the recheck return value.
+
 ## What this package does NOT own
 
 - **Flattener outputs** (`trusted-cas.json`, `layers.json`, `root.json`).
