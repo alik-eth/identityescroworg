@@ -1,177 +1,174 @@
-# @qkb/cli
+# `@qkb/cli`
 
-Offline Groth16 proving for the QKB split-proof flow.
+Localhost-bound native rapidsnark prover for the V5.2 register flow.
 
-## Why
+`qkb serve` boots an HTTP server on `127.0.0.1:9080` that the browser
+flow at `identityescrow.org/v5/registerV5` detects and offloads the
+prove step to. Same proof, **6× faster, ~10× less memory** than the
+in-browser snarkjs path:
 
-The SPA at `identityescrow.org` builds the leaf + chain witnesses in the
-browser, but `snarkjs.groth16.fullProve` reliably OOMs browser tabs on the
-4.5 GB leaf zkey. This CLI takes the witness bundle the SPA exports and
-produces real Groth16 proofs against the committed ceremony zkeys.
+| Path | Wall (V5.2 stub) | Peak RSS |
+|---|---|---|
+| Browser snarkjs (Firefox 64-bit) | 90.3 s | 38.38 GiB |
+| Native rapidsnark via `qkb serve` | 13.1 s | 3.70 GiB |
+
+Browser stays canonical for everything else: wallet (MetaMask via
+wagmi), witness gen, on-chain submission. CLI just turns the prove
+step into a localhost roundtrip.
 
 ## Install
 
-Inside this repo:
-
-```
-pnpm install
-pnpm --filter @qkb/cli build
+```bash
+npm install -g @qkb/cli
 ```
 
-Then run via pnpm (recommended):
+The postinstall hook downloads the matching iden3 rapidsnark sidecar
+binary for your platform from the [iden3/rapidsnark v0.0.8 GitHub
+release](https://github.com/iden3/rapidsnark/releases/tag/v0.0.8),
+sha256-verifies, and caches at `~/.cache/qkb-bin/`. No additional
+setup needed on supported platforms.
 
-```
-pnpm --filter @qkb/cli start -- prove ~/Downloads/witness.json
-```
+### Supported platforms (V1)
 
-Or directly:
+- Linux x86_64
+- Linux arm64
+- macOS arm64 (Apple Silicon)
+- macOS x86_64 (Intel Macs)
 
-```
-NODE_OPTIONS=--max-old-space-size=16384 node packages/qkb-cli/dist/src/cli.js \
-  prove ~/Downloads/witness.json
-```
-
-The CLI prints a heap-limit warning if Node's V8 heap is under ~12 GB. The
-warning matters for `--backend snarkjs` (which actually needs 12–14 GB of
-heap or OOMs mid-leaf). For `--backend rapidsnark` it's a false positive —
-rapidsnark runs outside V8 and tops out around 4.7 GB RSS regardless of
-Node's heap.
+**Windows is not supported in V1** — iden3/rapidsnark v0.0.8 ships no
+Windows prebuilt. Windows users either build rapidsnark from source +
+pass `--rapidsnark-bin <path>` at runtime, or wait for V1.1 (which
+will bundle a Windows build).
 
 ## Usage
 
-```
-qkb prove <witness-path> \
-  [--out <dir>]                 default ./proofs
-  [--backend snarkjs|rapidsnark] default snarkjs
-  [--rapidsnark-bin <path>]     required if --backend rapidsnark
-  [--cache-dir <path>]          default ~/.cache/qkb/
-```
+```bash
+# Start the localhost prove server.
+qkb serve \
+  --zkey ~/.local/share/qkb-cli/circuits/qkb-v5.2.zkey \
+  --wasm ~/.local/share/qkb-cli/circuits/qkb-v5.2.wasm \
+  --vkey ~/.local/share/qkb-cli/circuits/qkb-v5.2-vkey.json
+# Listening on http://127.0.0.1:9080
+# zkey:           …
+# allowed origin: https://identityescrow.org
+# endpoints:      GET /status   POST /prove
 
-### Input: `witness.json`
+# In another terminal: probe.
+qkb status
+# running: qkb-cli@0.5.2-pre  circuit=v5.2  zkey=ready  busy=false  …
 
-Exported by the SPA `/upload` screen when "Offline proving" is selected.
-Schema `qkb-witness/v1`:
+# Or via curl directly.
+curl -s http://127.0.0.1:9080/status
 
-```jsonc
-{
-  "schema": "qkb-witness/v1",
-  "circuitVersion": "QKBPresentationEcdsaLeaf+Chain",
-  "algorithmTag": 1,
-  "artifacts": { /* urls.json block — drives .wasm/.zkey fetch */ },
-  "leaf":  { /* Phase2Witness.leaf */ },
-  "chain": { /* Phase2Witness.chain */ }
-}
+# Stop with Ctrl-C — clean shutdown via SIGINT.
 ```
 
-### Output: `proof-bundle.json`
+The browser at `identityescrow.org/v5/registerV5` auto-detects a
+running `qkb serve` instance via a `/status` probe on page load and
+switches its prove path automatically. No browser configuration
+needed.
 
-Re-import via the SPA `/upload` "Import proof bundle" button. Schema
-`qkb-proof-bundle/v1`:
-
-```jsonc
-{
-  "schema": "qkb-proof-bundle/v1",
-  "circuitVersion": "QKBPresentationEcdsaLeaf+Chain",
-  "algorithmTag": 1,
-  "proofLeaf":   { /* Groth16Proof */ },
-  "publicLeaf":  [ /* 13 decimal-string field elements */ ],
-  "proofChain":  { /* Groth16Proof */ },
-  "publicChain": [ /* 3 decimal-string field elements */ ]
-}
-```
-
-## Backends
-
-### snarkjs (default)
-
-Pure Node.js. Works out of the box. Runtime on commodity laptop:
-
-- leaf: ~10–15 min
-- chain: ~3–5 min
-
-Memory: ~12 GB peak for leaf, ~6 GB for chain.
-
-### rapidsnark (opt-in)
-
-Much faster and far lower RAM, but requires the user to supply the binary:
+## Subcommands
 
 ```
-qkb prove witness.json --backend rapidsnark --rapidsnark-bin /usr/local/bin/rapidsnark
+qkb version              Print CLI + bundled rapidsnark version.
+qkb serve [options]      Start the localhost HTTP prove server.
+qkb status [options]     Probe whether a server is running.
+qkb cache                List cached circuit artifacts + sizes.
+qkb cache clear [-c id]  Remove cached artifacts for one or all circuits.
 ```
 
-Binary releases: https://github.com/iden3/rapidsnark/releases
-Source builds: https://github.com/iden3/rapidsnark (Linux x86_64 is the
-primary target; macOS / arm64 users typically build from source).
+`qkb serve --help` for the full flag surface.
 
-#### Measured profile
+## Security model
 
-Against the real Diia `binding.qkb.json.p7s` on a Linux/x86_64 laptop
-(2026-04-19, rapidsnark v0.0.8, leaf zkey 4.2 GB + chain zkey 2 GB):
-
-| Phase                | Wall time |
-|----------------------|-----------|
-| leaf wtns.calculate  | ~18 s     |
-| leaf rapidsnark prove| ~108 s    |
-| chain wtns.calculate | ~16 s     |
-| chain rapidsnark prove| ~98 s    |
-| **Total**            | **4:28**  |
-
-- Peak RSS: **4.67 GB** (cgroup `memory.peak`: 4,616 MB).
-- User CPU: 455 s across the run (rapidsnark multi-threads; ~1.7× wall).
-- Major page faults: 388 — zkeys are `mmap`'d, pages pulled on demand.
-
-Practical sizing: `MemoryMax=6G` is enough; `8G` is comfortable. Don't
-need Node's heap raised past the default when running rapidsnark. The
-full-process resident set tops out near 5 GB because rapidsnark holds the
-active portion of the zkey plus working buffers, not the whole 4.2 GB
-file.
-
-Sanity harness:
-
-```
-systemd-run --user --scope -p MemoryMax=6G -p MemorySwapMax=0 \
-  /usr/bin/time -v \
-  qkb prove witness.json --backend rapidsnark --rapidsnark-bin <path>
-```
-
-`/usr/bin/time -v` reports `Maximum resident set size`; the cgroup's
-`memory.peak` file under `/sys/fs/cgroup/.../<scope>/` agrees within a
-few MB.
-
-## Artifact cache
-
-Zkeys are large (4.5 GB leaf, 2 GB chain) and sha256-verified against the
-ceremony manifest baked into `witness.json`. The cache lives at:
-
-```
-$XDG_CACHE_HOME/qkb/<sha256>/
-```
-
-fallback `$HOME/.cache/qkb/<sha256>/`. First run downloads from R2; every
-subsequent run hits the local cache. A zkey rotation (new sha256) forces a
-fresh download automatically.
-
-## Security
-
-- Output files are written with `0600` perms inside a `0700` directory.
-- `witness.json` contains your leaf cert + intermediate cert + CAdES
-  signedAttrs — all already public in the `.p7s` you signed, but still
-  PII-adjacent. **Do not commit these files or paste them into public
-  issues.**
-- After `/register` succeeds on-chain, delete the proofs directory:
-  ```
-  rm -rf ./proofs
-  ```
+- **Loopback only** — server binds `127.0.0.1`, never `0.0.0.0`. LAN
+  devices cannot reach it. The `--host` flag rejects non-loopback
+  bind addresses with a startup error.
+- **Origin-pinned** — `POST /prove` accepts only the configured
+  `--allowed-origin` (default: `https://identityescrow.org`). A
+  malicious tab on a different origin cannot co-opt your local
+  prover.
+- **No background process** — `qkb serve` runs only while you've
+  invoked it. No daemon, no LaunchAgent / Windows Service / systemd
+  unit, no auto-start at login. Ctrl-C exits cleanly; the prover
+  isn't running unless you say so.
+- **Manifest signature verification** — circuit artifacts (`zkey`,
+  `wasm`, `vkey`) downloaded by `postinstall` are sha256-verified
+  against an Ed25519-signed manifest. The signing pubkey is embedded
+  in the CLI binary at compile time, so a substituted manifest URL
+  cannot redirect to malicious artifacts.
+- **No telemetry** — V1 ships zero telemetry. No crash reports, no
+  analytics, no version-check beacons. The auto-update manifest is
+  only fetched when explicitly requested.
 
 ## Troubleshooting
 
-**`WARNING: Node heap limit is ~2048 MB`**
-Re-run with `NODE_OPTIONS=--max-old-space-size=16384`.
+### `rapidsnark sidecar not found at …`
 
-**`sha256 mismatch for leaf zkey`**
-The cached zkey is corrupt or urls.json was updated. Delete
-`~/.cache/qkb/<sha>/` and retry.
+The postinstall hook didn't run (or its download failed silently).
+Re-run by reinstalling:
 
-**`--rapidsnark-bin is required`**
-You passed `--backend rapidsnark` without `--rapidsnark-bin`. Either point
-to your binary or drop the `--backend` flag to use snarkjs.
+```bash
+npm install -g @qkb/cli
+```
+
+Or if you've built rapidsnark from source, pass the binary path
+explicitly:
+
+```bash
+qkb serve --rapidsnark-bin /path/to/your/rapidsnark/build/bin/prover …
+```
+
+### `port 9080 already in use`
+
+Either another `qkb serve` is already running (check `qkb status`)
+or another service is squatting the port. Choose a different port:
+
+```bash
+qkb serve --port 9091 …
+```
+
+The browser-side detection probes `127.0.0.1:9080` by default, so
+non-default ports require the browser to be configured to match.
+
+### `qkb serve: refusing to bind non-loopback host`
+
+`--host` was set to a non-loopback address (e.g., `0.0.0.0` or a
+LAN IP). The CLI hard-rejects this since the prover has no auth — a
+LAN-reachable bind would expose your local prove API to any device
+on the network. Use `127.0.0.1` (default) or `::1`.
+
+### `Origin not allowed`
+
+The browser is making requests from an origin different from the
+configured `--allowed-origin`. For dev against a local web app at
+e.g. `http://localhost:5173`:
+
+```bash
+qkb serve --allowed-origin http://localhost:5173 …
+```
+
+Production CLI builds reject this flag — `--allowed-origin` is
+hard-coded to `https://identityescrow.org` to prevent a malicious
+local script from surreptitiously authorizing a bad origin.
+
+## V1.1 roadmap (deferred from V1 scope)
+
+- Single-file binaries (`qkb-linux-x86_64`, `qkb-darwin-arm64`, …) via
+  Node 24's Single Executable Application (SEA) support, distributed
+  via Homebrew tap + GitHub releases. V1's npm install path covers
+  the same UX with one extra step (`npm install -g`).
+- Windows native support — building rapidsnark from source on
+  Windows + bundling.
+- bun-runtime support — currently blocked by upstream's `web-worker@1.2.0`
+  calling `EventTarget.dispatchEvent(err)` with a non-Event arg
+  (Node tolerates; Bun's stricter EventTarget rejects). Waiting for
+  upstream to ship a Bun-compatible worker shim, or for Bun to relax
+  the EventTarget check.
+- Multi-circuit support — V5.3 (OID-anchor amendment) will publish
+  alongside V5.2; the manifest's `circuits` map is forward-compatible.
+
+## License
+
+(Pending — see project root LICENSE / COPYING when filled in by lead.)

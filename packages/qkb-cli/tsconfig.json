@@ -4,7 +4,10 @@
     "lib": ["ES2022"],
     "types": ["node", "vitest/globals"],
     "outDir": "dist",
-    "rootDir": "."
+    "rootDir": ".",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "verbatimModuleSyntax": false
   },
-  "include": ["src", "tests"]
+  "include": ["src", "test"]
 }
