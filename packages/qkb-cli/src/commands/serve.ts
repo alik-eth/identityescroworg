@@ -11,6 +11,7 @@
 
 import type { Command } from 'commander';
 import { resolve } from 'node:path';
+import { resolveSidecarPathOrThrow } from '../rapidsnark/sidecar-path.js';
 import { CliServer } from '../server/http.js';
 import { PKG_VERSION } from './version.js';
 
@@ -18,7 +19,7 @@ interface ServeOptions {
   readonly zkey: string;
   readonly wasm: string;
   readonly vkey: string;
-  readonly rapidsnarkBin: string;
+  readonly rapidsnarkBin?: string;
   readonly port: string;
   readonly host: string;
   readonly allowedOrigin: string;
@@ -33,9 +34,9 @@ export function serveCommand(program: Command): void {
     .requiredOption('--zkey <path>', 'V5.2 proving key (.zkey)')
     .requiredOption('--wasm <path>', 'V5.2 witness-calculator WASM')
     .requiredOption('--vkey <path>', 'V5.2 verification key (.json)')
-    .requiredOption(
+    .option(
       '--rapidsnark-bin <path>',
-      'iden3 rapidsnark prover binary (sidecar)',
+      'iden3 rapidsnark prover binary (sidecar). Default: bundled (pkg) or ~/.cache/qkb-bin/... (dev).',
     )
     .option('--port <n>', 'TCP port to bind', '9080')
     .option(
@@ -64,11 +65,21 @@ export function serveCommand(program: Command): void {
         process.exit(2);
       }
 
+      // Resolve sidecar via the explicit flag if given, otherwise fall
+      // back to the platform-aware default.  resolveSidecarPathOrThrow
+      // emits an actionable error if the binary isn't on disk yet
+      // (npm-install + postinstall hasn't run, or pkg bundle is
+      // missing the asset — both surface to the operator with a clear
+      // remediation suggestion).
+      const sidecarPath = opts.rapidsnarkBin
+        ? resolve(opts.rapidsnarkBin)
+        : resolveSidecarPathOrThrow();
+
       const server = new CliServer({
         zkeyPath: resolve(opts.zkey),
         wasmPath: resolve(opts.wasm),
         vkeyPath: resolve(opts.vkey),
-        rapidsnarkBinPath: resolve(opts.rapidsnarkBin),
+        rapidsnarkBinPath: sidecarPath,
         port: Number(opts.port),
         host: opts.host,
         allowedOrigin: opts.allowedOrigin,
