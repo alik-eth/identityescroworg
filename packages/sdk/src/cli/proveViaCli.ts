@@ -8,15 +8,23 @@
 // pipeline orchestration (`uaProofPipelineV5_2.ts`) reads `status` and
 // applies:
 //
-//   - 4xx        → witness is invalid; browser would also fail.
-//                  Surface verbatim, do NOT fall back. (Includes 403
-//                  origin-pin, 400 malformed JSON, 422 validation.)
-//   - 429        → server busy. ALSO no fallback — busy means another
-//                  prove is running on the same server, browser prove
-//                  would compete for the same CPU. UI should toast and
-//                  let the user retry once the prior prove finishes.
-//   - 5xx        → rapidsnark crash, OOM, manifest fail. Browser fallback.
-//   - network    → CLI stopped mid-flow. Browser fallback.
+//   - 400/403/422 → witness is invalid OR config error; browser would
+//                   also fail OR has nothing to recover. Surface
+//                   verbatim, do NOT fall back. (400 = malformed JSON,
+//                   403 = origin pin failure, 422 = witness validation.)
+//   - 429         → server busy with another prove. FALLBACK to browser.
+//                   429 is *transient* (not witness-invalid) — browser
+//                   prove WILL succeed against the same witness; the
+//                   only cost is 90s vs ~14s. Surfacing 429 verbatim
+//                   would leave the user stuck on a "CLI busy" toast
+//                   when the obvious recovery path (browser prove)
+//                   just works. Toast copy: "CLI busy; using browser
+//                   prover for this proof."
+//   - 5xx         → rapidsnark crash, OOM, manifest fail. Browser
+//                   fallback. Toast copy: "CLI server error; using
+//                   browser prover."
+//   - network     → CLI stopped mid-flow. Browser fallback. Toast
+//                   copy: "CLI server stopped; using browser prover."
 //
 // HTTP API contract reference: orchestration §1.1.
 import type { WitnessV5_2 } from '../witness/v5/build-witness-v5_2.js';
@@ -115,11 +123,22 @@ export class CliProveError extends Error {
     this.name = 'CliProveError';
   }
 
-  /** True iff the pipeline should fall back to browser prove. False for
-   *  4xx/429 responses (witness invalid or server busy — fallback would
-   *  fail or compete for the same CPU). */
+  /**
+   * True iff the pipeline should fall back to browser prove.
+   *
+   *   - 400/403/422 → false (witness invalid or config error; browser
+   *                   would fail too, or has nothing to recover).
+   *   - 429         → TRUE (CLI busy is transient; browser succeeds
+   *                   against the same witness — surface 429 verbatim
+   *                   would leave the user stuck on a "CLI busy" toast
+   *                   when browser prove just works).
+   *   - 5xx         → true (rapidsnark crash, OOM — browser fallback).
+   *   - 0 / -1      → true (network failure / malformed body —
+   *                   recovery path is browser prove).
+   */
   get shouldFallback(): boolean {
     if (this.status === 0 || this.status === -1) return true;
+    if (this.status === 429) return true;
     if (this.status >= 500 && this.status < 600) return true;
     return false;
   }

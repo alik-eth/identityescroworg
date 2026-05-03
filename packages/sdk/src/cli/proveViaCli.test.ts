@@ -207,15 +207,28 @@ describe('CliProveError.shouldFallback', () => {
   it.each([
     [0, true, 'network failure'],
     [-1, true, 'malformed 2xx body'],
-    [400, false, '4xx witness invalid'],
-    [403, false, '4xx origin pin'],
-    [422, false, '4xx validation'],
-    [429, false, '4xx server busy — competing CPU'],
+    [400, false, '4xx witness invalid — browser would fail too'],
+    [403, false, '4xx origin pin — config issue'],
+    [422, false, '4xx validation — browser would fail too'],
+    [429, true, '4xx CLI busy — TRANSIENT, browser unblocks user'],
     [500, true, '5xx rapidsnark crash'],
     [502, true, '5xx bad gateway'],
     [503, true, '5xx unavailable'],
   ])('status %i → shouldFallback %s (%s)', (status, expected) => {
     const err = new CliProveError(status, 'test');
     expect(err.shouldFallback).toBe(expected);
+  });
+
+  it('429 explicitly: shouldFallback is TRUE so the user reaches a working prover', () => {
+    // Lead's correction post-T1: 429 = transient "CLI busy" (another
+    // prove in flight on the same server), NOT witness-invalid. The
+    // browser prove path will succeed against the same witness; only
+    // cost is wall time (~14s CLI vs ~90s browser). Surfacing 429
+    // verbatim would leave the user stuck on a "CLI busy" toast.
+    // Pin this discipline as a standalone test so a future refactor
+    // that re-buckets 429 alongside 4xx surfaces immediately.
+    const err = new CliProveError(429, 'helper busy with another prove');
+    expect(err.shouldFallback).toBe(true);
+    expect(err.status).toBe(429);
   });
 });
