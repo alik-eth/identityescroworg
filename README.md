@@ -4,29 +4,30 @@ A zero-knowledge protocol that lets a holder of an EU-qualified electronic signa
 
 A holder signs a canonical binding statement with their qualified signature. The chain learns that **some** authorized signer has bound this wallet to themselves; it does not learn who. The first jurisdiction at launch is Ukraine, because [Diia](https://diia.gov.ua) is the most broadly deployed qualified-signature platform in the eIDAS perimeter today.
 
-The project line is named **Identity Escrow** for the broader research direction; the V1 protocol shipping at launch is QKB.
+QKB is, in two seconds for outside readers, a **zk-QES** — a zero-knowledge proof of a qualified electronic signature in the eIDAS sense. The project line is named **Identity Escrow** for the broader research direction; the V1 protocol shipping at launch is QKB.
 
 ## Status
 
-- **V5.1 wallet-bound nullifier** — shipped, tagged [`v0.5.1-pre-ceremony`](https://github.com/alik-eth/identityescroworg/releases/tag/v0.5.1-pre-ceremony).
+- **V5 protocol** — shipped through V5.4, latest tag [`v0.5.5-pre-ceremony`](https://github.com/alik-eth/zkqes/releases/tag/v0.5.5-pre-ceremony) (rolls up V5.1 wallet-bound nullifier, V5.2 keccak-on-chain, V5.3 OID-anchor + rotationNewWallet 160-bit guard, V5.4 native CLI prover).
 - **Real-QES validation** — passes end-to-end against Ukrainian Diia QES (P-256 ECDSA + CAdES-BES).
 - **Phase B trusted setup ceremony** — recruiting now. See [Help with the ceremony](#help-with-the-ceremony).
 - **Base Sepolia deploy** — gated on ceremony.
 - **Mainnet** — gated on Sepolia E2E + audit.
 
-V5.1 is the alpha-ready protocol. Phase 2 (Qualified Identity Escrow — threshold-held QTSP recovery material with formally-specified disclosure conditions) is a future iteration in the project line, not part of V5.1 launch scope.
+V5 is the alpha-ready protocol. Future iterations toward fuller escrow constructions remain an open research direction within the Identity Escrow line; nothing on that front is promised on a timeline, and V1 ships pure binding registration only.
 
 ## How it works
 
 1. Holder connects an EOA wallet.
 2. Holder generates a canonical binding statement (`binding.qkb2.json`) and signs it with their Diia QES (the QES private key never leaves the Diia app).
-3. The browser builds a Groth16 witness over the V5.1 circuit (~4 M constraints) and proves, in a Web Worker, that:
+3. The browser builds a Groth16 witness over the V5 circuit (~3.9 M constraints) and proves — either in a Web Worker via snarkjs (~90 s on a flagship desktop browser, ~38 GB peak) or via the local `qkb serve` native CLI prover from V5.4 (~14 s, ~3.7 GB peak) — that:
    - the binding's intermediate certificate chains to a leaf in a Merkle root derived from the EU List of Trusted Lists
    - the binding's `signedAttrs.messageDigest` matches the binding's hash
    - the binding's policy hash is in the registry's accepted policy root
    - the binding's `walletAddress` matches `msg.sender`
    - the wallet-bound `walletSecret` is consistent with the published `identityCommitment` and `nullifier`
-4. The wallet submits `register(...)` to `QKBRegistryV5_1` on Base. The contract verifies the Groth16 proof, calls the EIP-7212 P-256 precompile twice for the ECDSA chain, checks Merkle inclusion against the trusted-list + policy roots, and writes:
+   - the leaf cert's subject-serial bytes are anchored to OID 2.5.4.5 inside a real ASN.1 SET-of-SEQUENCE-of-AVA frame (V5.3 F1)
+4. The wallet submits `register(...)` to `QKBRegistryV5_2` on Base. The contract verifies the Groth16 proof, calls the EIP-7212 P-256 precompile twice for the ECDSA chain, checks Merkle inclusion against the trusted-list + policy roots, and writes:
    - `nullifierOf[wallet]` = `Poseidon₂(walletSecret, ctxHash)`
    - `identityCommitments[fingerprint]` = `Poseidon₂(subjectSerialPacked, walletSecret)`
    - `identityWallets[fingerprint]` = `msg.sender`
@@ -36,9 +37,9 @@ The chain stores a wallet-bound nullifier and (optionally) a transferable `Ident
 
 ## Privacy properties
 
-What V5.1 buys, honestly:
+What V5 buys, honestly:
 
-| Adversary | V5.1 nullifier value | Registration occurrence |
+| Adversary | V5 nullifier value | Registration occurrence |
 |---|---|---|
 | External observer (no cert access) | uncomputable | uncomputable |
 | Different consuming app (cross-app correlation) | distinct per `ctxHash` | unlinkable |
@@ -50,15 +51,15 @@ Full issuer-blindness on registration occurrence requires Pedersen-set-membershi
 
 ## Try it
 
-- **Live demo** — pending Base Sepolia deploy. URL will land on `https://identityescrow.org/ua/registerV5` after the trusted setup ceremony completes.
+- **Live demo** — pending Base Sepolia deploy. URL will land on [`https://app.zkqes.org/v5/registerV5`](https://app.zkqes.org/v5/registerV5) after the trusted setup ceremony completes.
 - **Wallet rotation** — `/account/rotate` lets a registered holder migrate to a new wallet under their existing identity. Three signatures: HKDF on the new wallet, HKDF + rotation-auth on the old wallet, register tx from the new wallet. The rotation-auth signature is bound to `chainId + registryAddress` to prevent cross-deployment replay.
 - **Local end-to-end** — see [Build & fork](#build--fork).
 
 ## Help with the ceremony
 
-The Groth16 proving key for V5.1 is produced via a multi-party Phase 2 trusted setup. **As long as one contributor honestly destroys their entropy after contributing, the resulting key is sound.** Contributors do not need to trust each other or us.
+The Groth16 proving key for V5 is produced via a multi-party Phase 2 trusted setup. **As long as one contributor honestly destroys their entropy after contributing, the resulting key is sound.** Contributors do not need to trust each other or us.
 
-- **Coordination page** — `/ceremony` on the live site (status feed, attestation chain, in-browser verifier).
+- **Coordination page** — [`zkqes.org/ceremony`](https://zkqes.org/ceremony) (status feed, attestation chain, in-browser verifier).
 - **Contributor flow** — 4 commands on a 32 GB-RAM machine, ~20 minutes wall time. See `/ceremony/contribute`.
 - **Cloud option** — [Fly.io cookbook](scripts/ceremony-coord/cookbooks/fly/README.md) runs the round on a Fly machine for ~$0.30/round (free-tier covered).
 - **Other clouds** — Cloudflare Containers (12 GiB cap) and Railway Pro (24 GB per replica) were evaluated and ruled out for the ~30 GB snarkjs peak. Hetzner CCX33 is the next viable cloud option for a contributor wanting an alternative.
@@ -95,20 +96,21 @@ cd packages/contracts && forge test -vv  # 376 tests, ~1 min
 pnpm -F @qkb/circuits test               # circuit + integration suite, ~10 min
 ```
 
-Local end-to-end (Anvil + V5.1 registry + browser proving):
+Local end-to-end (Anvil + V5.2 registry + browser proving):
 
 ```bash
-./scripts/dev-chain.sh                   # Anvil + deploy QKBRegistryV5_1 + IdentityEscrowNFT
+./scripts/dev-chain.sh                   # Anvil + deploy QKBRegistryV5_2 + IdentityEscrowNFT
 pnpm -F @qkb/web dev                     # http://localhost:5173
 ```
 
-The V5.1 stub ceremony zkey (~2.1 GB) is **not** committed to the repo — it's gitignored and produced locally via `pnpm -F @qkb/circuits ceremony:v5_1:stub`, or fetched at runtime from `prove.identityescrow.org/qkb-v5_1-stub.zkey` once the ceremony hosting is up. The smaller derived artifacts (`Groth16VerifierV5_1Stub.sol`, `verification_key.json`, sample proof triple) **are** committed under `packages/circuits/ceremony/v5_1/` and pumped to consumer worktrees during integration. The full prove + register flow takes ~75 seconds wall time on a 32 GB-RAM workstation; in-browser proving requires a flagship 2024+ phone or a desktop browser.
+The V5 stub ceremony zkey (~2.1 GB) is **not** committed to the repo — it's gitignored and produced locally via `pnpm -F @qkb/circuits ceremony:v5_2:stub`, or fetched at runtime from `prove.zkqes.org/qkb-v5-stub.zkey` once the ceremony hosting is up. The smaller derived artifacts (`Groth16VerifierV5_2Stub.sol`, `verification_key.json`, sample proof triple) **are** committed under `packages/circuits/ceremony/v5_2/` and pumped to consumer worktrees during integration; the historical `v5_1/` directory remains for V5.1 reproducibility. The full prove + register flow takes ~75 seconds wall time on a 32 GB-RAM workstation; in-browser proving requires a flagship 2024+ phone or a desktop browser.
 
 ## Packages
 
-- [`packages/circuits`](packages/circuits) — Circom V5.1 main circuit (4.02 M constraints, 19 frozen public signals), Groth16 stub artifacts, ceremony scripts (round-zero, contribute, finalize).
-- [`packages/contracts`](packages/contracts) — `QKBRegistryV5_1` registry, `IdentityEscrowNFT`, deploy scripts, real-pairing gas snapshot (2.10 M for `register()` against 2.5 M ceiling).
-- [`packages/sdk`](packages/sdk) — viem helpers, `qkbRegistryV5_1Abi`, witness builder, walletSecret derivation (EOA HKDF + SCW Argon2id).
+- [`packages/circuits`](packages/circuits) — Circom V5 main circuit (3.90 M constraints @ V5.3, 22 frozen public signals), Groth16 stub artifacts, ceremony scripts (round-zero, contribute, finalize).
+- [`packages/contracts`](packages/contracts) — `QKBRegistryV5_2` registry, `IdentityEscrowNFT`, deploy scripts, real-pairing gas snapshot (~2.0 M for `register()` against 2.5 M ceiling).
+- [`packages/sdk`](packages/sdk) — viem helpers, `qkbRegistryV5_2Abi`, witness builder, walletSecret derivation (EOA HKDF + SCW Argon2id).
+- [`packages/qkb-cli`](packages/qkb-cli) — `qkb serve` localhost native prover (V5.4) bundled with rapidsnark; browser at `app.zkqes.org/v5/registerV5` auto-detects via `GET :9080/status` and offloads proof generation when present, with silent fallback to the in-browser worker.
 - [`packages/web`](packages/web) — TanStack Router static SPA. EN + UK i18n. Browser proving via Web Worker + snarkjs. Civic-monumental visual language.
 - [`packages/lotl-flattener`](packages/lotl-flattener) — EU LOTL → Poseidon Merkle CA set; combined EU LOTL + Ukrainian national TSL.
 - [`scripts/ceremony-coord`](scripts/ceremony-coord) — admin tooling for the Phase 2 ceremony (R2 + signed URLs with `If-None-Match: '*'` write-once + chain-prefix verification).
