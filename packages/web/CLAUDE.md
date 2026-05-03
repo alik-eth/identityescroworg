@@ -285,6 +285,49 @@ Fields written per route:
    callers that need the freshest observation should re-render on
    `status` rather than chain on the recheck return value.
 
+20. **(reserved for V5.3 T5 OID-anchor invariant — see
+    `feat/v5_3-web` branch, will land on main as V5.20.)**
+
+21. **`VITE_TARGET` slices the SPA into landing/app builds for the
+    three-subdomain split.** Per BRAND.md §Domains (locked
+    2026-05-03):
+      - `VITE_TARGET=landing` → zkqes.org root: hero + ceremony
+        pages only. NO register flow.
+      - `VITE_TARGET=app`     → app.zkqes.org: full SPA including
+        `/v5/registerV5` + `/account/rotate`.
+      - unset (default)       → 'app' (preserves the existing
+        pages.yml workflow's behaviour).
+
+    **The dead-branch elimination is load-bearing for landing
+    bundle size.** With static imports of app-only routes at the
+    top of `router.tsx`, the landing build was ~13 MB / 4.5 MB
+    entry chunk; converting to `lazyRouteComponent(() =>
+    import(...))` inside an `import.meta.env.VITE_TARGET !==
+    'landing' ? [...] : []` ternary drops the entry to ~2.5 MB
+    (43% smaller).
+
+    **DO NOT** route the conditional through the `IS_APP_TARGET`
+    constant from `lib/buildTarget.ts` — Rollup processes the
+    module graph (registering dynamic imports as chunks) BEFORE
+    terser's constant folding, so the indirection breaks the
+    substitution match and the dynamic imports re-enter the
+    landing chunk graph. Inline `import.meta.env.VITE_TARGET ===
+    'landing'` directly at every conditional render / route
+    filter site. Same advice applies to `routes/index.tsx`'s
+    LandingHero/AppRegisterLanding switch.
+
+    **DO NOT** add app-only routes to `sharedRoutes` in
+    `router.tsx`. The partition is a brand decision, not a
+    code-organization convenience. New register-adjacent routes
+    go in `appOnlyRoutes`; new public-content routes go in
+    `sharedRoutes`. Cross-cutting routes (rare) need lead sign-off.
+
+    **Reach test:** `VITE_TARGET=landing pnpm -F @qkb/web build`
+    must succeed AND the entry chunk must NOT contain
+    `RegisterV5Screen` component bytes (route-name string is OK
+    — the type-machinery routes their string identifier into the
+    bundle even when the component is excluded).
+
 ## What this package does NOT own
 
 - **Flattener outputs** (`trusted-cas.json`, `layers.json`, `root.json`).

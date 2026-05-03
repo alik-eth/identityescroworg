@@ -2,9 +2,47 @@ import { Link } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { MintButton } from '../components/MintButton';
 import { DocumentFooter } from '../components/DocumentFooter';
+import { LandingHero } from '../components/LandingHero';
 import { PaperGrain } from '../components/PaperGrain';
 
+/**
+ * Root `/` route — surface depends on the SPA's build target.
+ *
+ * `VITE_TARGET=landing` (zkqes.org root) — pre-ceremony hero +
+ * recruitment CTA. `LandingHero` carries the BRAND.md descriptor lead
+ * + three contribution paths + status feed link. NO register flow.
+ *
+ * `VITE_TARGET=app` (app.zkqes.org, default) — the existing
+ * register-flow landing: identity-escrow privacy framing + MintButton
+ * + ceremony help link (`AppRegisterLanding`).
+ *
+ * The branch is on a compile-time constant, so terser/esbuild
+ * eliminates the dead branch at build time. The landing build doesn't
+ * pay for `MintButton` (which pulls in the wallet stack); the app
+ * build doesn't pay for `LandingHero`.
+ *
+ * `AppRegisterLanding` is extracted into its own component so the
+ * hooks it uses (`useTranslation`) stay inside a branch the React
+ * linter is comfortable with — calling hooks after an early-return
+ * on a compile-time constant works at runtime but trips the
+ * `react-hooks/rules-of-hooks` rule statically.
+ */
 export function IndexScreen() {
+  // Direct env-var comparison rather than the `IS_LANDING_TARGET`
+  // indirection — same reason as the comment in `router.tsx`: Vite's
+  // `define` plugin substitutes the literal string at source-text
+  // time, letting Rollup/terser fold the dead branch BEFORE the
+  // module graph is finalized. Going through a const breaks the
+  // substitution match and the dead branch (with its static imports)
+  // ships in the bundle. Cost: 1 line of repeated literal vs ~4 MB
+  // entry-chunk bloat.
+  if (import.meta.env.VITE_TARGET === 'landing') {
+    return <LandingHero />;
+  }
+  return <AppRegisterLanding />;
+}
+
+function AppRegisterLanding() {
   const { t } = useTranslation();
   return (
     <main className="relative min-h-screen">

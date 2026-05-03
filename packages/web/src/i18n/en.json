@@ -313,5 +313,31 @@
       "mismatch": "No match. Do not use this file. Re-download from the canonical source.",
       "noPublished": "Computed"
     }
+  },
+  "zkqes": {
+    "eyebrow": "Trusted setup ceremony in progress",
+    "headline": "zk-QES.",
+    "lede": "A zero-knowledge protocol over qualified electronic signatures. Prove you hold a state-issued QES — without revealing it, the cert behind it, or the document it signed.",
+    "framing": "QKB — the V1 implementation — is in trusted-setup ceremony. The Groth16 prover keys are produced by a multi-contributor ceremony; so long as one contributor honestly destroys their entropy, every future proof is sound. We need contributors.",
+    "pathsHeading": "Three ways to contribute",
+    "pathSnarkjs": {
+      "label": "Local snarkjs",
+      "body": "For contributors with a 32 GB-RAM machine. Five commands, twenty-five minutes wall-clock. Snarkjs holds the intermediate zkey in V8 heap; ~30 GB peak. Bring your own entropy source.",
+      "cta": "Read the snarkjs runbook →"
+    },
+    "pathVps": {
+      "label": "Rented VPS",
+      "body": "For contributors without local infra. A Hetzner CCX33 (32 GB, 8 vCPU, ~€0.10/hr) — or any 32 GB Linux machine — runs the same snarkjs commands. Spin up, run, attest, destroy.",
+      "cta": "Same commands; any 32 GB host →"
+    },
+    "pathFly": {
+      "label": "Fly.io launcher",
+      "body": "For everyone else. One form, your handle, your Fly token; we boot a 32 GB performance-2x machine, run snarkjs against the latest round, attest, and tear it down. Roughly $0.30/round and Fly’s free tier covers it.",
+      "cta": "Open the Fly launcher →"
+    },
+    "statusLink": "Live ceremony status — every contributor, every round →",
+    "umbrellaHeading": "About Identity Escrow",
+    "umbrellaBody": "Identity Escrow is the research line. Any state-issued credential exhibits a property: the issuing authority retains the ability to identify a holder under lawful process. QKB is the first protocol that surfaces this property on-chain — every-day pseudonymity for the holder, recoverable accountability for the state, the same trust structure as the qualified electronic signature itself.",
+    "docsLink": "Specs, install, reference at docs.zkqes.org →"
   }
 }
