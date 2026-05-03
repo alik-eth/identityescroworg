@@ -24,9 +24,13 @@
 // **Webserver carve-out (playwright.config.ts):** when T7_DEV_MANIFEST
 // is set, the global webServer (`pnpm run build && pnpm run preview`)
 // is skipped — assertions here are fetch-only and don't navigate the
-// SPA. Avoids coupling T7 to a transient web-build hiccup (e.g. the
-// pre-existing argon2-browser ESM-wasm blocker that's tracked
-// separately).
+// SPA. The carve-out keeps T7 decoupled from any future web-build
+// hiccups so the real-CLI prove-pipeline check stays runnable in
+// isolation. (The original motivating blocker — argon2-browser's
+// ESM-wasm import not resolving under Vite/Rollup — was fixed by
+// swapping argon2-browser for hash-wasm in walletSecret.ts; the
+// build is green again, but the carve-out itself stays useful for
+// future independence reasons.)
 //
 // **Out of scope, by design:**
 //   - UI banner-suppression on detection: pinned at unit level by

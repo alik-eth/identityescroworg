@@ -249,9 +249,20 @@ export async function deriveWalletSecretEoa(
  * passphrase is the only protection, so the SDK enforces a minimum
  * entropy threshold (≥80 bits zxcvbn) at the UX layer.
  *
- * The argon2-browser dependency is loaded via dynamic import so the
- * default EOA path doesn't pull the WASM module into its bundle.
- * The lib only ships when an SCW user actually opts in.
+ * Implementation: `hash-wasm`'s `argon2id` (RFC 9106). Same standard,
+ * same parameters → bit-identical output to any other RFC-9106
+ * Argon2id implementation. The dependency is loaded via dynamic
+ * `import('hash-wasm')` so the default EOA path doesn't pull the
+ * WASM blob into its bundle — Vite emits a separate chunk that ships
+ * only when an SCW user actually opts in.
+ *
+ * Why hash-wasm over argon2-browser: argon2-browser (v1.18.0, last
+ * released ~2021) ships UMD with `require('../dist/argon2.wasm')` in
+ * its lib entry, which Rollup's CommonJS resolver tries to statically
+ * resolve at build time and fails with "ESM integration proposal for
+ * Wasm is not supported". hash-wasm inlines its wasm as base64 inside
+ * the ESM module, so no bundler plugin or build-config workaround is
+ * required.
  */
 export async function deriveWalletSecretScw(
   passphrase: string,
@@ -273,26 +284,25 @@ export async function deriveWalletSecretScw(
     hexToBytes(walletAddress),
   );
 
-  // Lazy load. The dynamic import is `as any` because argon2-browser
-  // ships a UMD bundle with no type definitions; we narrow at the
-  // call site with the documented signature.
-  const argon2Module = (await import('argon2-browser')) as unknown as {
-    default?: Argon2Module;
-  } & Argon2Module;
-  const argon2 = (argon2Module.default ?? argon2Module) as Argon2Module;
-  const result = await argon2.hash({
-    pass: passphrase,
+  // Lazy load. Dynamic `import('hash-wasm')` keeps the ~200 KB ESM
+  // blob (which inlines the Argon2 wasm as base64) out of the main
+  // bundle for EOA-path users.
+  const { argon2id } = await import('hash-wasm');
+  const hash = await argon2id({
+    password: passphrase,
     salt,
-    type: argon2.ArgonType.Argon2id,
-    mem: ARGON2_PARAMS.memKiB,
-    time: ARGON2_PARAMS.time,
+    iterations: ARGON2_PARAMS.time,
     parallelism: ARGON2_PARAMS.parallelism,
-    hashLen: ARGON2_PARAMS.hashLen,
+    memorySize: ARGON2_PARAMS.memKiB,
+    hashLength: ARGON2_PARAMS.hashLen,
+    outputType: 'binary',
   });
-  // Defensive copy: argon2-browser returns a Uint8Array view that
-  // may share its underlying buffer with internal state.
-  const out = new Uint8Array(result.hash.length);
-  out.set(result.hash);
+  // Defensive copy: hash-wasm returns a Uint8Array that may share its
+  // underlying buffer with the wasm module's internal state. Copying
+  // detaches the result from the wasm linear memory so the caller
+  // can hold it safely across subsequent argon2id calls.
+  const out = new Uint8Array(hash.length);
+  out.set(hash);
   return out;
 }
 
@@ -323,27 +333,3 @@ export async function isSmartContractWallet(
   return code !== '0x' && code.length > 2;
 }
 
-/* ------------------------------------------------------------------ */
-/* Internal: argon2-browser type narrowing                            */
-/* ------------------------------------------------------------------ */
-
-interface Argon2HashArgs {
-  pass: string | Uint8Array;
-  salt: string | Uint8Array;
-  type: number;
-  mem: number;
-  time: number;
-  parallelism: number;
-  hashLen: number;
-}
-
-interface Argon2HashResult {
-  hash: Uint8Array;
-  hashHex: string;
-  encoded: string;
-}
-
-interface Argon2Module {
-  ArgonType: { Argon2d: 0; Argon2i: 1; Argon2id: 2 };
-  hash(args: Argon2HashArgs): Promise<Argon2HashResult>;
-}

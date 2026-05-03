@@ -12,11 +12,14 @@
 //   - SCW path wallet-binding (different wallet address → different).
 //   - SCW detection: empty bytecode → false; non-empty → true.
 //
-// argon2-browser ships a heavyweight WASM module that doesn't
-// initialise cleanly inside jsdom. We mock it via vi.mock with a
-// deterministic SHA-256-based stand-in so the SCW assertions can run
-// in unit context. The real WASM path is exercised via the e2e suite
-// (Task 5) where the browser provides a real WebAssembly runtime.
+// hash-wasm ships an Argon2 implementation as a wasm blob inlined as
+// base64. It runs fine in jsdom in principle, but cold-loading the
+// 200 KB module + actually computing m=64 MiB / t=3 Argon2id makes the
+// unit suite slow (~200 ms+ per call). We mock it with a deterministic
+// SHA-256-based stand-in so the SCW assertions exercise threading of
+// `password`, `salt`, and the four Argon2 parameters through the SDK
+// without paying the real cost. The genuine wasm path is covered by
+// the e2e suite where a real browser runs the wasm.
 import { describe, expect, it, vi } from 'vitest';
 import { hkdf } from '@noble/hashes/hkdf';
 import { sha256 } from '@noble/hashes/sha2';
@@ -31,54 +34,57 @@ import {
   type SignableMessage,
 } from '../../src/lib/walletSecret';
 
-// Deterministic mock for argon2-browser. The mock is NOT
-// cryptographically Argon2 — it's a stand-in that has the same
-// determinism / parameter-binding shape as Argon2id so we can verify
-// the SDK threads `pass`, `salt`, and parameters correctly to the
-// underlying library. The real Argon2 implementation is exercised in
-// the e2e suite where a real browser runs the WASM.
-vi.mock('argon2-browser', () => {
+// Deterministic mock for hash-wasm. The mock is NOT cryptographically
+// Argon2 — it's a stand-in that has the same determinism +
+// parameter-binding shape as RFC-9106 Argon2id so we can verify the
+// SDK threads `password`, `salt`, and parameters through to the
+// underlying library. Real Argon2 is exercised in e2e + via parity
+// against a known-good reference whenever a regression surfaces.
+vi.mock('hash-wasm', () => {
   return {
-    default: {
-      ArgonType: { Argon2d: 0, Argon2i: 1, Argon2id: 2 },
-      hash: async (args: {
-        pass: string | Uint8Array;
-        salt: string | Uint8Array;
-        type: number;
-        mem: number;
-        time: number;
-        parallelism: number;
-        hashLen: number;
-      }) => {
-        // Mix every input into a sha256 of the serialised arg bundle.
-        // This makes the mock deterministic + parameter-binding.
-        const enc = new TextEncoder();
-        const passBytes =
-          typeof args.pass === 'string' ? enc.encode(args.pass) : args.pass;
-        const saltBytes =
-          typeof args.salt === 'string' ? enc.encode(args.salt) : args.salt;
-        const params = enc.encode(
-          `t${args.type}.m${args.mem}.t${args.time}.p${args.parallelism}.l${args.hashLen}`,
+    argon2id: async (args: {
+      password: string | Uint8Array;
+      salt: string | Uint8Array;
+      iterations: number;
+      parallelism: number;
+      memorySize: number;
+      hashLength: number;
+      outputType?: 'binary' | 'hex' | 'encoded';
+    }) => {
+      // Mix every input into a sha256 of the serialised arg bundle so
+      // the mock is deterministic AND parameter-binding (any changed
+      // input → different output, just like real Argon2id).
+      const enc = new TextEncoder();
+      const passBytes =
+        typeof args.password === 'string'
+          ? enc.encode(args.password)
+          : args.password;
+      const saltBytes =
+        typeof args.salt === 'string' ? enc.encode(args.salt) : args.salt;
+      const params = enc.encode(
+        `i${args.iterations}.m${args.memorySize}.p${args.parallelism}.l${args.hashLength}`,
+      );
+      const total = passBytes.length + saltBytes.length + params.length;
+      const all = new Uint8Array(total);
+      all.set(passBytes, 0);
+      all.set(saltBytes, passBytes.length);
+      all.set(params, passBytes.length + saltBytes.length);
+      const digest = sha256(all);
+      const out = new Uint8Array(args.hashLength);
+      // Repeat-extend the 32-byte digest if hashLength > 32.
+      for (let i = 0; i < args.hashLength; i++) {
+        out[i] = digest[i % digest.length] as number;
+      }
+      // hash-wasm returns Uint8Array when outputType is 'binary' (the
+      // call site forces this); other outputType values aren't used so
+      // the mock doesn't bother emulating them.
+      if (args.outputType !== 'binary') {
+        throw new Error(
+          `hash-wasm mock: unexpected outputType ${args.outputType}; ` +
+            'walletSecret.ts is locked to "binary".',
         );
-        const total = passBytes.length + saltBytes.length + params.length;
-        const all = new Uint8Array(total);
-        all.set(passBytes, 0);
-        all.set(saltBytes, passBytes.length);
-        all.set(params, passBytes.length + saltBytes.length);
-        const digest = sha256(all);
-        const out = new Uint8Array(args.hashLen);
-        // Repeat-extend the 32-byte digest if hashLen > 32.
-        for (let i = 0; i < args.hashLen; i++) {
-          out[i] = digest[i % digest.length] as number;
-        }
-        return {
-          hash: out,
-          hashHex: Array.from(out, (b) => b.toString(16).padStart(2, '0')).join(
-            '',
-          ),
-          encoded: '<mock-encoded>',
-        };
-      },
+      }
+      return out;
     },
   };
 });
