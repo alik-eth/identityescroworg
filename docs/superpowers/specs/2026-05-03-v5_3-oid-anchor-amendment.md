@@ -249,6 +249,30 @@ The booleanity re-assertion + weighted-sum equality together force the optimizer
 
 > **DO NOT** rely on `LessThan(N+1).in[0] <== signal; LessThan.in[1] <== (1 << N);` as a workaround. Empirically (T2 measurement) this only adds +1 constraint under `-O1` because the LessThan output is unused — same orphan-prune rule applies.
 
+##### Post-mortem — V5.1 → V5.2 cascading aliveness loss
+
+The optimizer-pruning vulnerability for `rotationNewWallet` was not introduced by V5.3 work; it was a **latent cascading effect from the V5.2 amendment** that V5.3 was the first to surface. Timeline:
+
+- **V5.1**: `rotationNewWallet` was kept alive (under `-O1`) by the in-circuit equality gate `rotationNewWallet === msgSender` (V5.1's wallet-uniqueness anchor). That gate's existence forced `rotationNewWallet`'s value to be consumed by another constraint, which transitively forced any range-check chain on it to stay live. A bare `Num2Bits(160)` would have fired in V5.1.
+- **V5.2 keccak-on-chain amendment**: dropped the in-circuit `=== msgSender` equality (the keccak gate moved to the contract, msgSender was removed from public signals). That dropped the ONLY consumer of `rotationNewWallet` inside the circuit.
+- **Latent effect**: any future bare `Num2Bits(160)` over `rotationNewWallet` would silently be optimized away, because the input is now orphaned. V5.3's F2 defense-in-depth range-check was the first amendment to attempt one, exposing the issue.
+
+**Generalized rule (canonical for future amendments):**
+
+> When a public-signal slot is no longer constrained by any in-circuit gate (e.g., V5.2's `rotationNewWallet` after dropping the in-circuit equality with `msgSender`), bare `Num2Bits()` range checks may be optimized away by circom -O1. Use parent-aliveness pattern (boolean re-assert outputs at parent scope + weighted-sum equality reconstruction) for orphaned signals.
+
+**Previous-amendment lesson**: constraint deletions can void range-check assumptions in unrelated amendments added later. When dropping an in-circuit constraint, audit downstream amendments that may have implicitly relied on it for aliveness.
+
+##### Why V5.2's `walletSecret` / `oldWalletSecret` Num2Bits(254) ARE sound (T2.5 fold-in NOT needed)
+
+Lead/founder considered folding the parent-aliveness fix into V5.3 as T2.5 to cover V5.2's `walletSecret` and `oldWalletSecret` Num2Bits(254) checks. **Empirical verification (task #63, 2026-05-03) confirmed these checks ARE firing at V5.2; T2.5 is not needed.**
+
+Measurement: V5.2 baseline 3,876,304 constraints minus both `walletSecret` and `oldWalletSecret` Num2Bits(254) calls = 3,875,796. Delta: **−508 = 254 + 254** — both bare Num2Bits chains landed in the r1cs.
+
+Why these survive while `rotationNewWallet`'s did not: `walletSecret` flows into Poseidon₂ for nullifier (`Poseidon₂(walletSecret, ctxHash)`) + identityCommitment (`Poseidon₂(subjectPack, walletSecret)`) — the input is **consumed downstream**, which keeps the bit-decomposition chain alive without parent-aliveness. `oldWalletSecret` similarly flows into identityCommitment-of-old-fp via Poseidon₂ under the rotate-mode gate. Both have a downstream consumer.
+
+**Process learning** (logged 2026-05-03 by lead): workers should question "skip verification, just fix" calls when verification is cheap. The empirical compile (~10 min wall) was cheaper than the cost of a defensive fix — would have added 508 redundant constraints, muddied the auditor narrative ("each Num2Bits provably fires" beats "we verified the optimizer didn't prune it on this specific compiler version" only when the fix is necessary), and committed the team to a non-needed amendment. V5.3 scope stays at T1 (F1 OID-anchor) + T2 (witness builder + tests) + T3 (ceremony stub) + docs. Pot22 headroom remains 7.10%.
+
 #### F2.2 Contract side
 
 > **v0.2 amendment — rotate-only.** v0.1 specified the contract-side check on BOTH `register()` and `rotateWallet()`. Per contracts-eng commit `1b260d8`, the correct scope is **`rotateWallet()` only**:
@@ -470,12 +494,13 @@ The V5.2 stub at `ceremony/v5_2/` becomes the V5.2 archive (matching the V5.1 pa
 ## Revision history
 
 - v0.1 (2026-05-03): initial draft — three findings (F1 OID-anchor, F2 160-bit range check, F3 wallet-secret doc), minimal F1 recommended, ceremony pot22-reusable. Pending user-review gate.
-- v0.2 (2026-05-03, same-day): post-T1/T2-implementation amendments. Five corrections:
+- v0.2 (2026-05-03, same-day): post-T1/T2-implementation amendments. Six corrections + post-mortem:
   1. **F1.3 cost projection** revised from ~10-11K to **+19,892 measured** (root cause: circomlib `Multiplexer(1, 1408)` is ~2,800 constraints/mux via MultiMux binary-tree decomposition, not ~1,408 linear). Pot22 envelope holds at 7.10% headroom.
   2. **F2.1 implementation pattern** updated. v0.1's bare `Num2Bits(160)` is dead-code-eliminated by circom 2.1.9 -O1 when the input has no other consumer (empirically confirmed during T2 — 0 constraints added). Replaced with parent-level boolean re-assertion + weighted-sum equality (canonical optimizer-aliveness pattern documented as a recipe).
   3. **F2.2 contract scope** narrowed from "register + rotateWallet" to **rotateWallet only** (per contracts-eng commit `1b260d8`). register() derives `rotationNewWallet` from keccak internally; no malicious-input vector.
   4. **F1.5 SDK derivation note**: clarified that the new private input `subjectSerialOidOffsetInTbs` is computed by trivial subtraction (`subjectSerialValueOffsetInTbs - 7`) — no X.509 walker change needed.
   5. **ETSI string-tag scope note** added: F1 accepts `0x13` PrintableString + `0x0c` UTF8String only; X.520's `0x14`/`0x16`/`0x1e` are intentionally rejected (incompatible with §6.6 byte-pack semantics + outside ETSI EN 319 412-1 §5.1.3 namespace).
   6. **Founder decision recorded**: F1.2 minimal selected (not F1.4 stronger). F1.4 spec text retained as design reference for V5.4 if threat model warrants.
+  7. **§F2.1 post-mortem added**: V5.1 → V5.2 cascading aliveness loss documented (V5.1's `rotationNewWallet === msgSender` was load-bearing for keeping Num2Bits live; V5.2's keccak-on-chain amendment removed that gate without replacing the aliveness anchor). Rule generalized for future amendments. Process learning from task #63: workers should question "skip verification, just fix" calls when verification is cheap. Empirical (a) verified V5.2's walletSecret/oldWalletSecret Num2Bits(254) checks ARE firing (delta -508 = 254+254) — T2.5 fold-in NOT needed; V5.3 scope stays at T1+T2+T3+docs.
 
 End of v0.2 spec.

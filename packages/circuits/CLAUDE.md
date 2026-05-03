@@ -819,6 +819,70 @@ pattern for any future amendment that needs an in-circuit range-check
 on an otherwise-orphaned input — DO NOT use bare `Num2Bits(N)` or
 `LessThan(N+1)` (both empirically observed to be optimized away).
 
+#### Post-mortem — V5.1 → V5.2 cascading aliveness loss
+
+The optimizer-pruning vulnerability for `rotationNewWallet` is a
+**cascading effect from the V5.2 amendment**, not a V5.3-introduced
+regression. Timeline:
+
+- **V5.1**: `rotationNewWallet` was kept alive (under -O1) by the
+  in-circuit equality gate `rotationNewWallet === msgSender`
+  (V5.1's wallet-uniqueness anchor). That gate's existence
+  forced `rotationNewWallet`'s value to be consumed by another
+  constraint, which in turn forced any range-check chain on it
+  to stay live. A bare `Num2Bits(160)` would have fired in V5.1.
+- **V5.2 keccak-on-chain amendment**: dropped the in-circuit
+  `=== msgSender` equality (keccak gate moved to the contract,
+  msgSender removed from public signals). That dropped the
+  ONLY consumer of `rotationNewWallet` inside the circuit.
+- **Latent effect**: any future bare `Num2Bits(160)` over
+  `rotationNewWallet` would silently be optimized away, because
+  the input is now orphaned. V5.3's defense-in-depth range-check
+  was the first amendment to attempt one, exposing the issue.
+
+**Generalized rule (canonical for any future bit-range work):**
+
+> When a public-signal slot is no longer constrained by any
+> in-circuit gate (e.g., V5.2's `rotationNewWallet` after dropping
+> the in-circuit equality with `msgSender`), bare `Num2Bits()`
+> range checks may be optimized away by circom -O1. Use parent-
+> aliveness pattern (boolean re-assert outputs at parent scope +
+> weighted-sum equality reconstruction) for orphaned signals.
+
+The previous-amendment lesson: **constraint deletions can void
+range-check assumptions in unrelated amendments** added later.
+When dropping an in-circuit constraint, audit downstream amendments
+that may have implicitly relied on it for aliveness.
+
+#### Why V5.2's `walletSecret` / `oldWalletSecret` Num2Bits(254) ARE sound
+
+Empirical verification (task #63, 2026-05-03): V5.2 baseline 3,876,304
+constraints minus `walletSecret` and `oldWalletSecret` Num2Bits(254)
+checks = 3,875,796. Delta: **−508 = 254 + 254** — both bare Num2Bits
+chains DID land in the r1cs.
+
+Why these are different from `rotationNewWallet`'s case: `walletSecret`
+flows into Poseidon₂ for nullifier (`Poseidon₂(walletSecret, ctxHash)`)
++ identityCommitment (`Poseidon₂(subjectPack, walletSecret)`) — the
+input is **consumed downstream**, which forces the bit-decomposition
+chain alive even without parent-aliveness. `oldWalletSecret`
+similarly flows into identityCommitment-of-old-fp via Poseidon₂
+under the rotate-mode gate. Both have a downstream consumer that
+keeps their range-check chain alive.
+
+**T2.5 fold-in NOT needed for V5.2 walletSecret/oldWalletSecret.**
+The bare `Num2Bits(254)` checks are sound at V5.2 because of the
+Poseidon-downstream consumption. V5.3 amendment scope stays at T1
+(F1 OID-anchor) + T2 (witness builder + tests) + T3 (ceremony stub)
++ docs. Pot22 headroom remains 7.10%.
+
+**Workers should question "skip verification, just fix" calls when
+verification is cheap** (process learning logged 2026-05-03 by lead).
+The empirical compile (~10 min) was cheaper than the cost of a
+defensive fix that would have added 508 redundant constraints,
+muddied the auditor narrative, and committed the team to a non-
+needed amendment.
+
 Contract side (V5.3 §F2.2): the contract-side range check belongs on
 **`rotateWallet()` only** (per contracts-eng commit `1b260d8`). In
 `register()` the contract derives `rotationNewWallet` from keccak
