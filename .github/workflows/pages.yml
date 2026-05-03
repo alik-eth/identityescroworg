@@ -88,8 +88,24 @@ jobs:
       - name: Write CNAME (zkqes.org)
         run: echo "zkqes.org" > packages/web/dist/CNAME
 
-      - name: Ensure SPA 404 fallback
-        run: cp packages/web/dist/index.html packages/web/dist/404-fallback.html || true
+      - name: SPA 404 fallback (root-domain deploy serves the SPA shell)
+        # GH Pages serves `dist/404.html` for any path that doesn't map to a
+        # static asset. Copying `dist/index.html` on top makes every 404
+        # response boot the SPA, which then routes via TanStack Router.
+        #
+        # This bypasses the rafgraph/spa-github-pages query-string dance
+        # entirely — that pattern is for repo-subpath deploys
+        # (`/identityescroworg/`) and was the root cause of the infinite
+        # `?/&/~and~/...` loop seen at zkqes.org/ceremony/contribute on
+        # 2026-05-04 (a stale `segmentCount=1` from the subpath era treated
+        # `/ceremony` as a base prefix to keep, redirecting `/ceremony/foo`
+        # → `/ceremony/?/foo` which 404'd again because there is no
+        # `dist/ceremony/index.html`, looping).
+        #
+        # `dist/index.html` already includes a defensive restoration script
+        # for the rare cached tab still carrying a `?/...` URL from the
+        # broken-deploy era; that script is a no-op when the query is empty.
+        run: cp packages/web/dist/index.html packages/web/dist/404.html
 
       - uses: actions/upload-pages-artifact@v3
         with:
