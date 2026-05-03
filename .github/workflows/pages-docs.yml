@@ -1,0 +1,94 @@
+# GitHub Actions deploy → docs.zkqes.org.
+#
+# Per BRAND.md §Domains (locked 2026-05-03), docs.zkqes.org renders
+# the `docs/` markdown tree as a VitePress static site for developers,
+# integrators, researchers. Sister surfaces:
+#
+#   zkqes.org root  → pre-ceremony hero (deployed via `pages.yml`)
+#   app.zkqes.org   → register flow (post-§9.4, separate deploy)
+#   docs.zkqes.org  → THIS workflow's output
+#
+# **GitHub Pages serves ONE custom-domain site per repo.** The
+# `pages.yml` workflow already takes the github-pages slot for
+# zkqes.org root. To deploy a SECOND domain (docs.zkqes.org) from the
+# same repo, we publish the VitePress dist to a dedicated
+# `gh-pages-docs` branch via `peaceiris/actions-gh-pages`. Lead's #62
+# DNS work picks the actual serving mechanism for that branch:
+#
+#   Option A — separate GH Pages repo: create `zkqes-docs` repo,
+#              configure its GH Pages to serve from this repo's
+#              gh-pages-docs branch via subtree push. Highest
+#              alignment with existing infra.
+#   Option B — Cloudflare Pages: connect to identityescroworg repo,
+#              point at `gh-pages-docs` branch. Custom domain config
+#              in Cloudflare dashboard. Lowest friction if Cloudflare
+#              is already in use for zkqes.org DNS.
+#   Option C — Netlify / Vercel: same shape as B with their dashboard.
+#
+# All three options consume the same `gh-pages-docs` branch this
+# workflow produces. Lead's #62 task picks A/B/C; this workflow stays
+# as-is regardless.
+#
+# **Triggers:** push to main when docs/, BRAND.md, or root config files
+# change. Avoids re-deploying the docs site for every commit to
+# packages/web etc.
+
+name: Deploy docs to docs.zkqes.org
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'BRAND.md'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/pages-docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write    # peaceiris/actions-gh-pages needs write to push the publish branch
+
+concurrency:
+  group: pages-docs
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.1.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.x
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build VitePress site
+        run: pnpm docs:build
+
+      - name: Write CNAME (docs.zkqes.org)
+        # Per BRAND.md §Domains. Update post-DNS migration only if the
+        # subdomain itself ever changes (lead-side, gated on #62).
+        run: echo "docs.zkqes.org" > docs/.vitepress/dist/CNAME
+
+      - name: Publish to gh-pages-docs branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs/.vitepress/dist
+          publish_branch: gh-pages-docs
+          # Pin the commit user to a bot identity rather than
+          # whoever's GH_TOKEN happened to fire the workflow. Keeps
+          # the gh-pages-docs branch history tidy.
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: 'docs: deploy ${{ github.sha }}'
