@@ -22,7 +22,22 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-export type RapidsnarkPlatform = 'linux-x86_64' | 'linux-arm64' | 'darwin-arm64' | 'darwin-x86_64' | 'windows-x86_64';
+// Platform keys match the iden3 release-asset filenames exactly
+// (`rapidsnark-<platform>-v0.0.8.zip`).  The zip extracts to
+// `rapidsnark-<platform>-v0.0.8/bin/prover[.exe]`, so the on-disk
+// directory inherits the same key.  Capitalization quirk: macOS is
+// "macOS" in iden3's release naming, NOT "darwin".  Mapping from
+// process.platform happens in detectRapidsnarkPlatform below.
+//
+// V1 supports the four platforms iden3 ships prebuilts for in v0.0.8:
+// Linux x86_64 + arm64, macOS arm64 + x86_64.  iden3 does NOT publish
+// a Windows prebuilt for v0.0.8; Windows users build rapidsnark from
+// source and pass `--rapidsnark-bin <path>` explicitly (graceful fallback).
+export type RapidsnarkPlatform =
+  | 'linux-x86_64'
+  | 'linux-arm64'
+  | 'macOS-arm64'
+  | 'macOS-x86_64';
 export const RAPIDSNARK_VERSION = 'v0.0.8';
 
 export interface SidecarPathInput {
@@ -38,7 +53,10 @@ export interface SidecarPathInput {
 
 /**
  * Detect which prebuilt rapidsnark archive matches the current host.
- * iden3 publishes prebuilts for these five platforms in v0.0.8.
+ * iden3 publishes prebuilts for these four platforms in v0.0.8 (no
+ * Windows binary; Windows users must build from source and pass
+ * --rapidsnark-bin explicitly — handled by the caller's graceful
+ * fallback in postinstall.ts).
  */
 export function detectRapidsnarkPlatform(
   platform: NodeJS.Platform = process.platform,
@@ -46,12 +64,13 @@ export function detectRapidsnarkPlatform(
 ): RapidsnarkPlatform {
   if (platform === 'linux' && arch === 'x64') return 'linux-x86_64';
   if (platform === 'linux' && arch === 'arm64') return 'linux-arm64';
-  if (platform === 'darwin' && arch === 'arm64') return 'darwin-arm64';
-  if (platform === 'darwin' && arch === 'x64') return 'darwin-x86_64';
-  if (platform === 'win32' && arch === 'x64') return 'windows-x86_64';
+  if (platform === 'darwin' && arch === 'arm64') return 'macOS-arm64';
+  if (platform === 'darwin' && arch === 'x64') return 'macOS-x86_64';
   throw new Error(
-    `unsupported platform/arch for rapidsnark sidecar: ${platform}-${arch}.  ` +
-      'iden3/rapidsnark v0.0.8 ships Linux x64/arm64, macOS arm64/x64, Windows x64 only.',
+    `no rapidsnark v0.0.8 prebuilt for ${platform}-${arch}.  ` +
+      'iden3/rapidsnark v0.0.8 ships Linux x64/arm64 and macOS arm64/x64. ' +
+      'Other platforms (Windows etc.) must build rapidsnark from source ' +
+      'and pass --rapidsnark-bin <path> at runtime.',
   );
 }
 
@@ -63,7 +82,11 @@ export function detectRapidsnarkPlatform(
 export function resolveSidecarPath(input: SidecarPathInput = {}): string {
   const platform = input.platform ?? detectRapidsnarkPlatform();
   const isPkg = input.isPkg ?? Boolean((process as unknown as { pkg?: unknown }).pkg);
-  const exeName = platform.startsWith('windows') ? 'prover.exe' : 'prover';
+  // V1 supports Linux + macOS only; iden3 ships no Windows v0.0.8
+  // prebuilt.  All four platforms use the bare `prover` binary name
+  // (no .exe suffix).  When V1.1 adds Windows from-source support,
+  // this is the place to append `.exe` for the win32 platform.
+  const exeName = 'prover';
 
   if (isPkg) {
     // Bundled path: pkg copies the prover binary alongside the exe

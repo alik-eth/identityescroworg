@@ -16,19 +16,29 @@ describe('detectRapidsnarkPlatform', () => {
   it.each([
     ['linux', 'x64', 'linux-x86_64'],
     ['linux', 'arm64', 'linux-arm64'],
-    ['darwin', 'arm64', 'darwin-arm64'],
-    ['darwin', 'x64', 'darwin-x86_64'],
-    ['win32', 'x64', 'windows-x86_64'],
+    ['darwin', 'arm64', 'macOS-arm64'],
+    ['darwin', 'x64', 'macOS-x86_64'],
   ] as const)('maps %s + %s → %s', (platform, arch, expected) => {
     expect(detectRapidsnarkPlatform(platform, arch)).toBe(expected);
   });
 
-  it('rejects unsupported platform/arch combos', () => {
+  it('rejects Windows (no v0.0.8 prebuilt) with actionable message', () => {
+    // Documented limitation: iden3/rapidsnark v0.0.8 ships no
+    // Windows binary.  Windows users must build from source.
+    expect(() => detectRapidsnarkPlatform('win32', 'x64')).toThrow(
+      /no rapidsnark v0\.0\.8 prebuilt/,
+    );
+    expect(() => detectRapidsnarkPlatform('win32', 'x64')).toThrow(
+      /--rapidsnark-bin/,
+    );
+  });
+
+  it('rejects other unsupported platform/arch combos', () => {
     expect(() => detectRapidsnarkPlatform('linux', 'ia32')).toThrow(
-      /unsupported platform\/arch/,
+      /no rapidsnark v0\.0\.8 prebuilt/,
     );
     expect(() => detectRapidsnarkPlatform('android', 'arm64')).toThrow(
-      /unsupported platform\/arch/,
+      /no rapidsnark v0\.0\.8 prebuilt/,
     );
   });
 });
@@ -56,32 +66,25 @@ describe('resolveSidecarPath', () => {
     );
   });
 
-  it('Windows pkg mode appends .exe', () => {
-    const path = resolveSidecarPath({
-      platform: 'windows-x86_64',
-      isPkg: true,
-      execPath: 'C:\\Program Files\\qkb-cli\\qkb.exe',
-    });
-    expect(path.endsWith('prover.exe')).toBe(true);
-  });
-
-  it('Windows dev mode also appends .exe', () => {
-    const path = resolveSidecarPath({
-      platform: 'windows-x86_64',
-      isPkg: false,
-      home: 'C:\\Users\\alice',
-    });
-    expect(path.endsWith('prover.exe')).toBe(true);
-  });
-
   it('macOS arm64 dev mode resolves to the conventional cache layout', () => {
     const path = resolveSidecarPath({
-      platform: 'darwin-arm64',
+      platform: 'macOS-arm64',
       isPkg: false,
       home: '/Users/bob',
     });
     expect(path).toBe(
-      `/Users/bob/.cache/qkb-bin/rapidsnark-darwin-arm64-${RAPIDSNARK_VERSION}/bin/prover`,
+      `/Users/bob/.cache/qkb-bin/rapidsnark-macOS-arm64-${RAPIDSNARK_VERSION}/bin/prover`,
+    );
+  });
+
+  it('macOS x86_64 dev mode resolves under .cache (Intel Macs still supported)', () => {
+    const path = resolveSidecarPath({
+      platform: 'macOS-x86_64',
+      isPkg: false,
+      home: '/Users/carol',
+    });
+    expect(path).toBe(
+      `/Users/carol/.cache/qkb-bin/rapidsnark-macOS-x86_64-${RAPIDSNARK_VERSION}/bin/prover`,
     );
   });
 

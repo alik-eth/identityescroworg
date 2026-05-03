@@ -33,25 +33,43 @@ interface PrebuildEntry {
 }
 
 /**
- * Embedded manifest of iden3 rapidsnark v0.0.8 prebuilts.  V1 ships
- * only Linux x86_64; T8 fills in the rest.  Treat any platform not
- * in this map as "supported by the CLI but no prebuilt — please
- * point --rapidsnark-bin at a manually-built binary" rather than a
- * full reject.
+ * Embedded manifest of iden3 rapidsnark v0.0.8 prebuilts.  Sha256
+ * pins are this CLI's supply-chain check: a tampered mirror at the
+ * canonical GitHub URL would mismatch and abort the postinstall.
+ *
+ * Pins captured 2026-05-03 against the iden3/rapidsnark v0.0.8
+ * GitHub release (`gh release view v0.0.8 --repo iden3/rapidsnark
+ * --json assets`); independently verified by downloading + sha256-
+ * summing each archive.
+ *
+ * v0.0.8 ships NO Windows binary — Windows users build rapidsnark
+ * from source; detectRapidsnarkPlatform throws an actionable error
+ * pointing them at --rapidsnark-bin.
  */
 const PREBUILTS: Partial<Record<RapidsnarkPlatform, PrebuildEntry>> = {
   'linux-x86_64': {
-    // The lead-staged tarball at ~/.cache/qkb-bin/rapidsnark.zip is
-    // the bytes-equivalent artifact.  Production: pull from iden3
-    // GitHub releases (URL TBD by lead during T8 cross-platform).
-    // Dev: lead can override via QKB_PREBUILTS_BASE env if testing
-    // against a local mirror.
     url: 'https://github.com/iden3/rapidsnark/releases/download/v0.0.8/rapidsnark-linux-x86_64-v0.0.8.zip',
-    // Sha256 of the lead's local zip; matches GitHub release.  Pin
-    // here so a tampered mirror is detected.  V1 supply-chain check.
-    sha256: 'PLACEHOLDER_FILL_IN_T8',
+    sha256: '2ec59e3aa5ff498e862d60b3b7abdcd094ea484271750ec1ea14fb7c1305e423',
     archiveType: 'zip',
     proverPathInArchive: 'rapidsnark-linux-x86_64-v0.0.8/bin/prover',
+  },
+  'linux-arm64': {
+    url: 'https://github.com/iden3/rapidsnark/releases/download/v0.0.8/rapidsnark-linux-arm64-v0.0.8.zip',
+    sha256: '704dfbaa6847d4ddf5f63bf7bc8d3e59f007c33e2d8ab16b318090d671253dbd',
+    archiveType: 'zip',
+    proverPathInArchive: 'rapidsnark-linux-arm64-v0.0.8/bin/prover',
+  },
+  'macOS-arm64': {
+    url: 'https://github.com/iden3/rapidsnark/releases/download/v0.0.8/rapidsnark-macOS-arm64-v0.0.8.zip',
+    sha256: 'dbd2c1498663223232f9c3ad02259d2839e62e784e9b1f6a0e9bd5070443990d',
+    archiveType: 'zip',
+    proverPathInArchive: 'rapidsnark-macOS-arm64-v0.0.8/bin/prover',
+  },
+  'macOS-x86_64': {
+    url: 'https://github.com/iden3/rapidsnark/releases/download/v0.0.8/rapidsnark-macOS-x86_64-v0.0.8.zip',
+    sha256: 'df116044e6edfd409aa198a9bc828f0f038ddfeaa3243d350460da3a08376631',
+    archiveType: 'zip',
+    proverPathInArchive: 'rapidsnark-macOS-x86_64-v0.0.8/bin/prover',
   },
 };
 
@@ -91,14 +109,6 @@ export async function runPostinstall(input: PostinstallInput = {}): Promise<void
   if (!entry) {
     log(`[qkb-cli postinstall] no prebuilt for ${platform}; skipping prover download`);
     log('[qkb-cli postinstall] pass --rapidsnark-bin <path> at runtime instead');
-    return;
-  }
-
-  if (entry.sha256.startsWith('PLACEHOLDER_')) {
-    log(
-      `[qkb-cli postinstall] sha256 pin for ${platform} is a placeholder; ` +
-        'skipping download.  Lead populates these in T8.',
-    );
     return;
   }
 
