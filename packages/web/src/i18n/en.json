@@ -41,6 +41,12 @@
     "opensea": "View on OpenSea",
     "share": "Share"
   },
+  "cliBanner": {
+    "title": "Faster proofs with the QKB CLI",
+    "body": "Install qkb for native proof generation — about 7× faster (≈14 s vs ≈90 s) and 10× less memory (≈3.7 GB vs ≈38 GB) than the in-browser prover. Optional — the browser prover works as-is.",
+    "cta": "Install qkb →",
+    "dismiss": "Dismiss"
+  },
   "registerV5": {
     "title": "Register your identity",
     "lede": "Four steps. Your private credentials never leave this browser — only a zero-knowledge proof reaches the chain.",
