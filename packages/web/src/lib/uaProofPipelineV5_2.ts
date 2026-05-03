@@ -44,9 +44,12 @@ import {
   type CmsExtraction,
   decodeEcdsaSigSequence,
   bytes32ToHex,
+  CliProveError,
+  type WitnessV5_2,
 } from '@qkb/sdk';
 import { SnarkjsWorkerProver } from '@qkb/sdk/prover/snarkjsWorker';
 import { V5_PROVER_ARTIFACTS } from './circuitArtifacts';
+import { runCliFirstProver } from './cliFallbackProver';
 
 export type V5_2PipelineStage =
   | 'parse-cades'
@@ -91,6 +94,25 @@ export interface V5_2PipelineOptions {
   readonly intSpki?: Uint8Array;
   readonly onProgress?: (p: V5_2PipelineProgress) => void;
   readonly signal?: AbortSignal;
+  /**
+   * Caller-side gate for the CLI prove path. Pipeline reads this once
+   * per `runV5_2Pipeline` call (no internal `detectCli` polling — that's
+   * the React `useCliPresence` hook's job). When `true`, the pipeline
+   * tries `proveViaCli` first and falls back to in-browser snarkjs on
+   * 5xx / 429 / network / malformed responses (per
+   * `CliProveError.shouldFallback`). `false` (default) skips the CLI
+   * path entirely.
+   */
+  readonly cliPresent?: boolean;
+  /**
+   * Callback fired when the CLI was attempted but failed in a way that
+   * triggered a browser-prover fallback. The component renders a toast
+   * with version-specific copy (`CLI busy`, `CLI server error`, `CLI
+   * server stopped`) — see `proveViaCli.ts` header for the canonical
+   * mapping. NOT fired on 4xx (those re-throw from the pipeline so the
+   * UI surfaces the error verbatim instead of silently retrying).
+   */
+  readonly onCliFallback?: (err: CliProveError) => void;
 }
 
 export interface V5_2PipelineResult {
@@ -102,6 +124,16 @@ export interface V5_2PipelineResult {
    *  when `useMockProver: true` — the Step 4 component skips submit in
    *  that case. */
   readonly registerArgs: RegisterArgsV5_2;
+  /**
+   * Discriminator: which prover actually generated the proof.
+   *   'cli'     — `proveViaCli` returned a 2xx (CLI was present + healthy)
+   *   'browser' — fell back to in-browser snarkjs (CLI absent OR
+   *               present-but-failed-with-shouldFallback). Step 4
+   *               renders a "proved on CLI" / "proved in browser"
+   *               receipt off this field.
+   *   'mock'    — mock-prover path (CI / dev without a ceremony zkey).
+   */
+  readonly source: 'cli' | 'browser' | 'mock';
 }
 
 const ZERO_BYTES32 = `0x${'00'.repeat(32)}` as const;
@@ -203,42 +235,36 @@ async function runRealPath(
     walletSecret: Buffer.from(opts.walletSecret),
   });
 
-  // Run the prover. The proveV5 driver guards on the public-signal count;
-  // V5.2's `publicSignalsV5_2FromArray` then asserts the 22-element shape
-  // — keeps the cross-package contract tight against any future drift.
-  tick('prove', 50, 'running snarkjs Groth16 prover');
-  const artifacts: CircuitArtifactUrls = {
-    wasmUrl: V5_PROVER_ARTIFACTS.wasmUrl,
-    zkeyUrl: V5_PROVER_ARTIFACTS.zkeyUrl,
-    zkeySha256: V5_PROVER_ARTIFACTS.zkeySha256,
-  };
-  // Drive snarkjs in a Web Worker so the main thread stays responsive
-  // during the multi-minute prove step. The Worker is terminated after
-  // each prove to release the zkey heap back to the OS.
-  const proverWorker = new Worker(
-    new URL('../workers/v5-prover.worker.ts', import.meta.url),
-    { type: 'module' },
+  // Run the prover. CLI path is preferred when `cliPresent: true` is
+  // set by the caller (T2 `useCliPresence` hook); falls back to
+  // in-browser snarkjs on 5xx / 429 / network / malformed per
+  // `CliProveError.shouldFallback` (orchestration §1.6 fallback
+  // discipline). 4xx (witness invalid / origin pin) re-throws so
+  // Step 4 can surface verbatim — no silent retry on a witness that's
+  // mathematically certain to fail in the browser too.
+  const { proofRaw, publicSignalsRaw, source } = await runCliFirstProver(
+    witness,
+    {
+      cliPresent: opts.cliPresent ?? false,
+      ...(opts.onCliFallback ? { onCliFallback: opts.onCliFallback } : {}),
+      onProgress: (msg) => tick('prove', 35, msg),
+      runBrowser: () => runBrowserProver(witness, tick),
+    },
   );
-  const prover: IProver = new SnarkjsWorkerProver({
-    worker: proverWorker,
-    terminateAfterProve: true,
-  });
-  const proveResult = await proveV5(witness as Record<string, unknown>, {
-    prover,
-    artifacts,
-  });
-  tick('prove', 80);
 
-  const publicSignals = publicSignalsV5_2FromArray(proveResult.publicSignals);
+  // V5.2's `publicSignalsV5_2FromArray` asserts the 22-element shape
+  // here — keeps the cross-package contract tight against any future
+  // drift between the SDK's V5.2 layout and what either prover emits.
+  const publicSignals = publicSignalsV5_2FromArray(publicSignalsRaw);
 
   tick('encode-calldata', 90, 'assembling RegisterArgsV5_2');
   const proof: Groth16ProofV5_2 = {
-    a: [BigInt(proveResult.proof.pi_a[0] ?? '0'), BigInt(proveResult.proof.pi_a[1] ?? '0')] as const,
+    a: [BigInt(proofRaw.pi_a[0] ?? '0'), BigInt(proofRaw.pi_a[1] ?? '0')] as const,
     b: [
-      [BigInt(proveResult.proof.pi_b[0]?.[0] ?? '0'), BigInt(proveResult.proof.pi_b[0]?.[1] ?? '0')] as const,
-      [BigInt(proveResult.proof.pi_b[1]?.[0] ?? '0'), BigInt(proveResult.proof.pi_b[1]?.[1] ?? '0')] as const,
+      [BigInt(proofRaw.pi_b[0]?.[0] ?? '0'), BigInt(proofRaw.pi_b[0]?.[1] ?? '0')] as const,
+      [BigInt(proofRaw.pi_b[1]?.[0] ?? '0'), BigInt(proofRaw.pi_b[1]?.[1] ?? '0')] as const,
     ] as const,
-    c: [BigInt(proveResult.proof.pi_c[0] ?? '0'), BigInt(proveResult.proof.pi_c[1] ?? '0')] as const,
+    c: [BigInt(proofRaw.pi_c[0] ?? '0'), BigInt(proofRaw.pi_c[1] ?? '0')] as const,
   };
 
   // Trust + policy merkle inclusion paths come from the registry-side
@@ -284,7 +310,43 @@ async function runRealPath(
     policyMerklePathBits: 0n,
   };
 
-  return { publicSignals, proof, registerArgs };
+  return { publicSignals, proof, registerArgs, source };
+}
+
+/**
+ * In-browser snarkjs prover for the given V5.2 witness. Spawns a fresh
+ * Web Worker per call and terminates it after the prove (V5_PROVER_ARTIFACTS
+ * defines the wasm + zkey URLs). Used as the `runBrowser` callback for
+ * `runCliFirstProver` — keeps the snarkjs Worker plumbing out of the
+ * fallback dispatch logic so the latter is testable in isolation.
+ */
+async function runBrowserProver(
+  witness: WitnessV5_2,
+  tick: (stage: V5_2PipelineStage, pct: number, message?: string) => void,
+): Promise<{ proofRaw: import('@qkb/sdk').Groth16Proof; publicSignalsRaw: string[] }> {
+  tick('prove', 50, 'running snarkjs Groth16 prover');
+  const artifacts: CircuitArtifactUrls = {
+    wasmUrl: V5_PROVER_ARTIFACTS.wasmUrl,
+    zkeyUrl: V5_PROVER_ARTIFACTS.zkeyUrl,
+    zkeySha256: V5_PROVER_ARTIFACTS.zkeySha256,
+  };
+  const proverWorker = new Worker(
+    new URL('../workers/v5-prover.worker.ts', import.meta.url),
+    { type: 'module' },
+  );
+  const prover: IProver = new SnarkjsWorkerProver({
+    worker: proverWorker,
+    terminateAfterProve: true,
+  });
+  const proveResult = await proveV5(witness as Record<string, unknown>, {
+    prover,
+    artifacts,
+  });
+  tick('prove', 80);
+  return {
+    proofRaw: proveResult.proof,
+    publicSignalsRaw: proveResult.publicSignals,
+  };
 }
 
 /**
@@ -430,7 +492,7 @@ async function runMockPath(
     policyMerklePathBits: 0n,
   };
 
-  return { publicSignals, proof, registerArgs };
+  return { publicSignals, proof, registerArgs, source: 'mock' };
 }
 
 function delay(ms: number): Promise<void> {
