@@ -2,8 +2,10 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  type AnyRoute,
   Outlet,
 } from '@tanstack/react-router';
+import { IS_APP_TARGET } from './lib/buildTarget';
 import { IndexScreen } from './routes/index';
 import { CliInstall } from './routes/ua/cli';
 import { SubmitScreen } from './routes/ua/submit';
@@ -24,11 +26,58 @@ function RootLayout() {
 
 const rootRoute = createRootRoute({ component: RootLayout });
 
+// ---------------------------------------------------------------- //
+// Shared routes — present on BOTH `landing` and `app` targets.     //
+// ---------------------------------------------------------------- //
+// IndexScreen itself is target-aware: it renders the pre-ceremony
+// hero on the landing target (zkqes.org root) and the existing
+// register-flow landing on the app target (app.zkqes.org). See
+// `routes/index.tsx`.
+
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/',
   component: IndexScreen,
 });
+
+const ceremonyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/ceremony',
+  component: CeremonyIndex,
+});
+
+const ceremonyContributeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/ceremony/contribute',
+  component: CeremonyContribute,
+});
+
+const ceremonyStatusRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/ceremony/status',
+  component: CeremonyStatus,
+});
+
+const ceremonyVerifyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/ceremony/verify',
+  component: CeremonyVerify,
+});
+
+const integrationsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/integrations',
+  component: IntegrationsScreen,
+});
+
+// ---------------------------------------------------------------- //
+// App-only routes — register + rotate flow + UA mint pipeline.     //
+// Excluded from `landing` builds per BRAND.md §Domains: zkqes.org  //
+// root surfaces ceremony recruitment ONLY; the register flow lives //
+// at app.zkqes.org. Adding any of these routes to a `landing` build //
+// is a brand-decision regression — surface to lead before expanding //
+// the conditional set.                                              //
+// ---------------------------------------------------------------- //
 
 const cliRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -66,56 +115,38 @@ const useDesktopRoute = createRoute({
   component: UseDesktopScreen,
 });
 
-const ceremonyRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/ceremony',
-  component: CeremonyIndex,
-});
-
-const ceremonyContributeRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/ceremony/contribute',
-  component: CeremonyContribute,
-});
-
-const ceremonyStatusRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/ceremony/status',
-  component: CeremonyStatus,
-});
-
-const ceremonyVerifyRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/ceremony/verify',
-  component: CeremonyVerify,
-});
-
-const integrationsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/integrations',
-  component: IntegrationsScreen,
-});
-
 const accountRotateRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/account/rotate',
   component: AccountRotateScreen,
 });
 
-const routeTree = rootRoute.addChildren([
+// Filter the route tree by build target. Tree-shaking eliminates the
+// component imports for the excluded routes from the final bundle on
+// the landing target — verified via `pnpm -F @qkb/web build` for the
+// landing target showing no `registerV5`/`account/rotate` chunks.
+const sharedRoutes: AnyRoute[] = [
   indexRoute,
+  ceremonyRoute,
+  ceremonyContributeRoute,
+  ceremonyStatusRoute,
+  ceremonyVerifyRoute,
+  integrationsRoute,
+];
+
+const appOnlyRoutes: AnyRoute[] = [
   cliRoute,
   submitRoute,
   mintRoute,
   registerV5Route,
   mintNftRoute,
   useDesktopRoute,
-  ceremonyRoute,
-  ceremonyContributeRoute,
-  ceremonyStatusRoute,
-  ceremonyVerifyRoute,
-  integrationsRoute,
   accountRotateRoute,
+];
+
+const routeTree = rootRoute.addChildren([
+  ...sharedRoutes,
+  ...(IS_APP_TARGET ? appOnlyRoutes : []),
 ]);
 
 export const router = createRouter({ routeTree });
