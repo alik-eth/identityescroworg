@@ -22,54 +22,18 @@ import { CopyButton } from '../../components/CopyButton';
 import { DocumentFooter } from '../../components/DocumentFooter';
 import { PaperGrain } from '../../components/PaperGrain';
 
-interface InstallChannel {
-  /** Stable testid suffix — used by Playwright + the CopyButton anchor. */
-  readonly id: string;
-  readonly title: string;
-  readonly availability: 'v1' | 'v1.1';
-  readonly platforms: string;
-  readonly cmd: string;
-  readonly note: string;
-}
-
 export function CliInstall() {
   const { t } = useTranslation();
 
-  const channels: readonly InstallChannel[] = [
-    {
-      id: 'npm',
-      title: t('cli.npmTitle', 'Via npm — works on every platform with Node 20+'),
-      availability: 'v1',
-      platforms: t('cli.npmPlatforms', 'macOS / Linux / Windows + WSL'),
-      cmd: 'npm install -g @qkb/cli',
-      note: t(
-        'cli.npmNote',
-        'Postinstall downloads the rapidsnark sidecar matching your OS + arch. ~32 KB tarball + ~12 MB sidecar.',
-      ),
-    },
-    {
-      id: 'brew',
-      title: t('cli.brewTitle', 'Via Homebrew — coming in V1.1'),
-      availability: 'v1.1',
-      platforms: t('cli.brewPlatforms', 'macOS / Linux'),
-      cmd: 'brew install identityescrow/qkb/qkb',
-      note: t(
-        'cli.brewNote',
-        'Pre-built binary + bundled sidecar in the formula. Tracking the V1.1 distribution work.',
-      ),
-    },
-    {
-      id: 'github',
-      title: t('cli.githubTitle', 'Direct binary — coming in V1.1'),
-      availability: 'v1.1',
-      platforms: t('cli.githubPlatforms', 'macOS / Linux only'),
-      cmd: 'curl -fsSL https://identityescrow.org/install.sh | sh',
-      note: t(
-        'cli.githubNote',
-        'Detects platform, downloads the matching pre-built binary into ~/.local/bin/qkb. Windows users: install via npm for V1.',
-      ),
-    },
-  ];
+  // V1 ships npm-only per circuits-eng's packaging path:
+  //   - bun ↔ snarkjs has an EventTarget panic that blocks pkg-style
+  //     single-file binary builds.
+  //   - Homebrew + GitHub release binaries deferred to V1.1.
+  // Lead's framing 2026-05-03: "Honest scope is better than ambitious-
+  // but-empty install instructions." So we show ONE working command
+  // (npm) + a single deferred-channels note rather than three code
+  // blocks where two literally don't run in V1.
+  const NPM_INSTALL = 'npm install -g @qkb/cli';
 
   return (
     <main className="relative min-h-screen">
@@ -151,7 +115,7 @@ export function CliInstall() {
           <section
             aria-labelledby="install-heading"
             data-testid="cli-install"
-            className="space-y-10"
+            className="space-y-6"
           >
             <h2
               id="install-heading"
@@ -160,54 +124,59 @@ export function CliInstall() {
             >
               {t('cli.installHeading', 'Install')}
             </h2>
-            {channels.map((c) => (
-              <article
-                key={c.id}
-                className="space-y-3"
-                data-testid={`cli-channel-${c.id}`}
-              >
-                <h3
-                  className="text-fine text-sm"
-                  style={{
-                    color: 'var(--sovereign)',
-                    fontVariant: 'small-caps',
-                    letterSpacing: '0.08em',
-                  }}
-                >
-                  <span aria-hidden="true" style={{ color: 'var(--seal)', marginRight: '0.5em' }}>
-                    ·
-                  </span>
-                  {c.title}
-                </h3>
-                <p className="text-sm" style={{ color: 'var(--ink)', opacity: 0.7 }}>
-                  {c.platforms}
-                  {c.availability === 'v1.1' && (
-                    <span
-                      data-testid={`cli-channel-${c.id}-coming-soon`}
-                      style={{ color: 'var(--seal)', marginLeft: '0.5em' }}
-                    >
-                      {t('cli.comingSoon', '— coming in V1.1')}
-                    </span>
-                  )}
-                </p>
-                <pre
-                  className="text-mono text-sm p-4 overflow-x-auto whitespace-pre-wrap break-all"
-                  data-testid={`cli-cmd-${c.id}`}
-                  style={{ background: 'var(--ink)', color: 'var(--bone)' }}
-                >
-{c.cmd}
-                </pre>
-                <p className="text-base max-w-prose" style={{ color: 'var(--ink)' }}>
-                  {c.note}
-                </p>
-                <div>
-                  <CopyButton
-                    text={c.cmd}
-                    testId={`cli-copy-${c.id}`}
-                  />
-                </div>
-              </article>
-            ))}
+            <p className="text-base max-w-prose" style={{ color: 'var(--ink)' }}>
+              {t(
+                'cli.installLede',
+                'V1 ships via npm. Requires Node 20 or newer; works on macOS, Linux, and Windows + WSL.',
+              )}
+            </p>
+            <pre
+              className="text-mono text-sm p-4 overflow-x-auto whitespace-pre-wrap break-all"
+              data-testid="cli-cmd-npm"
+              style={{ background: 'var(--ink)', color: 'var(--bone)' }}
+            >
+{NPM_INSTALL}
+            </pre>
+            <div>
+              <CopyButton text={NPM_INSTALL} testId="cli-copy-npm" />
+            </div>
+            <p className="text-base max-w-prose" style={{ color: 'var(--ink)' }}>
+              {t(
+                'cli.installNpmNote',
+                'Postinstall downloads the rapidsnark sidecar matching your OS + arch (~12 MB). The CLI itself is a ~32 KB tarball.',
+              )}
+            </p>
+            {/* Windows callout — iden3 rapidsnark v0.0.8 ships no Windows
+                prebuilt, so postinstall can't fetch a sidecar. Windows
+                users must point the CLI at their own rapidsnark binary
+                via --rapidsnark-bin <path>. WSL users can install
+                rapidsnark inside the WSL distro normally. Per
+                circuits-eng's T8 scope cut. */}
+            <aside
+              className="p-4 space-y-2 border"
+              style={{ borderColor: 'var(--seal)', color: 'var(--ink)' }}
+              data-testid="cli-windows-callout"
+            >
+              <p className="text-sm font-semibold" style={{ color: 'var(--seal)' }}>
+                {t('cli.windowsCalloutLabel', 'Windows note')}
+              </p>
+              <p className="text-sm">
+                {t(
+                  'cli.windowsCalloutBody',
+                  'rapidsnark has no Windows prebuilt in V1. Native Windows users must build rapidsnark themselves and pass `qkb serve --rapidsnark-bin C:\\\\path\\\\to\\\\rapidsnark.exe`. WSL users install rapidsnark inside the WSL distro normally — no extra flag needed.',
+                )}
+              </p>
+            </aside>
+            <p
+              className="text-sm"
+              style={{ color: 'var(--ink)', opacity: 0.7 }}
+              data-testid="cli-deferred-channels"
+            >
+              {t(
+                'cli.deferredChannels',
+                'Homebrew formula and a one-line curl installer (`brew install identityescrow/qkb/qkb` and `curl -fsSL https://identityescrow.org/install.sh | sh`) are coming in V1.1. For V1, npm is the supported channel.',
+              )}
+            </p>
           </section>
 
           <hr className="rule" />
@@ -325,7 +294,7 @@ qkb serve
                 <dd className="text-base max-w-prose" style={{ color: 'var(--ink)' }}>
                   {t(
                     'cli.troubleSidecarBody',
-                    'If postinstall couldn\'t download the sidecar (offline machine, restricted CI), run `qkb cache rebuild` while online to retry. The sidecar is platform-specific (~12 MB).',
+                    'If postinstall couldn\'t download the sidecar (offline machine, restricted CI, or native Windows where iden3 v0.0.8 ships no prebuilt), pass `qkb serve --rapidsnark-bin <path>` with a binary you built yourself. Run `qkb cache rebuild` while online to retry the postinstall download on platforms that have a prebuilt.',
                   )}
                 </dd>
               </div>
