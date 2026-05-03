@@ -9,7 +9,7 @@
 
 import type { Command } from 'commander';
 
-export const PKG_VERSION = '0.5.2-pre';
+export const PKG_VERSION = '0.5.4.1-pre';
 export const RAPIDSNARK_VERSION = 'v0.0.8';
 
 export function versionCommand(program: Command): void {

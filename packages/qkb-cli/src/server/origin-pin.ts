@@ -1,7 +1,7 @@
 // Origin-pin gate for the localhost prove API.
 //
 // Per orchestration plan §1.1, the helper accepts requests only from the
-// configured `allowedOrigin` (production: `https://identityescrow.org`).
+// configured `allowedOrigin` (production: `https://app.zkqes.org`).
 // `/status` is exempt — it's used by browser-side detection from any
 // origin (e.g., a dev `http://localhost:5173` that wants to probe whether
 // a helper is running before deciding whether to surface the

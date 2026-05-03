@@ -40,7 +40,7 @@ describe('qkb version', () => {
     // hard-coded constant in commands/version.ts. T7 will additionally
     // smoke-test the pkg-bundled binary's reported version against the
     // package.json baseline.
-    expect(PKG_VERSION).toBe('0.5.2-pre');
+    expect(PKG_VERSION).toBe('0.5.4.1-pre');
     expect(RAPIDSNARK_VERSION).toMatch(/^v\d+\.\d+\.\d+$/);
   });
 });

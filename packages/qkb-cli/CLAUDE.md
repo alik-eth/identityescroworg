@@ -2,7 +2,7 @@
 
 This package hosts `qkb serve` — the localhost-bound native rapidsnark
 prover that the V5.2 register flow at
-`identityescrow.org/v5/registerV5` offloads its prove step to.
+`app.zkqes.org/v5/registerV5` offloads its prove step to.
 
 **The package's purpose is single**: turn a witness JSON into a
 Groth16 proof in ~13 s using native rapidsnark, behind an
@@ -29,11 +29,11 @@ to-have. See also: helper-vs-app design history at
 `docs/superpowers/specs/2026-05-03-qkb-helper-design.md` (superseded
 by the CLI-server design).
 
-## V5.24 — Origin pin is `https://identityescrow.org` exclusively
+## V5.24 — Origin pin is `https://app.zkqes.org` exclusively
 
 `POST /prove` requires the request's `Origin` header to match the
 configured `--allowed-origin`. Default: production
-(`https://identityescrow.org`); production CLI builds will eventually
+(`https://app.zkqes.org`); production CLI builds will eventually
 hard-code this with no flag. Dev builds expose `--allowed-origin
 <url>` for local development against `http://localhost:5173` or
 similar staging origins.
@@ -55,7 +55,7 @@ implementation.
 
 ## V5.25 — Manifest signature verification is REQUIRED in production
 
-The auto-update manifest at `https://identityescrow.org/qkb-cli-manifest.json`
+The auto-update manifest at `https://app.zkqes.org/qkb-cli-manifest.json`
 is signed by an Ed25519 key whose public half is embedded in the CLI
 binary at compile time (`src/manifest/signing-key.ts`). The
 verification path lives in `src/manifest/fetch.ts` and runs by
@@ -203,6 +203,31 @@ If a future agent "tidies up" the finally block by reordering
 release after cleanup — push back. The 429-mutex test in
 `test/integration/failure-modes.test.ts` (T9) is the regression
 guard but only catches it if the test runs.
+
+## V5.31 — Production origin is `app.zkqes.org` (post-V5.4-tag rename)
+
+The CLI was originally written against `https://identityescrow.org`
+as the production origin (per the V5.4 dispatch + the `v0.5.4-cli`
+tag that shipped at commit `95561ba`).  Founder direction
+2026-05-03 (post-tag, pre-npm-publish) renamed the production app
+to `https://app.zkqes.org`.  The CLI's frozen origin pin updated
+on a separate branch (`feat/cli-origin-pin-app-zkqes`) without
+re-tagging; npm publish picks up the new origin from the current
+HEAD whenever it fires.
+
+Future contributors checking out the `v0.5.4-cli` tag verbatim
+will see `identityescrow.org` references; main HEAD has
+`app.zkqes.org`.  The orchestration §1.1 contract update (§ "Origin
+allowlist") is the load-bearing source of truth.
+
+Multi-origin allowlist explicitly NOT supported (per V5.24 — single
+origin keeps the security narrative tight).  Dev builds expose
+`--allowed-origin <url>` for `http://localhost:5173` etc.;
+production CLI builds will eventually hard-code the production
+origin with no flag.
+
+Bumped `@qkb/cli` package version `0.5.2-pre` → `0.5.4.1-pre` to
+signal the post-tag fix.
 
 ## File map
 

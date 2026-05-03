@@ -83,7 +83,7 @@ describe('qkb status', () => {
         res.end(
           JSON.stringify({
             ok: true,
-            version: 'qkb-cli@0.5.2-pre',
+            version: 'qkb-cli@0.5.4.1-pre',
             circuit: 'v5.2',
             zkeyLoaded: true,
             busy: false,
@@ -105,7 +105,7 @@ describe('qkb status', () => {
 
     const r = await runCli(['status', '--port', String(port)]);
     expect(r.status).toBe(0);
-    expect(r.stdout).toContain('running: qkb-cli@0.5.2-pre');
+    expect(r.stdout).toContain('running: qkb-cli@0.5.4.1-pre');
     expect(r.stdout).toContain('circuit=v5.2');
     expect(r.stdout).toContain('zkey=ready');
     expect(r.stdout).toContain('busy=false');

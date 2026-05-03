@@ -130,7 +130,7 @@ describeIfFixtures('CliServer — runtime failure modes', () => {
       rapidsnarkBinPath: RAPIDSNARK_BIN,
       port: 0, // ephemeral
       host: '127.0.0.1',
-      allowedOrigin: 'https://identityescrow.org',
+      allowedOrigin: 'https://app.zkqes.org',
       version: 'qkb-cli@test',
       circuit: 'v5.2',
       log: () => {
