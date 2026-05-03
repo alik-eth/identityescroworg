@@ -26,14 +26,12 @@ pragma solidity 0.8.24;
 ///             multi-contributor Phase-2 ceremony) — wired by setting
 ///             GROTH16_VERIFIER_ADDR before running DeployV5_2.s.sol.
 ///
-///         A future `DeployV5_2.s.sol` (T4 implementation task) will use
-///         THIS placeholder (always-true) ONLY when `GROTH16_VERIFIER_ADDR`
-///         is unset — dev/anvil convenience, mirroring the V5.1 deploy
-///         pattern. Production deploys MUST pass `GROTH16_VERIFIER_ADDR`
-///         pointing at the real ceremonied verifier; the script will log
-///         a loud warning when the placeholder is wired in.
-///         (Until DeployV5_2.s.sol lands, this placeholder is referenced
-///         only by V5.2 unit tests + the future integration suite.)
+///         The Deploy script (`DeployV5_2.s.sol`) uses THIS placeholder
+///         (always-true) ONLY when `GROTH16_VERIFIER_ADDR` is unset —
+///         dev/anvil convenience, mirroring the V5.1 deploy pattern.
+///         Production deploys MUST pass `GROTH16_VERIFIER_ADDR` pointing
+///         at the real ceremonied verifier; the script logs a loud
+///         warning when the placeholder is wired in.
 ///
 /// @dev    V5.2 layout vs V5.1:
 ///           - Slot [0] msgSender DROPPED (no longer circuit-emitted; the
