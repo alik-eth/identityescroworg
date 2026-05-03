@@ -28,10 +28,28 @@
 
 export type BuildTarget = 'landing' | 'app';
 
-const RAW_TARGET = (
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (import.meta as any)?.env?.VITE_TARGET as string | undefined
-) ?? 'app';
+/**
+ * **Direct property access on `import.meta.env.VITE_TARGET`** — load-
+ * bearing for Vite's `define`-plugin substitution. Vite replaces the
+ * exact source-text `import.meta.env.VITE_TARGET` with a string
+ * literal at build time (e.g. `"landing"`); when terser/esbuild
+ * minify, the comparison `"landing" === "landing"` folds to `true`,
+ * and `IS_APP_TARGET`/`IS_LANDING_TARGET` become compile-time
+ * constants. That's what lets the `IS_APP_TARGET ? [...] : []` dead
+ * branch in `router.tsx` get eliminated, dropping the dynamic-
+ * import expressions for the app-only routes from the landing
+ * bundle.
+ *
+ * Earlier versions of this file used `(import.meta as any)?.env?.
+ * VITE_TARGET` to satisfy strict TS without a separate `vite-env.d.ts`,
+ * but the optional-chaining + `as any` cast prevented Vite's regex-
+ * based substitution from matching the source text — the runtime
+ * behaviour was correct, but the bundler kept both branches alive
+ * and the landing entry chunk shipped the app-only screens. Now
+ * resolved with `vite-env.d.ts` typing the env var (see
+ * `src/vite-env.d.ts`) so direct access type-checks cleanly.
+ */
+const RAW_TARGET: string = import.meta.env.VITE_TARGET ?? 'app';
 
 /** Validate at module-load time so a typo in the env var fails fast at
  *  build/startup rather than producing a silently-wrong route tree. */
@@ -47,5 +65,5 @@ export const BUILD_TARGET: BuildTarget = asBuildTarget(RAW_TARGET);
 
 /** Convenience: route registration guards. Slightly more readable at
  *  call sites than `BUILD_TARGET === 'app'`. */
-export const IS_APP_TARGET = BUILD_TARGET === 'app';
-export const IS_LANDING_TARGET = BUILD_TARGET === 'landing';
+export const IS_APP_TARGET: boolean = BUILD_TARGET === 'app';
+export const IS_LANDING_TARGET: boolean = BUILD_TARGET === 'landing';

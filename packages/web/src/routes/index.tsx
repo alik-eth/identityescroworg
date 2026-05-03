@@ -4,7 +4,6 @@ import { MintButton } from '../components/MintButton';
 import { DocumentFooter } from '../components/DocumentFooter';
 import { LandingHero } from '../components/LandingHero';
 import { PaperGrain } from '../components/PaperGrain';
-import { IS_LANDING_TARGET } from '../lib/buildTarget';
 
 /**
  * Root `/` route — surface depends on the SPA's build target.
@@ -29,7 +28,15 @@ import { IS_LANDING_TARGET } from '../lib/buildTarget';
  * `react-hooks/rules-of-hooks` rule statically.
  */
 export function IndexScreen() {
-  if (IS_LANDING_TARGET) {
+  // Direct env-var comparison rather than the `IS_LANDING_TARGET`
+  // indirection — same reason as the comment in `router.tsx`: Vite's
+  // `define` plugin substitutes the literal string at source-text
+  // time, letting Rollup/terser fold the dead branch BEFORE the
+  // module graph is finalized. Going through a const breaks the
+  // substitution match and the dead branch (with its static imports)
+  // ships in the bundle. Cost: 1 line of repeated literal vs ~4 MB
+  // entry-chunk bloat.
+  if (import.meta.env.VITE_TARGET === 'landing') {
     return <LandingHero />;
   }
   return <AppRegisterLanding />;
