@@ -75,6 +75,14 @@ jobs:
           # prove.zkqes.org once the prove subdomain DNS migrates
           # (lead-side, gated on R2 DNS for prove.*).
           VITE_CEREMONY_STATUS_URL: https://prove.identityescrow.org/ceremony/status.json
+          # Chain selector — repo variable. Landing target excludes
+          # wallet flows so this is harmless here; threading it keeps
+          # landing/app build env parity for when the app deploy at
+          # app.zkqes.org lands post-§9.4.
+          VITE_CHAIN: ${{ vars.VITE_CHAIN }}
+          # WalletConnect project ID — repo variable (public-bundle
+          # token, not a secret). Same parity reasoning as VITE_CHAIN.
+          VITE_WALLETCONNECT_PROJECT_ID: ${{ vars.VITE_WALLETCONNECT_PROJECT_ID }}
         run: pnpm -F @qkb/web build
 
       - name: Write CNAME (zkqes.org)
