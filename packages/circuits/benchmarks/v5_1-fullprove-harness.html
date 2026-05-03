@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>V5.1 in-browser fullProve benchmark (A6.4)</title>
+    <style>
+      :root {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+      body {
+        max-width: 980px;
+        margin: 24px auto;
+        padding: 0 16px;
+        color: #1a1a1a;
+        background: #fafafa;
+      }
+      h1 {
+        font-size: 18px;
+        margin: 0 0 4px 0;
+      }
+      .sub {
+        color: #666;
+        margin: 0 0 16px 0;
+      }
+      button {
+        font: inherit;
+        padding: 6px 12px;
+        margin: 0 4px 8px 0;
+        background: #fff;
+        border: 1px solid #888;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: wait;
+      }
+      .results {
+        background: #fff;
+        border: 1px solid #ddd;
+        padding: 12px;
+        border-radius: 4px;
+        white-space: pre-wrap;
+        font-family: ui-monospace, monospace;
+        font-size: 12.5px;
+        max-height: 480px;
+        overflow: auto;
+      }
+      .phase-row {
+        display: grid;
+        grid-template-columns: 24px 200px 100px 110px;
+        gap: 6px;
+        align-items: center;
+      }
+      .ok {
+        color: #060;
+      }
+      .err {
+        color: #b00;
+      }
+      .pending {
+        color: #888;
+      }
+      details {
+        margin-top: 12px;
+      }
+      summary {
+        cursor: pointer;
+        font-weight: 600;
+      }
+      .meta {
+        color: #555;
+        font-size: 11.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>V5.1 in-browser <code>snarkjs.groth16.fullProve</code> benchmark</h1>
+    <p class="sub">
+      A6.4 — feasibility test for desktop Chrome direct proving against the V5.1 stub
+      ceremony artifacts (4.022 M constraints, ~22 MB wasm + 2.1 GB zkey, 19 public
+      signals).  Adapted from the V4 leaf benchmark in the arch-fly tree.
+    </p>
+
+    <div>
+      <button id="btn-default">Run (default desktop Chrome)</button>
+      <button id="btn-persist">Run (after navigator.storage.persist())</button>
+      <button id="btn-verify-only">Run (verify-only, no fullProve)</button>
+      <button id="btn-clear">Clear log</button>
+    </div>
+    <p class="meta" id="env">env: pending…</p>
+
+    <div id="phases" class="results">
+      <div class="phase-row" data-phase="fetchWasm">
+        <span class="pending">·</span><span>fetch wasm</span><span></span><span></span>
+      </div>
+      <div class="phase-row" data-phase="fullProve">
+        <span class="pending">·</span><span>fullProve (witness+zkey+prove)</span><span></span><span></span>
+      </div>
+      <div class="phase-row" data-phase="verify">
+        <span class="pending">·</span><span>verify</span><span></span><span></span>
+      </div>
+      <div class="phase-row" data-phase="total">
+        <span class="pending">·</span><span><strong>total</strong></span><span></span><span></span>
+      </div>
+    </div>
+    <p class="meta">
+      Note: snarkjs's <code>fullProve</code> wraps witness gen + zkey load
+      + groth16 prove without surfacing sub-phase callbacks, so we report
+      it as one combined wall.  Per-phase split would require a custom
+      snarkjs build (see results doc §"Workarounds").
+    </p>
+
+    <details open>
+      <summary>Log (raw)</summary>
+      <pre id="log" class="results"></pre>
+    </details>
+
+    <details>
+      <summary>Final result (JSON, machine-parseable)</summary>
+      <pre id="result-json" class="results">[no run yet]</pre>
+    </details>
+
+    <script src="/snarkjs.min.js"></script>
+    <script>
+      'use strict';
+
+      const $ = (id) => document.getElementById(id);
+      const log = (msg) => {
+        const ts = new Date().toISOString().slice(11, 23);
+        $('log').textContent += `[${ts}] ${msg}\n`;
+        console.log(msg);
+      };
+
+      function setEnv() {
+        const ua = navigator.userAgent;
+        const cores = navigator.hardwareConcurrency ?? 'unknown';
+        const dm = navigator.deviceMemory ?? 'unknown';
+        $('env').textContent =
+          `env: cores=${cores}  navigator.deviceMemory=${dm} GB  ua=${ua.slice(0, 100)}…`;
+      }
+      setEnv();
+
+      // --- phase tracking -------------------------------------------------
+      // Stable phase IDs — used both as `result.phases[id]` keys AND as
+      // `data-phase` attribute selectors on the row DOM, so the JSON
+      // shape and the visual table stay locked.
+      const PHASE_IDS = ['fetchWasm', 'fullProve', 'verify', 'total'];
+      function setPhase(id, status, wallMs, peakHeapMB) {
+        const row = document.querySelector(`[data-phase="${id}"]`);
+        if (!row) {
+          console.warn('setPhase: unknown id', id);
+          return;
+        }
+        row.children[0].textContent =
+          status === 'ok' ? '✔' : status === 'err' ? '✘' : '…';
+        row.children[0].className =
+          status === 'ok' ? 'ok' : status === 'err' ? 'err' : 'pending';
+        if (typeof wallMs === 'number') {
+          row.children[2].textContent = `${(wallMs / 1000).toFixed(2)} s`;
+        }
+        if (typeof peakHeapMB === 'number') {
+          row.children[3].textContent = `${peakHeapMB.toFixed(0)} MB heap`;
+        }
+      }
+      function resetPhases() {
+        for (const id of PHASE_IDS) setPhase(id, 'pending');
+      }
+
+      // --- memory sampler -------------------------------------------------
+      let sampler = null;
+      let peakHeapMB = 0;
+      function startSampling() {
+        peakHeapMB = 0;
+        sampler = setInterval(() => {
+          const mem = performance.memory;
+          if (mem) {
+            const mb = mem.usedJSHeapSize / 1024 / 1024;
+            if (mb > peakHeapMB) peakHeapMB = mb;
+          }
+        }, 250);
+      }
+      function stopSampling() {
+        if (sampler) {
+          clearInterval(sampler);
+          sampler = null;
+        }
+        return peakHeapMB;
+      }
+
+      // --- fetch helper that streams + reports size -----------------------
+      async function fetchAndMeasure(url, label) {
+        const t0 = performance.now();
+        const res = await fetch(url);
+        if (!res.ok) {
+          throw new Error(`${label}: HTTP ${res.status}`);
+        }
+        const buf = await res.arrayBuffer();
+        const t1 = performance.now();
+        const sizeMB = buf.byteLength / 1024 / 1024;
+        log(`fetched ${label}: ${sizeMB.toFixed(1)} MB in ${(t1 - t0).toFixed(0)} ms`);
+        return { buf, wallMs: t1 - t0, sizeMB };
+      }
+
+      // --- the actual benchmark --------------------------------------------
+      // snarkjs.groth16.fullProve(input, wasmUrl, zkeyUrl) accepts URLs.
+      // In snarkjs 0.7.6 (this benchmark's installed bundle), the zkey URL
+      // is read as a single-shot fetch(url).arrayBuffer(), NOT chunked
+      // Range reads — confirmed via grep of snarkjs.min.js: zero hits for
+      // 'Range:' or 'bytes='.  That single-shot fetch is what hits the V8
+      // per-ArrayBuffer cap (~2.0 GB on Chrome 147) and produces the
+      // 'Failed to fetch' that the results doc treats as the verdict.
+      // We DO pre-fetch the wasm to time the witness-compiler download
+      // separately, since wasm is ~22 MB and well under any cap.
+      async function runBenchmark(opts = {}) {
+        const { persist = false, verifyOnly = false } = opts;
+        const result = {
+          mode: persist ? 'persist-granted' : 'default',
+          verifyOnly,
+          startTs: new Date().toISOString(),
+          phases: {},
+        };
+        $('log').textContent = '';
+        resetPhases();
+
+        try {
+          if (persist) {
+            const granted = await navigator.storage.persist();
+            log(`navigator.storage.persist() returned ${granted}`);
+            result.persistGranted = granted;
+          }
+
+          // ---------- 1. fetch witness input + verification key ----------
+          const winRes = await fetch('/witness-input.json');
+          const witnessInput = await winRes.json();
+          log(`witness input: ${Object.keys(witnessInput).length} top-level fields`);
+          const vkeyRes = await fetch('/verification_key.json');
+          const vkey = await vkeyRes.json();
+          log(`verification key: nPublic=${vkey.nPublic}, protocol=${vkey.protocol}`);
+
+          // ---------- 2. fetch wasm (timed) ----------
+          startSampling();
+          setPhase('fetchWasm', 'pending');
+          const t_wasm0 = performance.now();  // legacy var name kept for grep-friendliness
+          const wasmRes = await fetch('/v5_1.wasm');
+          const wasmBuf = await wasmRes.arrayBuffer();
+          const t_wasm1 = performance.now();
+          result.phases.fetchWasm = {
+            wallMs: t_wasm1 - t_wasm0,
+            sizeMB: wasmBuf.byteLength / 1024 / 1024,
+          };
+          setPhase('fetchWasm', 'ok', t_wasm1 - t_wasm0, stopSampling());
+          log(`fetched wasm: ${result.phases.fetchWasm.sizeMB.toFixed(1)} MB`);
+
+          if (verifyOnly) {
+            // Skip fullProve, just re-verify the committed sample triple.
+            // This is the cheap-test path — confirms the harness can do the
+            // fundamentals without touching the heavy zkey-load path.
+            startSampling();
+            const t_v0 = performance.now();
+            const proofRes = await fetch('/proof-sample.json');
+            const proof = await proofRes.json();
+            const pubRes = await fetch('/public-sample.json');
+            const publicSignals = await pubRes.json();
+            const ok = await snarkjs.groth16.verify(vkey, publicSignals, proof);
+            const t_v1 = performance.now();
+            result.phases.verify = {
+              wallMs: t_v1 - t_v0,
+              ok,
+              peakHeapMB: stopSampling(),
+            };
+            setPhase('verify', ok ? 'ok' : 'err', t_v1 - t_v0, peakHeapMB);
+            log(`verify (committed sample): ${ok}`);
+            result.ok = ok;
+            // Total for verify-only = wasm fetch + verify (no fullProve).
+            result.phases.total = {
+              wallMs: result.phases.fetchWasm.wallMs + (t_v1 - t_v0),
+              ok,
+            };
+            setPhase('total', ok ? 'ok' : 'err', result.phases.total.wallMs);
+            result.endTs = new Date().toISOString();
+            return result;
+          }
+
+          // ---------- 3. fullProve (witness gen + zkey load + prove) ----------
+          // Time the whole thing as one unit since snarkjs doesn't surface
+          // sub-phase callbacks externally.  Watch the console for snarkjs's
+          // own progress prints and observe peak heap continuously.
+          startSampling();
+          const tFull0 = performance.now();
+          let proof, publicSignals;
+          try {
+            ({ proof, publicSignals } = await snarkjs.groth16.fullProve(
+              witnessInput,
+              '/v5_1.wasm',
+              '/v5_1.zkey',
+            ));
+          } catch (err) {
+            const peak = stopSampling();
+            const elapsed = performance.now() - tFull0;
+            log(`✘ fullProve failed at ${(elapsed / 1000).toFixed(1)}s: ${err.message}`);
+            setPhase('fullProve', 'err', elapsed, peak);
+            result.phases.fullProve = {
+              wallMs: elapsed,
+              error: { name: err.name, message: err.message },
+              peakHeapMB: peak,
+            };
+            // Total = wasm fetch + failed fullProve elapsed.  Even on
+            // failure we record total wall so the driver gets a complete
+            // shape.
+            result.phases.total = {
+              wallMs: result.phases.fetchWasm.wallMs + elapsed,
+              ok: false,
+            };
+            setPhase('total', 'err', result.phases.total.wallMs);
+            result.ok = false;
+            result.error = { name: err.name, message: err.message };
+            throw err;
+          }
+          const tFull1 = performance.now();
+          const peakAfterProve = stopSampling();
+          // snarkjs typically spends ~35-45% of fullProve on witness gen
+          // and ~55-65% on the prover.  We can't measure precisely from
+          // outside (no callback API), so we report the combined wall.
+          result.phases.fullProve = {
+            wallMs: tFull1 - tFull0,
+            peakHeapMB: peakAfterProve,
+          };
+          setPhase('fullProve', 'ok', tFull1 - tFull0, peakAfterProve);
+          log(
+            `fullProve: ${((tFull1 - tFull0) / 1000).toFixed(1)} s, peak heap ${peakAfterProve.toFixed(0)} MB`,
+          );
+
+          // ---------- 4. verify ----------
+          startSampling();
+          const tV0 = performance.now();
+          const ok = await snarkjs.groth16.verify(vkey, publicSignals, proof);
+          const tV1 = performance.now();
+          const verifyPeak = stopSampling();
+          result.phases.verify = {
+            wallMs: tV1 - tV0,
+            ok,
+            peakHeapMB: verifyPeak,
+          };
+          setPhase('verify', ok ? 'ok' : 'err', tV1 - tV0, verifyPeak);
+          log(`verify: ${ok} (in ${(tV1 - tV0).toFixed(0)} ms)`);
+
+          // ---------- 5. shape sanity ----------
+          if (!Array.isArray(publicSignals) || publicSignals.length !== 19) {
+            throw new Error(
+              `expected 19 public signals (V5.1), got ${publicSignals?.length}`,
+            );
+          }
+          // V5.1 fixture: rotationMode=0 (register).
+          if (publicSignals[16] !== '0') {
+            throw new Error(
+              `expected publicSignals[16]=='0' (register mode), got ${publicSignals[16]}`,
+            );
+          }
+          log(
+            `publicSignals[0]=msgSender=${publicSignals[0].slice(0, 20)}…  publicSignals.length=${publicSignals.length}`,
+          );
+
+          result.ok = ok;
+          result.phases.total = {
+            wallMs: performance.now() - tFull0 + result.phases.fetchWasm.wallMs,
+            ok,
+          };
+          setPhase('total', ok ? 'ok' : 'err', result.phases.total.wallMs);
+        } catch (err) {
+          stopSampling();
+          log(`✘ benchmark error: ${err.message}`);
+          result.ok = false;
+          result.error = result.error ?? {
+            name: err.name,
+            message: err.message,
+          };
+          // Ensure `total` is always set, even on early throws.
+          if (!result.phases.total) {
+            result.phases.total = { wallMs: 0, ok: false };
+          }
+        }
+
+        result.endTs = new Date().toISOString();
+        return result;
+      }
+
+      async function run(opts) {
+        for (const b of document.querySelectorAll('button')) b.disabled = true;
+        $('result-json').textContent = '[running…]';
+        try {
+          const result = await runBenchmark(opts);
+          $('result-json').textContent = JSON.stringify(result, null, 2);
+          // Expose for `browser_evaluate` to read back from the driver.
+          window.__BENCH_RESULT__ = result;
+          window.__BENCH_DONE__ = true;
+          log(`done. window.__BENCH_DONE__ = true`);
+        } finally {
+          for (const b of document.querySelectorAll('button')) b.disabled = false;
+        }
+      }
+
+      $('btn-default').addEventListener('click', () => run({}));
+      $('btn-persist').addEventListener('click', () =>
+        run({ persist: true }),
+      );
+      $('btn-verify-only').addEventListener('click', () =>
+        run({ verifyOnly: true }),
+      );
+      $('btn-clear').addEventListener('click', () => {
+        $('log').textContent = '';
+        $('result-json').textContent = '[cleared]';
+        resetPhases();
+        window.__BENCH_DONE__ = false;
+      });
+    </script>
+  </body>
+</html>

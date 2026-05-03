@@ -12,41 +12,61 @@ include "circomlib/circuits/poseidon.circom";
 include "circomlib/circuits/bitify.circom";
 include "./primitives/Bytes32ToHiLo.circom";
 include "./primitives/SpkiCommit.circom";
-include "./secp/Secp256k1PkMatch.circom";
-include "./secp/Secp256k1AddressDerive.circom";
 include "circomlib/circuits/comparators.circom";
 include "circomlib/circuits/multiplexer.circom";
+// V5.2: dropped Secp256k1PkMatch + Secp256k1AddressDerive (§6.8 keccak-on-chain
+// amendment, 2026-05-01). The wallet-pk → msg.sender keccak gate now fires in
+// the contract layer; circuit just emits the binding's claimed pk as 4 ×
+// 128-bit limbs (bindingPkXHi/Lo, bindingPkYHi/Lo) for the contract to keccak.
 
-/// @title  QKBPresentationV5 — V5.1 single-circuit ZK presentation proof.
-/// @notice Public-signal layout per V5.1 wallet-bound nullifier amendment
+/// @title  QKBPresentationV5 — V5.2 single-circuit ZK presentation proof.
+/// @notice Public-signal layout per V5.2 keccak-on-chain amendment
+///         (`docs/superpowers/specs/2026-05-01-keccak-on-chain-amendment.md`,
+///         pending user-review at v0.4) layered on V5.1 wallet-bound nullifier
 ///         (`docs/superpowers/specs/2026-04-30-wallet-bound-nullifier-amendment.md`,
-///         user-approved at `df203b8` on 2026-04-30) — frozen 19 elements:
-///         [0]  msgSender              ≤ 2^160
-///         [1]  timestamp              ≤ 2^64
-///         [2]  nullifier              Poseidon₂(walletSecret, ctxFieldHash) — V5.1 construction
-///         [3]  ctxHashHi              uint128 — high 128 bits of SHA-256(ctxBytes)
-///         [4]  ctxHashLo              uint128 — low  128 bits
-///         [5]  bindingHashHi          uint128 — high 128 bits of SHA-256(bindingBytes)
-///         [6]  bindingHashLo          uint128
-///         [7]  signedAttrsHashHi      uint128 — high 128 bits of SHA-256(signedAttrs DER)
-///         [8]  signedAttrsHashLo      uint128
-///         [9]  leafTbsHashHi          uint128 — high 128 bits of SHA-256(leaf TBSCertificate)
-///         [10] leafTbsHashLo          uint128
-///         [11] policyLeafHash         field — uint256(sha256(JCS(policyLeafObject))) mod p
-///         [12] leafSpkiCommit         field — SpkiCommit(leafSpki)
-///         [13] intSpkiCommit          field — SpkiCommit(intSpki)
-///         [14] identityFingerprint    field — Poseidon₂(subjectSerialPacked, FINGERPRINT_DOMAIN)  ← NEW
-///         [15] identityCommitment     field — Poseidon₂(subjectSerialPacked, walletSecret)        ← NEW
-///         [16] rotationMode           bool — 0 = register, 1 = rotateWallet                        ← NEW
-///         [17] rotationOldCommitment  field — under register: == identityCommitment;
-///                                              under rotate:   prior commitment from chain        ← NEW
-///         [18] rotationNewWallet      field — under register: == msgSender;
-///                                              under rotate:   new-wallet address (≤2^160)        ← NEW
+///         user-approved at `df203b8` on 2026-04-30) — frozen 22 elements:
+///         [0]  timestamp              ≤ 2^64
+///         [1]  nullifier              Poseidon₂(walletSecret, ctxFieldHash) — V5.1 construction
+///         [2]  ctxHashHi              uint128 — high 128 bits of SHA-256(ctxBytes)
+///         [3]  ctxHashLo              uint128 — low  128 bits
+///         [4]  bindingHashHi          uint128 — high 128 bits of SHA-256(bindingBytes)
+///         [5]  bindingHashLo          uint128
+///         [6]  signedAttrsHashHi      uint128 — high 128 bits of SHA-256(signedAttrs DER)
+///         [7]  signedAttrsHashLo      uint128
+///         [8]  leafTbsHashHi          uint128 — high 128 bits of SHA-256(leaf TBSCertificate)
+///         [9]  leafTbsHashLo          uint128
+///         [10] policyLeafHash         field — uint256(sha256(JCS(policyLeafObject))) mod p
+///         [11] leafSpkiCommit         field — SpkiCommit(leafSpki)
+///         [12] intSpkiCommit          field — SpkiCommit(intSpki)
+///         [13] identityFingerprint    field — Poseidon₂(subjectSerialPacked, FINGERPRINT_DOMAIN)  ← V5.1
+///         [14] identityCommitment     field — Poseidon₂(subjectSerialPacked, walletSecret)        ← V5.1
+///         [15] rotationMode           bool — 0 = register, 1 = rotateWallet                        ← V5.1
+///         [16] rotationOldCommitment  field — under register: == identityCommitment;
+///                                              under rotate:   prior commitment from chain        ← V5.1
+///         [17] rotationNewWallet      field — register: == msg.sender (CONTRACT-enforced in V5.2);
+///                                              rotate:   new-wallet address (≤2^160)              ← V5.1
+///         [18] bindingPkXHi           uint128 — upper 128 bits of binding-attested wallet pkX     ← V5.2 NEW
+///         [19] bindingPkXLo           uint128 — lower 128 bits of binding-attested wallet pkX     ← V5.2 NEW
+///         [20] bindingPkYHi           uint128 — upper 128 bits of binding-attested wallet pkY     ← V5.2 NEW
+///         [21] bindingPkYLo           uint128 — lower 128 bits of binding-attested wallet pkY     ← V5.2 NEW
 ///
-/// Layout MUST match arch-contracts QKBRegistryV5.PublicSignalsV51 struct
-/// (frozen by orchestration plan §1.1, 2026-04-30). All 19 are declared as
-/// `signal input` so snarkjs's `[outputs..., public_inputs...]` emission
-/// order places them in the canonical positions.
+/// V5.2 amendment summary (2026-05-01): the V5.1 in-circuit Keccak-256 +
+/// Secp256k1PkMatch chain that derived `msgSender` from the binding's pk
+/// (~200K constraints) is REMOVED. The 4 new public signals 18-21 carry
+/// the binding's claimed pubkey directly; the contract reconstructs the
+/// 64-byte uncompressed pk and runs `address(uint160(uint256(keccak256(
+/// uncompressedPk)))) == msg.sender` natively (~5K gas vs ~200K
+/// constraints). This unlocks Groth16-zkey portability across all
+/// EVM-family chains with EIP-7212 P256Verify (mainnet, Base, Optimism
+/// post-Pectra; Arbitrum / Polygon zkEVM blocked on P256). Non-EVM
+/// chains (Solana, Cosmos, Aptos, Sui) need a chain-specific auth-shim
+/// before V5.2 deploys there.
+///
+/// Layout MUST match arch-contracts QKBRegistryV5_2.PublicSignalsV52 struct
+/// (frozen by V5.2 spec §"Public-signal layout V5.1 (19) → V5.2 (22)"). All
+/// 22 are declared as `signal input` so snarkjs's
+/// `[outputs..., public_inputs...]` emission order places them in the
+/// canonical positions.
 ///
 /// ctxHash domain note (lead-greenlit option A, 2026-04-29):
 ///   Public ctxHashHi/Lo is the SHA-256 of ctxBytes (hi/lo 128-bit split).
@@ -69,9 +89,14 @@ include "circomlib/circuits/multiplexer.circom";
 ///
 /// rotation_mode no-op binding (under rotationMode == 0 register path):
 ///   rotationOldCommitment === identityCommitment  (free under rotation mode)
-///   rotationNewWallet     === msgSender           (free under rotation mode)
-/// Implemented via `ForceEqualIfEnabled(enabled = 1 - rotationMode, ...)`.
-/// rotationMode itself is boolean-range-checked (`rm * (rm - 1) === 0`).
+///   rotationNewWallet     === msg.sender          (CONTRACT-enforced in V5.2;
+///                                                  was circuit-enforced in V5.1
+///                                                  via ForceEqualIfEnabled(=msgSender);
+///                                                  moved on-chain because msgSender
+///                                                  is no longer a circuit public signal)
+/// rotationOldCommitment no-op still implemented via
+/// `ForceEqualIfEnabled(enabled = 1 - rotationMode, ...)`. rotationMode itself
+/// is boolean-range-checked (`rm * (rm - 1) === 0`).
 template QKBPresentationV5() {
     // MAX bounds per V5 spec v5 §0.5. Two empirical bumps from the original
     // estimates (commit b8e0f74 / 139c475 in this worktree):
@@ -98,29 +123,44 @@ template QKBPresentationV5() {
     var MAX_TS_DIGITS = 20;
     var MAX_POLICY_ID = 128;
 
-    // ===== Public inputs (19 field elements, FROZEN order — see header §0.1 V5.1) =====
-    signal input msgSender;
-    signal input timestamp;
-    signal input nullifier;
-    signal input ctxHashHi;
-    signal input ctxHashLo;
-    signal input bindingHashHi;
-    signal input bindingHashLo;
-    signal input signedAttrsHashHi;
-    signal input signedAttrsHashLo;
-    signal input leafTbsHashHi;
-    signal input leafTbsHashLo;
-    signal input policyLeafHash;
-    signal input leafSpkiCommit;
-    signal input intSpkiCommit;
-    // ----- V5.1 amendment additions (slots 14-18) -----
-    signal input identityFingerprint;
-    signal input identityCommitment;
-    signal input rotationMode;            // 0 = register, 1 = rotateWallet
-    signal input rotationOldCommitment;   // under register: == identityCommitment (no-op);
-                                          // under rotate:   prior commitment from chain
-    signal input rotationNewWallet;       // under register: == msgSender (no-op);
-                                          // under rotate:   new-wallet address (≤2^160)
+    // ===== Public inputs (22 field elements, FROZEN order — see header §0.1 V5.2) =====
+    // V5.2 amendment (2026-05-01): msgSender removed from public signals (the
+    // keccak-derived address is now reconstructed contract-side); 4 new
+    // wallet-pk limbs appended at slots 18-21 for that contract-side derivation.
+    // Slots 0-13 reshuffled DOWN BY ONE from V5.1 to fill the freed slot 0.
+    signal input timestamp;               // [0]
+    signal input nullifier;               // [1]
+    signal input ctxHashHi;               // [2]
+    signal input ctxHashLo;               // [3]
+    signal input bindingHashHi;           // [4]
+    signal input bindingHashLo;           // [5]
+    signal input signedAttrsHashHi;       // [6]
+    signal input signedAttrsHashLo;       // [7]
+    signal input leafTbsHashHi;           // [8]
+    signal input leafTbsHashLo;           // [9]
+    signal input policyLeafHash;          // [10]
+    signal input leafSpkiCommit;          // [11]
+    signal input intSpkiCommit;           // [12]
+    // ----- V5.1 amendment additions (slots 13-17 in V5.2 numbering) -----
+    signal input identityFingerprint;     // [13]
+    signal input identityCommitment;      // [14]
+    signal input rotationMode;            // [15] 0 = register, 1 = rotateWallet
+    signal input rotationOldCommitment;   // [16] register: == identityCommitment (no-op);
+                                          //      rotate:   prior commitment from chain
+    signal input rotationNewWallet;       // [17] register: == msg.sender (contract-enforced
+                                          //      in V5.2; was circuit-enforced in V5.1)
+                                          //      rotate:   new-wallet address (≤2^160)
+    // ----- V5.2 amendment additions (slots 18-21) — wallet-pk limbs for on-chain keccak -----
+    // Each pk coordinate (X, Y) is 256 bits = 2 × 128-bit limbs, big-endian
+    // (Hi = leftmost 16 bytes, Lo = rightmost 16 bytes). The contract
+    // reconstructs the 64-byte uncompressed pubkey by concatenating
+    // (Hi << 128 | Lo) for each coordinate, then keccak256 + low-160-bit
+    // cast → asserts == msg.sender (register mode) or == identityWallets[fp]
+    // (rotate mode, defense-in-depth per contracts-eng v0.4 review).
+    signal input bindingPkXHi;            // [18]
+    signal input bindingPkXLo;            // [19]
+    signal input bindingPkYHi;            // [20]
+    signal input bindingPkYLo;            // [21]
 
     // FINGERPRINT_DOMAIN — fixed compile-time constant for identity-fingerprint domain
     // separation. Field-element encoding of the ASCII string "qkb-id-fingerprint-v1"
@@ -200,10 +240,10 @@ template QKBPresentationV5() {
     signal input intXLimbs[6];
     signal input intYLimbs[6];
 
-    // secp256k1 wallet pk for msg.sender binding (Secp256k1PkMatch consumes
-    // these against the binding's `pk` field).
-    signal input pkX[4];
-    signal input pkY[4];
+    // V5.2: pkX[4] / pkY[4] limb inputs from V5.1 are removed. The on-chain
+    // keccak gate operates on the 4 public-signal limbs (bindingPkX/Y Hi/Lo)
+    // which are packed directly from `parser.pkBytes[1..65]` via Bits2Num —
+    // no separate witness-side limb decomposition needed.
 
     // V5.1 wallet-bound nullifier secret. Off-circuit derivation:
     //   EOA: walletSecret = HKDF-SHA256(personal_sign(walletPriv, "qkb-personal-secret-v1"
@@ -233,7 +273,7 @@ template QKBPresentationV5() {
     //   6.5 — 2× SpkiCommit (leaf + intermediate)
     //   6.6 — X509SubjectSerial + NullifierDerive (Poseidon-domain ctxHash)
     //   6.7 — Sha256Var(ctxBytes) + Bytes32ToHiLo for public ctxHashHi/Lo
-    //   6.8 — Secp256k1PkMatch (msgSender ← pkX/pkY)
+    //   6.8 — V5.2 wallet-pk limb packing (Bits2Num → 4 public signals; keccak gate moved on-chain)
     //   6.9 — leafTBS bound to leaf-cert DER consistency
     //   6.10 — final E2E test on real Diia fixture
 
@@ -242,7 +282,7 @@ template QKBPresentationV5() {
     // field-key prefix at its witnessed offset, and produces 8 outputs.
     // Two of those outputs are bound to public signals here (timestamp,
     // policyLeafHash); the rest (pkBytes, nonceBytes, ctxBytes, ctxLen,
-    // policyIdBytes) are consumed by later wiring (Secp256k1PkMatch in §6.8,
+    // policyIdBytes) are consumed by later wiring (Bits2Num pk-limb packing in §6.8,
     // ctx-domain hashes in §6.6/6.7).
     component parser = BindingParseV2CoreFast(MAX_BCANON, MAX_CTX, MAX_TS_DIGITS);
     for (var i = 0; i < MAX_BCANON; i++) parser.bytes[i] <== bindingBytes[i];
@@ -475,17 +515,29 @@ template QKBPresentationV5() {
 
     // ===== Rotation-mode gates =====
     //
-    // rotationMode is boolean. Under register (rotationMode == 0), the no-op slots
-    // 17/18 must equal identityCommitment / msgSender respectively — preventing a
-    // register-mode caller from passing arbitrary garbage in those public slots.
-    // Under rotate (rotationMode == 1), the constraints are released; the contract
-    // takes over by gating `rotationOldCommitment == identityCommitments[fp]` and
-    // binding `rotationNewWallet` against tx semantics.
+    // rotationMode is boolean. Under register (rotationMode == 0), the no-op
+    // slot 16 (`rotationOldCommitment`) must equal `identityCommitment` —
+    // preventing a register-mode caller from passing arbitrary garbage in
+    // that public slot. Under rotate (rotationMode == 1), that constraint
+    // releases and the contract takes over by gating
+    // `rotationOldCommitment == identityCommitments[fp]` and binding
+    // `rotationNewWallet` against tx semantics.
+    //
+    // V5.2 amendment (2026-05-01): the V5.1 register-mode no-op gate
+    // `rotationNewWallet === msgSender` MOVES TO CONTRACT because
+    // `msgSender` is no longer a circuit public signal. Contract-side, the
+    // 5-gate `register()` body now reconstructs the address from
+    // `bindingPkX/Y` limbs and asserts both
+    //   address(uint160(uint256(keccak256(uncompressedPk)))) == msg.sender
+    //   rotationNewWallet                                    == msg.sender
+    // before letting the proof through. See spec §"Construction delta —
+    // Contract changes" of `2026-05-01-keccak-on-chain-amendment.md`.
 
     rotationMode * (rotationMode - 1) === 0;     // boolean range check
 
-    // Register-mode (rotationMode == 0): rotation slots 17/18 are no-op,
-    // pinned to identityCommitment / msgSender to prevent garbage in those slots.
+    // Register-mode (rotationMode == 0): rotation slot 16
+    // (`rotationOldCommitment`) is no-op, pinned to `identityCommitment` so
+    // the public-signal slot can't carry garbage.
     component oldCommitNoOp = ForceEqualIfEnabled();
     oldCommitNoOp.enabled <== 1 - rotationMode;
     oldCommitNoOp.in[0]   <== rotationOldCommitment;
@@ -509,10 +561,13 @@ template QKBPresentationV5() {
     rotateOldCommitGate.in[0]   <== oldCommitOpen.out;
     rotateOldCommitGate.in[1]   <== rotationOldCommitment;
 
-    component newWalletNoOp = ForceEqualIfEnabled();
-    newWalletNoOp.enabled <== 1 - rotationMode;
-    newWalletNoOp.in[0]   <== rotationNewWallet;
-    newWalletNoOp.in[1]   <== msgSender;
+    // V5.2: V5.1's register-mode `newWalletNoOp` gate
+    // (`rotationNewWallet === msgSender`) is REMOVED — `msgSender` is no
+    // longer a circuit public signal.  The contract enforces both branches:
+    //   register: assert rotationNewWallet == msg.sender
+    //   rotate:   assert rotationNewWallet == new-wallet-from-tx
+    // V5.2 spec §"Construction delta — Contract changes" + contracts-eng
+    // v0.4 review.
 
     // §6.7 — Byte-domain SHA chain over ctxBytes → ctxHashHi / ctxHashLo.
     //
@@ -613,55 +668,65 @@ template QKBPresentationV5() {
         activeMask69[i].out * (leafTbsByte[i].out[0] - subjectSerial.rawBytes[i]) === 0;
     }
 
-    // §6.8 — Secp256k1PkMatch + Keccak256 → msgSender bind.
+    // §6.8 — V5.2 wallet-pk limb packing for on-chain keccak gate.
     //
-    // Two-step gate:
-    //   (a) Secp256k1PkMatch asserts that parser.pkBytes (the user's
-    //       uncompressed wallet pubkey embedded in the binding's `pk`
-    //       field, signed-over by Diia QES) is byte-identical to the
-    //       4×64-bit limb encoding of the witness pkX/pkY. This pins
-    //       pkX/pkY to the genuine-cert wallet pubkey. (V4 template,
-    //       reused unchanged.)
-    //   (b) Secp256k1AddressDerive runs Keccak-256 (vendored
-    //       bkomuves/hash-circuits @
-    //       4ef64777cc9b78ba987fbace27e0be7348670296, MIT) over
-    //       parser.pkBytes[1..65] — the 64-byte uncompressed pubkey
-    //       sans the 0x04 SEC1 prefix — and emits the low 160 bits of
-    //       the digest packed as a single field element (Ethereum
-    //       address convention: digest[12..32] big-endian). Equality-
-    //       bound to the public msgSender signal.
+    // V5.1 ran Secp256k1PkMatch (~50K) + Secp256k1AddressDerive (~150K
+    // Keccak_256_bytes(64)) IN-CIRCUIT to derive msgSender from the
+    // binding's claimed wallet pk.  V5.2 moves that keccak gate to the
+    // contract layer (`address(uint160(uint256(keccak256(uncompressedPk))))
+    // == msg.sender`), unlocking cross-chain portability of the Groth16
+    // zkey and saving ~200K constraints.
     //
-    // Soundness: closes the gap V4's Secp256k1PkMatch alone left open.
-    // Without (b), msgSender would be unconstrained vs. parser.pkBytes,
-    // letting an attacker re-prove a stolen .p7s under their own wallet
-    // by simply lying about msgSender. With (b), msgSender is uniquely
-    // determined by the binding's `pk` field via the keccak chain.
+    // What the circuit must still do:
+    //   (a) Assert the binding's pk has the SEC1-uncompressed prefix
+    //       (`parser.pkBytes[0] === 4`) — cheap (1 constraint), retained
+    //       so the proof's attestation about the binding-pk ENCODING
+    //       remains intact (codex pass 1 [P2] caught this in spec v0.1).
+    //   (b) Pack `parser.pkBytes[1..33]` and `parser.pkBytes[33..65]` —
+    //       the 64 bytes of the uncompressed (X || Y) pubkey — into 4 ×
+    //       128-bit field elements (bindingPkXHi/Lo, bindingPkYHi/Lo).
+    //       Each 16-byte slice fits comfortably in BN254's ~254-bit
+    //       field. Big-endian packing matches Ethereum's natural pk
+    //       serialization.
+    //   (c) Equality-bind those packings to the 4 V5.2 public-signal
+    //       slots (18-21), which the contract reads off the
+    //       Groth16 verifier output.
     //
-    // Cost: ~50K (Secp256k1PkMatch limb pack + range checks) + ~150K
-    // (Keccak_256_bytes(64) — single absorb block since 64 B < 136 B
-    // rate) + ~20 (linear address packing) ≈ 200K. Per spec amendment
-    // 55e388f: "Secp256k1PkMatch | ~150K | Binds proof to msg.sender
-    // (includes Keccak256 over uncompressed pk)".
-    component pkMatch = Secp256k1PkMatch();
-    for (var i = 0; i < 65; i++) pkMatch.pkBytes[i] <== parser.pkBytes[i];
-    for (var i = 0; i < 4; i++) {
-        pkMatch.pkX[i] <== pkX[i];
-        pkMatch.pkY[i] <== pkY[i];
-    }
+    // Cost: ~3 (SEC1 prefix) + 4 × ~128 (Bits2Num packing per limb) ≈
+    // ~515 constraints. Net delta from V5.1 §6.8: -200K + 515 ≈ -199.5K.
+    // Per spec §"Construction delta — Circuit changes" + §"Cost
+    // estimate" of `2026-05-01-keccak-on-chain-amendment.md`.
 
-    component pkAddr = Secp256k1AddressDerive();
-    for (var i = 0; i < 64; i++) {
-        pkAddr.pkBytes64[i] <== parser.pkBytes[i + 1];
-    }
-    pkAddr.addr === msgSender;
+    // (a) SEC1 uncompressed-prefix assertion — single equality.
+    parser.pkBytes[0] === 4;
 
-    // After §6.8, every public signal in V5 spec §0.1 is bound to a
-    // circuit-computed value. The witness-anchor is no longer needed.
-    //
-    // Constrained-for-real summary (all 14):
-    //   msgSender                 (§6.8) ← keccak256(parser.pkBytes[1..65])[12..32]
+    // (b) Pack the 64 raw uncompressed-pk bytes into 4 × 128-bit field
+    //     elements via Bits2Num. Each byte at parser.pkBytes[i+1] is
+    //     already constrained to [0, 255] by BindingParseV2CoreFast.
+    //     Big-endian:
+    //       pkXHi = sum_{j=0..15}  parser.pkBytes[1+j]   << ((15-j)*8)
+    //       pkXLo = sum_{j=0..15}  parser.pkBytes[17+j]  << ((15-j)*8)
+    //       pkYHi = sum_{j=0..15}  parser.pkBytes[33+j]  << ((15-j)*8)
+    //       pkYLo = sum_{j=0..15}  parser.pkBytes[49+j]  << ((15-j)*8)
+    var bindingPkXHiAcc = 0;
+    var bindingPkXLoAcc = 0;
+    var bindingPkYHiAcc = 0;
+    var bindingPkYLoAcc = 0;
+    for (var j = 0; j < 16; j++) {
+        bindingPkXHiAcc += parser.pkBytes[1  + j] * (256 ** (15 - j));
+        bindingPkXLoAcc += parser.pkBytes[17 + j] * (256 ** (15 - j));
+        bindingPkYHiAcc += parser.pkBytes[33 + j] * (256 ** (15 - j));
+        bindingPkYLoAcc += parser.pkBytes[49 + j] * (256 ** (15 - j));
+    }
+    bindingPkXHi === bindingPkXHiAcc;
+    bindingPkXLo === bindingPkXLoAcc;
+    bindingPkYHi === bindingPkYHiAcc;
+    bindingPkYLo === bindingPkYLoAcc;
+
+    // After §6.8 (V5.2), every public signal is bound to a
+    // circuit-computed value:
     //   timestamp                 (§6.2) ← parser.tsValue
-    //   nullifier                 (§6.6) ← NullifierDerive over X509SubjectSerial
+    //   nullifier                 (§6.6) ← Poseidon₂(walletSecret, ctxHashField)
     //   ctxHashHi, ctxHashLo      (§6.7) ← Bytes32ToHiLo(sha256(parser.ctxBytes))
     //   bindingHashHi, bindingHashLo (§6.3) ← Bytes32ToHiLo(sha256(bindingBytes))
     //   signedAttrsHashHi, signedAttrsHashLo (§6.3) ← Bytes32ToHiLo(sha256(signedAttrsBytes))
@@ -669,13 +734,19 @@ template QKBPresentationV5() {
     //   policyLeafHash            (§6.2) ← parser.policyLeafHash
     //   leafSpkiCommit            (§6.5) ← SpkiCommit(leafXLimbs, leafYLimbs)
     //   intSpkiCommit             (§6.5) ← SpkiCommit(intXLimbs, intYLimbs)
+    //   identityFingerprint       (V5.1) ← Poseidon₂(subjectSerialPacked, FINGERPRINT_DOMAIN)
+    //   identityCommitment        (V5.1) ← Poseidon₂(subjectSerialPacked, walletSecret)
+    //   rotationMode              (V5.1) ← witness, boolean range-checked
+    //   rotationOldCommitment     (V5.1) ← register: == identityCommitment
+    //                                      rotate:   == Poseidon₂(subjectPack, oldWalletSecret)
+    //   rotationNewWallet         (V5.1) ← witness; CONTRACT-enforced in V5.2
+    //   bindingPkXHi/Lo, PkYHi/Lo (V5.2) ← Bits2Num packing of parser.pkBytes[1..65]
     //
     // (§6.9 closes the leafTbs ↔ leafCert byte-equality gate as an
     // internal-soundness invariant — doesn't bind a public signal.)
 }
 
 component main { public [
-    msgSender,
     timestamp,
     nullifier,
     ctxHashHi,
@@ -693,5 +764,9 @@ component main { public [
     identityCommitment,
     rotationMode,
     rotationOldCommitment,
-    rotationNewWallet
+    rotationNewWallet,
+    bindingPkXHi,
+    bindingPkXLo,
+    bindingPkYHi,
+    bindingPkYLo
 ] } = QKBPresentationV5();
