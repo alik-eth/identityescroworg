@@ -266,6 +266,19 @@ export {
 } from './registry/registryV5.js';
 
 export {
+  PUBLIC_SIGNALS_V5_2_LENGTH,
+  assertRegisterArgsV5_2Shape,
+  encodeV5_2RegisterCalldata,
+  encodeV5_2RotateWalletCalldata,
+  publicSignalsV5_2FromArray,
+  publicSignalsV5_2ToArray,
+  type Groth16ProofV5_2,
+  type PublicSignalsV5_2,
+  type RegisterArgsV5_2,
+  type RotateWalletArgsV5_2,
+} from './registry/registryV5_2.js';
+
+export {
   bytes32ToHiLo,
   hiLoToBytes32,
 } from './core/bytes32ToHiLo.js';
@@ -276,6 +289,7 @@ export {
 // are re-exported above; we only surface V5-specific symbols here.
 export {
   buildWitnessV5,
+  buildWitnessV5_2,
   computeIdentityFingerprint,
   parseP7s,
   extractBindingOffsets,
@@ -291,9 +305,11 @@ export {
   MAX_LEAF_TBS,
   MAX_POLICY_ID,
   type BuildWitnessV5Input,
+  type BuildWitnessV5_2Input,
   type CmsExtraction,
   type V2CoreBindingOffsets,
   type WitnessV5,
+  type WitnessV5_2,
   type ParsedSpki,
   type EcdsaRS,
 } from './witness/v5.js';

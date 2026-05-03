@@ -5,6 +5,12 @@
 // `build-witness-v5.ts` header for the two browser patches).
 
 export {
+  buildWitnessV5_2,
+  type WitnessV5_2,
+  type BuildWitnessV5_2Input,
+} from './build-witness-v5_2';
+
+export {
   buildWitnessV5,
   computeIdentityFingerprint,
   parseP7s,
