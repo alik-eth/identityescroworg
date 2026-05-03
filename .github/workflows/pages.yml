@@ -1,3 +1,27 @@
+# GitHub Pages deploy → zkqes.org root.
+#
+# Per BRAND.md §Domains (locked 2026-05-03), zkqes.org root serves
+# the pre-ceremony hero + recruitment CTA — i.e. the SPA built with
+# `VITE_TARGET=landing`. The slim landing entry chunk drops ~43% of
+# the app entry; see V5.21 invariant in `packages/web/CLAUDE.md`.
+#
+# Pre-launch posture:
+#   - DNS: zkqes.org CNAME → <gh-pages-host> (lead-side, see #62).
+#   - This workflow writes a `CNAME` file at the dist root so the
+#     `actions/deploy-pages` action serves with `Host: zkqes.org`.
+#   - VITE_BASE is `/` (custom-domain root), not `/identityescroworg/`.
+#
+# Post-Sepolia-E2E §9.4 (when the register flow goes live), a SEPARATE
+# workflow will deploy `VITE_TARGET=app` to app.zkqes.org — likely as
+# a Cloudflare Pages or Vercel project pulling from the same repo.
+# This workflow stays as-is.
+#
+# Status feed: `VITE_CEREMONY_STATUS_URL` is set to the absolute URL
+# of the prove-origin status feed. Pre-DNS-migration that's
+# `prove.identityescrow.org`; post-migration (lead-side, gated on R2
+# DNS for the prove subdomain) it switches to `prove.zkqes.org` —
+# one-line config edit here, no source change required.
+
 name: Deploy web SPA to GitHub Pages
 
 on:
@@ -38,10 +62,22 @@ jobs:
           pnpm -F @qkb/qie-core build
           pnpm -F @qkb/qie-agent build
 
-      - name: Build SPA
+      - name: Build SPA (landing target → zkqes.org root)
         env:
-          VITE_BASE: /${{ github.event.repository.name }}/
+          # Landing target: hero + ceremony pages only. Per BRAND.md
+          # §Domains; the app target deploys separately to
+          # app.zkqes.org once Sepolia E2E §9.4 is green.
+          VITE_TARGET: landing
+          # Custom-domain root. Not /identityescroworg/.
+          VITE_BASE: /
+          # Absolute URL of the ceremony status feed. Update to
+          # prove.zkqes.org once the prove subdomain DNS migrates
+          # (lead-side, gated on R2 DNS for prove.*).
+          VITE_CEREMONY_STATUS_URL: https://prove.identityescrow.org/ceremony/status.json
         run: pnpm -F @qkb/web build
+
+      - name: Write CNAME (zkqes.org)
+        run: echo "zkqes.org" > packages/web/dist/CNAME
 
       - name: Ensure SPA 404 fallback
         run: cp packages/web/dist/index.html packages/web/dist/404-fallback.html || true
