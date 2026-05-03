@@ -18,7 +18,8 @@
     "extract:spkis": "ts-node scripts/extract-spkis.ts",
     "parity:v5": "vitest run test/SpkiCommitParity.vitest.ts",
     "parity:v5:emit": "ts-node scripts/emit-spki-parity-fixture.ts",
-    "build-witness-v5": "ts-node bin/build-witness-v5.ts"
+    "build-witness-v5": "ts-node bin/build-witness-v5.ts",
+    "prove:v5_2": "node --max-old-space-size=24576 scripts/v5_2-prove.mjs"
   },
   "bin": {
     "build-witness-v5": "bin/build-witness-v5.ts"

@@ -1,16 +1,23 @@
 # V5.2 in-browser `snarkjs.groth16.fullProve` benchmark — A6.4 (V5.2 re-run)
 
-> **TL;DR**: V5.2's smaller zkey (2.06 GB) STILL exceeds Chrome's V8
-> per-ArrayBuffer cap (2,147,483,648 bytes = 2.0 GiB). Chrome 147 OOMs
-> at the zkey fetch in 8.0s, identical pattern to the V5.1 baseline.
-> **Firefox 64-bit clears**: V5.2 fullProve runs end-to-end in 90.1s
-> wall with **38.38 GiB peak content-process RSS** (NOT 33 GB; that
-> was a conservative system-RAM observation), witness verifies,
-> 22-signal layout intact. The 38 GiB peak is overwhelmingly a snarkjs
-> artifact (H-polynomial NTT + MSM scratch), NOT a V5.2-shape issue;
-> single highest-leverage reduction is **rapidsnark-WASM port → ~10-14
-> GiB expected peak**. Firefox remains the only browser where direct
-> in-page proving works for V5.x without a chunked-loader shim.
+> **TL;DR (updated 2026-05-03 with native rapidsnark data)**:
+>
+> Browser-only direct prove against V5.2 stub: Chrome 147 OOMs at zkey
+> fetch (V8 ArrayBuffer cap), Firefox 64-bit succeeds in 90.3 s with
+> **38.38 GiB peak content-process RSS**. The 38 GiB is overwhelmingly
+> a snarkjs/ffjavascript artifact (H-polynomial NTT + MSM scratch),
+> NOT a V5.2-circuit-shape issue.
+>
+> **Native rapidsnark CLI (v0.0.8) against the SAME V5.2 zkey + witness:
+> 13.9 s wall, 3.70 GiB peak — 6.5x faster, ~10x lower memory.** Fits
+> 8 GB laptops. This flips the prior "rapidsnark-WASM port (1-3 months,
+> uncertain savings)" recommendation entirely: rapidsnark already works
+> natively today; we just need a native shell (Tauri desktop or Mopro
+> mobile, 1-2 weeks each) instead of a WASM port that doesn't exist.
+>
+> Pure-browser path remains as a fallback (Firefox 64-bit, 32+ GB RAM)
+> but the native-shell path dominates for any production user-facing
+> deployment.
 
 > **Date**: 2026-05-03 (T+1 day from V5.2 stub ceremony commit `5cbd888`).
 >
@@ -181,6 +188,58 @@ peak reduction, which is in the noise of the measurement variance.
 Keccak-on-chain was scoped for cross-chain portability + pot22 download
 savings; it was never a meaningful in-browser memory lever.
 
+## Native rapidsnark CLI — measured (2026-05-03 follow-up)
+
+After the initial browser benchmark showed 38 GiB peak, we ran the SAME
+V5.2 zkey + witness through the native rapidsnark prover (iden3/rapidsnark
+v0.0.8, Linux x86_64) via a new V5.2 prove CLI at
+`packages/circuits/scripts/v5_2-prove.mjs`. Same fixture, same machine,
+same 250 ms RSS poller (this time at 100 ms over the full process tree
+including the spawned `rapidsnark` child).
+
+| Metric | snarkjs browser (Firefox) | snarkjs ceremony (Node CLI) | **rapidsnark CLI (native)** |
+|---|---|---|---|
+| Wall total | 90.3 s | ~85 s | **13.86 s** |
+| Peak process-tree RSS | 38.38 GiB content / 40.51 GiB all-Firefox | ~26 GiB | **3.70 GiB** |
+| `wtns.calculate` (snarkjs WASM, Node) | (folded into fullProve) | ~0.5-1 s | 6.90 s |
+| `groth16.prove` | (folded) | ~84 s | **6.42 s** |
+| `groth16.verify` | 11 ms (Firefox) | <1 s | 0.26 s |
+| `verifyOk` | ✓ | ✓ | ✓ |
+| Public signals length | 22 ✓ | 22 ✓ | 22 ✓ |
+
+Note: rapidsnark's wtns.calculate is slower than the ceremony script's
+because we run it in-process with snarkjs WASM in this CLI; for a
+production deploy the C++ `circom-witnesscalc` binary would drop wtns
+calc to ~1 s. The 6.9 s here is the snarkjs-WASM witnesscalc cost,
+which dominates the rapidsnark-CLI total wall.
+
+### rapidsnark CLI per-second RSS trajectory
+
+| t (s) | RSS | Phase |
+|---|---|---|
+| 0-1 | 0.35 GiB | Node startup + snarkjs UMD load |
+| 1-6 | 0.5-1.05 GiB | `wtns.calculate` (Node + WASM witnesscalc) |
+| 6-7 | 1.05 → 2.21 GiB | spawn rapidsnark child + zkey load |
+| 7-13 | 2.97 → **3.70 GiB peak** | rapidsnark MSM compute (no NTT explosion — C++ Fr arithmetic + native asm MSM is dramatically denser than ffjavascript BigInt pool) |
+| 13+ | drop to 0 | rapidsnark exits, parent exits |
+
+The rapidsnark prove process never exceeds 3.7 GiB, vs snarkjs's 38 GiB
+peak. **This is the 10x memory reduction the rapidsnark-WASM hypothesis
+was reaching for** — but rapidsnark itself is native, not WASM. The
+WASM port was unnecessary; the native binary just works.
+
+### What snarkjs Node-CLI did
+
+Attempted `snarkjs.groth16.prove` in the same `v5_2-prove.mjs` CLI under
+the 48 GB cgroup — **OOM-killed at ~57 s**. Confirms snarkjs Node prove
+peaks ABOVE 48 GB (higher than the browser content-RSS measurement;
+Node V8 + ffjavascript memory layout is even less compact than Firefox
+SpiderMonkey). The ceremony script avoids this because it shells out
+to the snarkjs CLI as a separate process and gets fresh-process memory
+benefits — even so, ceremony peak was ~26 GB for the prove leg, well
+under the cap. The Node-hosted snarkjs benchmark was abandoned;
+ceremony + browser numbers cover the snarkjs side adequately.
+
 ## Reducing the peak — what's realistic
 
 The 38 GiB peak is overwhelmingly a snarkjs/ffjavascript artifact, NOT
@@ -189,23 +248,42 @@ expected leverage:
 
 | Lever | Expected peak | Owner | Effort | Notes |
 |---|---|---|---|---|
-| **rapidsnark-WASM port** (C++ groth16, replaces snarkjs prover) | **~10-14 GiB** | web-eng + circuits-eng | 1-2 weeks | iden3/rapidsnark already exists as a CLI; partial WASM ports exist (0xPolygonMiden, others). Single-largest lever. Requires verifying byte-identical proof output vs snarkjs. |
-| **arkworks-rs WASM groth16 prover** | ~12-16 GiB | new dep | 2-3 weeks | More aggressive than rapidsnark; arkworks Rust BigInt is denser than C++ Fr. Newer; less ecosystem support. |
-| **V5.3 constraint-reduction amendment** (e.g., move bindingHash + signedAttrsHash + leafTbsHash on-chain) | ~22-28 GiB | circuits-eng + contracts-eng | 1-2 weeks | -1.5 to -2.5M constraints (-40-65%). Strictly increases on-chain calldata + reduces ZK compactness. Adds ~60-100K register() gas. Real engineering trade-off; not free. |
+| **Tauri/Electron desktop app + native rapidsnark** (web frontend, native prover backend, local-IPC) | **3.7 GiB measured** | web-eng + circuits-eng | 1-2 weeks | Ships ~30 MB shell + 1 MB rapidsnark binary. Browser still does witness calc (WASM); shells out to native prover. **Measured against V5.2 stub: 13.9 s wall, 3.7 GiB peak. Single highest-leverage path.** |
+| **Mopro on iOS/Android** (native rapidsnark via Swift/Kotlin FFI) | ~3-5 GiB (native, similar to desktop) | mobile-eng (new) | 2-3 weeks | The official mobile-prove path per zkmopro.org. Native app, NOT browser. Same 6-13x speedup as desktop. |
+| **rapidsnark-WASM port** (C++ groth16, replaces snarkjs prover) | ~25 GiB best case, uncertain | web-eng + circuits-eng | 1-3 months | NO existing port. Forking rapidsnark + replacing inline asm with portable C++ + Emscripten compile + memory-model work. The 30% asm speedup is platform-specific; lost in WASM. **Earlier "1-2 weeks" estimate was wrong. Native rapidsnark via desktop/mobile shell beats this on every axis.** |
+| **arkworks-rs WASM groth16 prover** | uncertain — "doesn't outperform snarkjs in browser" per Mopro/PSE benchmarks | new dep | 2-3 weeks | Tried; no perf advantage demonstrated at scale. Skip. |
+| **Server-side delegated proving** | n/a (server-side) | web-eng | 3-5 days | Browser sends witness to server, gets back proof. Privacy trade-off: witness includes `walletSecret` which is the user's keying material. Possibly acceptable with proper TEE / trust scoping; needs threat-model review. |
+| **V5.3 constraint-reduction amendment** (move bindingHash + signedAttrsHash + leafTbsHash on-chain) | ~22-28 GiB (browser) | circuits-eng + contracts-eng | 1-2 weeks | -1.5 to -2.5M constraints (-40-65%). Strictly increases on-chain calldata + reduces ZK compactness. Adds ~60-100K register() gas. Real engineering trade-off; not free. Helps browser path; doesn't help if we go native rapidsnark anyway. |
 | **Streaming zkey load + chunked allocator** | ~33-35 GiB | web-eng | 3-5 days | Saves ~3-5 GB transient buffer overlap during zkey-parse step. Doesn't touch prove-time peak. PRIMARILY unlocks Chrome (V8 cap), not memory reduction. |
-| **Web Worker isolation** | ~38 GiB (unchanged) | web-eng (#24) | 0 (already on plate) | Moves prover off main thread — same total memory, better UX. |
+| **Web Worker isolation** | unchanged | web-eng (#24, in flight) | 0 | Moves prover off main thread — same total memory, better UX. |
 
-**Recommendation**: rapidsnark-WASM is the single most impactful next
-step. Effort is real but the leverage is 3-4x peak reduction, which
-unlocks 16 GB consumer laptops as a viable target. Combined with the
-V5.2 constraint count, a rapidsnark-equipped browser run should hit
-~10-14 GiB peak and ~30 s wall (rapidsnark is also faster than snarkjs
-in compute time). That's the realistic "in-browser proving for a wide
-device base" path.
+**Updated recommendation (post-rapidsnark-CLI measurement)**:
 
-V5.3 constraint reduction is a slower, more invasive lever; ROI lands
-~6-9 months out and costs cryptographic compactness. Worth scoping but
-NOT the first move.
+The native rapidsnark CLI proves V5.2 in **13.9 s with 3.70 GiB peak**.
+That's a 6-7x speedup AND ~10x memory reduction vs snarkjs. The path
+forward is **NOT a rapidsnark→WASM port** (which earlier in this report
+I overstated as 1-2 weeks; in reality it's 1-3 months with uncertain
+savings). The path forward is to **expose rapidsnark via a native shell**:
+
+- **Desktop**: Tauri (or Electron) app — web frontend, native rapidsnark
+  embedded as a binary. End-user installs once, then "click button →
+  14 s wait → done". Fits ALL consumer laptops including 8 GB. **Effort:
+  1-2 weeks for production-quality wrapper.**
+- **Mobile**: Mopro (zkmopro/mopro) — native FFI to rapidsnark on
+  iOS/Android, ~3-5 GiB peak, similar wall time. Effort 2-3 weeks.
+- **Pure-web fallback**: keep the current Firefox 64-bit / 32 GB
+  workstation path for users who refuse to install. Document the
+  performance gap honestly in the UI.
+
+This entirely supersedes the earlier "rapidsnark-WASM port" recommendation
+in this same report. The native shell path is a fraction of the effort
+and dramatically better numbers — measured, not estimated.
+
+V5.3 constraint reduction remains a real lever but its ROI gets eaten
+by the rapidsnark native shell path: if we're going native anyway,
+shaving 1-2M circuit constraints buys mostly proof-time savings (which
+are already 6.4 s with rapidsnark) rather than feasibility-unlock.
+Defer V5.3 unless we hit an unrelated soundness or feature need.
 
 ## What V5.2 changes vs V5.1 for the in-browser story
 
