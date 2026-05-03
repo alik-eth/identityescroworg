@@ -15,10 +15,11 @@
 // pumped from circuits-eng) MUST pin to this exact order.
 //
 // The `qkbRegistryV5_2Abi` consumed by the encoder lives at
-// `packages/sdk/src/abi/QKBRegistryV5_2.ts` once contracts-eng pumps it
-// (lead's T3 step). Until then, this module exports the SHAPE types +
-// pack/unpack helpers; the encoder lands when the ABI is in place.
+// `packages/sdk/src/abi/QKBRegistryV5_2.ts` (auto-generated from
+// `forge inspect QKBRegistryV5_2 abi --json` against contracts-eng's
+// `feat/v5_2arch-contracts`).
 import { encodeFunctionData } from 'viem';
+import { qkbRegistryV5_2Abi } from '../abi/QKBRegistryV5_2.js';
 import { QkbError } from '../errors/index.js';
 
 // ===========================================================================
@@ -280,16 +281,17 @@ function assertU256(v: bigint, field: string): void {
 // ===========================================================================
 
 /**
- * Encode a `register()` call against the V5.2 ABI. Requires
- * `qkbRegistryV5_2Abi` to be available (lead pumps from contracts-eng);
- * shape-validate via `assertRegisterArgsV5_2Shape` before calling.
+ * Encode a `register()` call against the V5.2 ABI. Shape-validate via
+ * `assertRegisterArgsV5_2Shape` before calling.
+ *
+ * The explicit generic `<typeof qkbRegistryV5_2Abi, 'register'>` pins
+ * viem's TFunctionName so it doesn't union the `register` 11-arg shape
+ * with `rotateWallet`'s 3-arg shape — same pattern as V5.1's encoder
+ * (V5.1 commit `73ba255`).
  */
-export function encodeV5_2RegisterCalldata(
-  args: RegisterArgsV5_2,
-  abi: readonly unknown[],
-): `0x${string}` {
-  return encodeFunctionData({
-    abi: abi as Parameters<typeof encodeFunctionData>[0]['abi'],
+export function encodeV5_2RegisterCalldata(args: RegisterArgsV5_2): `0x${string}` {
+  return encodeFunctionData<typeof qkbRegistryV5_2Abi, 'register'>({
+    abi: qkbRegistryV5_2Abi,
     functionName: 'register',
     args: [
       {
@@ -333,7 +335,7 @@ export function encodeV5_2RegisterCalldata(
       args.trustMerklePathBits,
       args.policyMerklePath,
       args.policyMerklePathBits,
-    ] as readonly unknown[] as never,
+    ],
   });
 }
 
@@ -348,12 +350,9 @@ export interface RotateWalletArgsV5_2 {
   readonly oldWalletAuthSig: `0x${string}`;
 }
 
-export function encodeV5_2RotateWalletCalldata(
-  args: RotateWalletArgsV5_2,
-  abi: readonly unknown[],
-): `0x${string}` {
-  return encodeFunctionData({
-    abi: abi as Parameters<typeof encodeFunctionData>[0]['abi'],
+export function encodeV5_2RotateWalletCalldata(args: RotateWalletArgsV5_2): `0x${string}` {
+  return encodeFunctionData<typeof qkbRegistryV5_2Abi, 'rotateWallet'>({
+    abi: qkbRegistryV5_2Abi,
     functionName: 'rotateWallet',
     args: [
       {
@@ -389,6 +388,6 @@ export function encodeV5_2RotateWalletCalldata(
         bindingPkYLo: args.sig.bindingPkYLo,
       },
       args.oldWalletAuthSig,
-    ] as readonly unknown[] as never,
+    ],
   });
 }

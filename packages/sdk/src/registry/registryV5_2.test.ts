@@ -2,13 +2,18 @@
 // load-bearing — they're the regression guard against spec
 // §"Public-signal layout V5.1 → V5.2" (22-field FROZEN order) drift.
 import { describe, expect, it } from 'vitest';
+import { decodeFunctionData } from 'viem';
+import { qkbRegistryV5_2Abi } from '../abi/QKBRegistryV5_2.js';
 import {
   PUBLIC_SIGNALS_V5_2_LENGTH,
   assertRegisterArgsV5_2Shape,
+  encodeV5_2RegisterCalldata,
+  encodeV5_2RotateWalletCalldata,
   publicSignalsV5_2FromArray,
   publicSignalsV5_2ToArray,
   type PublicSignalsV5_2,
   type RegisterArgsV5_2,
+  type RotateWalletArgsV5_2,
 } from './registryV5_2.js';
 
 const ZERO32: `0x${string}` = `0x${'00'.repeat(32)}`;
@@ -135,5 +140,141 @@ describe('assertRegisterArgsV5_2Shape', () => {
       },
     };
     expect(() => assertRegisterArgsV5_2Shape(args)).not.toThrow();
+  });
+});
+
+// ===========================================================================
+// Encoder round-trip — guards against drift between PublicSignalsV5_2's
+// field order and the canonical pumped ABI's `register()` sig tuple.
+// If contracts-eng re-pumps with a reordered sig tuple, this test fires.
+// ===========================================================================
+
+describe('encodeV5_2RegisterCalldata + decodeFunctionData round-trip', () => {
+  function makeArgs(): RegisterArgsV5_2 {
+    const path16 = Array.from({ length: 16 }, (): `0x${string}` => ZERO32) as unknown as RegisterArgsV5_2['trustMerklePath'];
+    return {
+      proof: {
+        a: [0x1n, 0x2n] as const,
+        b: [[0x3n, 0x4n] as const, [0x5n, 0x6n] as const] as const,
+        c: [0x7n, 0x8n] as const,
+      },
+      sig: makePublicSignalsV5_2(),
+      leafSpki: `0x${'aa'.repeat(91)}`,
+      intSpki: `0x${'bb'.repeat(91)}`,
+      signedAttrs: '0x3041020100',
+      leafSig: [`0x${'11'.repeat(32)}`, `0x${'22'.repeat(32)}`] as const,
+      intSig: [`0x${'33'.repeat(32)}`, `0x${'44'.repeat(32)}`] as const,
+      trustMerklePath: path16,
+      trustMerklePathBits: 0n,
+      policyMerklePath: path16,
+      policyMerklePathBits: 0n,
+    };
+  }
+
+  it('decodes back to functionName=register with proof at arg[0] and sig at arg[1]', () => {
+    const calldata = encodeV5_2RegisterCalldata(makeArgs());
+    const decoded = decodeFunctionData({ abi: qkbRegistryV5_2Abi, data: calldata });
+    expect(decoded.functionName).toBe('register');
+    const args = decoded.args as readonly unknown[];
+    // arg[0] = proof
+    expect((args[0] as { a: readonly bigint[] }).a).toEqual([0x1n, 0x2n]);
+    // arg[1] = sig — slot 0 is timestamp (V5.2 layout, not V5.1's msgSender).
+    expect((args[1] as { timestamp: bigint }).timestamp).toBe(1n);
+    // arg[1].rotationNewWallet at slot 17 (V5.1 was slot 18).
+    expect((args[1] as { rotationNewWallet: bigint }).rotationNewWallet).toBe(18n);
+    // arg[1] new pkLimb fields at slots 18-21.
+    expect((args[1] as { bindingPkXHi: bigint }).bindingPkXHi).toBe(19n);
+    expect((args[1] as { bindingPkXLo: bigint }).bindingPkXLo).toBe(20n);
+    expect((args[1] as { bindingPkYHi: bigint }).bindingPkYHi).toBe(21n);
+    expect((args[1] as { bindingPkYLo: bigint }).bindingPkYLo).toBe(22n);
+  });
+
+  it('preserves the signedAttrs raw-bytes contract (NOT a hash) at calldata position 4', () => {
+    const calldata = encodeV5_2RegisterCalldata(makeArgs());
+    const decoded = decodeFunctionData({ abi: qkbRegistryV5_2Abi, data: calldata });
+    const args = decoded.args as readonly unknown[];
+    expect(args[2]).toBe(`0x${'aa'.repeat(91)}`);   // leafSpki
+    expect(args[3]).toBe(`0x${'bb'.repeat(91)}`);   // intSpki
+    expect(args[4]).toBe('0x3041020100');           // signedAttrs raw DER
+  });
+
+  it('rejects a V5.1-shape sig (with msgSender) at the type-system layer', () => {
+    // Compile-time guard: PublicSignalsV5_2 has no `msgSender` field, so
+    // attempting to inject one is a TS error. We verify here at runtime that
+    // adding an extra `msgSender` property to the args.sig doesn't smuggle
+    // it into the encoded calldata (viem encodes per ABI components only).
+    const argsWithStrayMsgSender = {
+      ...makeArgs(),
+      sig: { ...makePublicSignalsV5_2(), msgSender: 999n } as unknown as PublicSignalsV5_2,
+    };
+    const calldata = encodeV5_2RegisterCalldata(argsWithStrayMsgSender);
+    const decoded = decodeFunctionData({ abi: qkbRegistryV5_2Abi, data: calldata });
+    const sig = (decoded.args as readonly unknown[])[1] as Record<string, unknown>;
+    expect(sig.msgSender).toBeUndefined();
+  });
+});
+
+describe('encodeV5_2RotateWalletCalldata round-trip', () => {
+  function makeRotateArgs(): RotateWalletArgsV5_2 {
+    return {
+      proof: {
+        a: [0x10n, 0x20n] as const,
+        b: [[0x30n, 0x40n] as const, [0x50n, 0x60n] as const] as const,
+        c: [0x70n, 0x80n] as const,
+      },
+      sig: makePublicSignalsV5_2(),
+      // 65-byte EIP-191 signature (0x prefix + 130 hex chars).
+      oldWalletAuthSig: `0x${'aa'.repeat(64)}1c`,
+    };
+  }
+
+  it('decodes back to functionName=rotateWallet with the 3-arg shape', () => {
+    const calldata = encodeV5_2RotateWalletCalldata(makeRotateArgs());
+    const decoded = decodeFunctionData({ abi: qkbRegistryV5_2Abi, data: calldata });
+    expect(decoded.functionName).toBe('rotateWallet');
+    const args = decoded.args as readonly unknown[];
+    expect(args.length).toBe(3);
+    expect((args[0] as { a: readonly bigint[] }).a).toEqual([0x10n, 0x20n]);
+    expect((args[1] as { bindingPkYLo: bigint }).bindingPkYLo).toBe(22n);
+    expect(args[2]).toBe(`0x${'aa'.repeat(64)}1c`);
+  });
+});
+
+// ===========================================================================
+// V5.2 4-byte selector pinning. Selectors changed vs V5.1 because the sig
+// tuple grew from 19 → 22 `uint256` components (the canonical Solidity
+// function signature includes tuple components). Pinning the selectors
+// here means any future ABI re-pump that reorders the sig tuple — even
+// with the same field count — fires this test.
+//
+//   register     V5.1: 0x8843e757   →   V5.2: 0x9ab660c7
+//   rotateWallet V5.1: 0x07d19c50   →   V5.2: 0x9849ff37
+// ===========================================================================
+
+describe('V5.2 4-byte selectors (changed vs V5.1 due to 22-element sig tuple)', () => {
+  it('register selector is 0x9ab660c7', () => {
+    const calldata = encodeV5_2RegisterCalldata({
+      proof: { a: [0n, 0n], b: [[0n, 0n], [0n, 0n]], c: [0n, 0n] },
+      sig: makePublicSignalsV5_2(),
+      leafSpki: `0x${'00'.repeat(91)}`,
+      intSpki: `0x${'00'.repeat(91)}`,
+      signedAttrs: '0x',
+      leafSig: [ZERO32, ZERO32],
+      intSig: [ZERO32, ZERO32],
+      trustMerklePath: Array.from({ length: 16 }, (): `0x${string}` => ZERO32) as unknown as RegisterArgsV5_2['trustMerklePath'],
+      trustMerklePathBits: 0n,
+      policyMerklePath: Array.from({ length: 16 }, (): `0x${string}` => ZERO32) as unknown as RegisterArgsV5_2['policyMerklePath'],
+      policyMerklePathBits: 0n,
+    });
+    expect(calldata.slice(0, 10)).toBe('0x9ab660c7');
+  });
+
+  it('rotateWallet selector is 0x9849ff37', () => {
+    const calldata = encodeV5_2RotateWalletCalldata({
+      proof: { a: [0n, 0n], b: [[0n, 0n], [0n, 0n]], c: [0n, 0n] },
+      sig: makePublicSignalsV5_2(),
+      oldWalletAuthSig: `0x${'00'.repeat(65)}`,
+    });
+    expect(calldata.slice(0, 10)).toBe('0x9849ff37');
   });
 });
