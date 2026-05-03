@@ -205,6 +205,9 @@ importers:
       commander:
         specifier: ^12.0.0
         version: 12.1.0
+      snarkjs:
+        specifier: ^0.7.4
+        version: 0.7.6
       zod:
         specifier: ^3.22.0
         version: 3.25.76

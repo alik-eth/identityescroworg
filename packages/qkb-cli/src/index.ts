@@ -9,6 +9,7 @@
 // in T5.
 
 import { Command } from 'commander';
+import { serveCommand } from './commands/serve.js';
 import { PKG_VERSION, versionCommand } from './commands/version.js';
 
 const program = new Command();
@@ -20,6 +21,7 @@ program
   .version(PKG_VERSION);
 
 versionCommand(program);
+serveCommand(program);
 
 program.parseAsync(process.argv).catch((err) => {
   process.stderr.write(`qkb: ${err instanceof Error ? err.message : String(err)}\n`);
