@@ -4,15 +4,15 @@
 **Date:** 2026-04-30
 **Audience.** Trusted ZK ecosystem contacts the founder is recruiting personally — PSE, 0xPARC, Mopro, Anon Aadhaar, Polygon ID, Lambdaclass, ETH Kyiv, individual ZK researchers.
 **Use.** Founder adapts per contact. Verbatim where the rapport allows; abbreviated where the contact already knows the project.
-**Voice.** Civic-monumental restraint. A serious technical request, not a marketing pitch. Branding leans on **zk-QES**; Identity Escrow named once for context.
+**Voice.** Civic-monumental restraint. A serious technical request, not a marketing pitch. Naming follows `BRAND.md`: **QKB** is the protocol noun; **zk-QES** appears once in the opening as the descriptor; **Identity Escrow** is the project umbrella named once for context.
 
 ---
 
 ## Subject lines (pick one)
 
-1. zk-QES Phase 2 ceremony — would you be a contributor?
-2. Trusted-setup contribution request — zk-QES, ~20 min on a 32 GB PC
-3. Phase 2 ceremony for zk-QES — contributor sign-up
+1. QKB Phase 2 ceremony — would you be a contributor?
+2. Trusted-setup contribution request — QKB (zk-QES), ~20 min on a 32 GB PC
+3. Phase 2 ceremony for QKB — contributor sign-up
 
 ---
 
@@ -20,9 +20,9 @@
 
 > Hi {{name}},
 >
-> I am running a Phase 2 trusted-setup ceremony for zk-QES, a zero-knowledge protocol I have been building for the last several months under the project name Identity Escrow. The protocol lets a holder of an eIDAS qualified electronic signature authorize a wallet on chain, in zero knowledge — initial jurisdiction Ukraine, signing key sourced from Diia, verifier on Base. Source is open: {{repo-url}}. Architecture spec: {{spec-url}}.
+> I am running a Phase 2 trusted-setup ceremony for QKB — a zero-knowledge protocol over qualified electronic signatures (zk-QES) that I have been building for the last several months under the project umbrella Identity Escrow. The protocol lets a holder of an eIDAS QES authorize a wallet on chain, in zero knowledge — initial jurisdiction Ukraine, signing key sourced from Diia, verifier on Base. Source is open: {{repo-url}}. Architecture spec: {{spec-url}}.
 >
-> The Groth16 circuit is roughly four million constraints and the final zkey will be on the order of 2.2 GB. I would like to recruit you as one of seven to ten trusted contributors for the multi-party Phase 2. Each contributor downloads the previous intermediate zkey, runs `snarkjs zkey contribute` with their own entropy, verifies, and uploads. So long as one contributor honestly destroys their entropy, the ceremony is sound.
+> The Groth16 circuit is roughly four million constraints and the final zkey will be on the order of 2.2 GB. I would like to recruit you as one of seven to ten trusted contributors for the multi-party Phase 2 of the QKB ceremony. Each contributor downloads the previous intermediate zkey, runs `snarkjs zkey contribute` with their own entropy, verifies, and uploads. So long as one contributor honestly destroys their entropy, the ceremony is sound.
 >
 > What is involved on your side:
 >

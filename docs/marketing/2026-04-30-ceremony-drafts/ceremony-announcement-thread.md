@@ -4,22 +4,22 @@
 **Date:** 2026-04-30
 **Posting gate.** Only after at least five core contributors have confirmed. Not the launch thread; the launch thread lives at `2026-04-29-launch-drafts/x-thread-launch.md` and goes out at T-day after the ceremony has finalised.
 **Audience.** ZK Twitter and Ukrainian crypto. Goal: amplify the ceremony in flight, surface the contributor chain as social proof, invite additional civic participation.
-**Branding.** Lead with zk-QES; the ceremony is a protocol-layer artefact, not a project-level announcement.
+**Branding.** Per `BRAND.md`: **QKB** is the protocol noun; **zk-QES** is the descriptor used once in the opening for outside-legibility; **Identity Escrow** is the project umbrella, used only when the project as a whole is meant.
 **Constraint check.** Zero emoji. Zero argot. Each tweet ≤ 280 characters; counted in brackets.
 
 ---
 
 ## T1 — opening
 
-A multi-party trusted setup is underway for zk-QES, the zero-knowledge protocol that lets an eIDAS qualified electronic signature authorize a wallet on chain.
+A multi-party trusted setup is underway for QKB — a zero-knowledge protocol over qualified electronic signatures (zk-QES) that lets an eIDAS QES authorize a wallet on chain.
 
 Phase 1 is the public Hermez Powers of Tau. Phase 2 is the contributor chain we are running now.
 
-[259]
+[271]
 
 ---
 
-## T2 — what zk-QES is, in one breath
+## T2 — what QKB is, in one breath
 
 The protocol proves possession of a valid qualified signature whose issuing chain anchors in the European Union List of Trusted Lists. Initial jurisdiction is Ukraine; the signing key is sourced from Diia.
 
@@ -81,17 +81,17 @@ The contributor chain. The beacon block we will pin as final entropy. The verifi
 
 ## T8 — closer
 
-The protocol's source is open. The ceremony is open. The verifier will be deployed on Base as soon as the chain finalises and the deterministic-rerun verification clears.
+QKB's source is open. The ceremony is open. The verifier will be deployed on Base as soon as the chain finalises and the deterministic-rerun verification clears.
 
 `identityescrow.org/ceremony` for the full picture.
 
-[245]
+[214]
 
 ---
 
 ## Founder notes
 
 - **{{N}} placeholder in T4.** Fill at posting time with the number of confirmed contributors at the moment of the post (5+ minimum per Phase A.A4 acceptance).
-- **Threading sequence.** T1 is the hook; T2 explains zk-QES for any reader unfamiliar; T3 explains why a ceremony at all; T4 + T5 surface the social proof; T6 is the civic invitation; T7 is the transparency commitment; T8 closes with the link.
+- **Threading sequence.** T1 is the hook (introduces QKB + the zk-QES descriptor in one breath); T2 explains QKB for any reader unfamiliar; T3 explains why a ceremony at all; T4 + T5 surface the social proof; T6 is the civic invitation; T7 is the transparency commitment; T8 closes with the link.
 - **Open call posture.** T6 invites *derivative-round* attestation, not core-round contribution. The core is recruited personally; derivative rounds are open to anyone with a 32 GB machine. This matches the §11 spec: "community contributions are welcome after the core completes; community drops do not break chain."
 - **Link discipline.** T5 surfaces the JSON feed (machine-readable) and the rendered page (human-readable). T6 surfaces the contribute page. T8 surfaces the umbrella. Three different links, three different audiences within the same thread.
