@@ -147,8 +147,8 @@ export class MockProver implements IProver {
  * V5 amendments. Exported so the V5.2 web pipeline can sanity-check the
  * count post-prove without needing to hardcode literals at every call site.
  */
-export const V5_PUBLIC_SIGNALS_LENGTHS = [14, 19, 22] as const;
-export type V5PublicSignalsLength = (typeof V5_PUBLIC_SIGNALS_LENGTHS)[number];
+export const ALLOWED_PUBLIC_SIGNAL_LENGTHS = [14, 19, 22] as const;
+export type V5PublicSignalsLength = (typeof ALLOWED_PUBLIC_SIGNAL_LENGTHS)[number];
 
 export interface ProveV5Options {
   /** Swappable IProver — MockProver in tests, SnarkjsProver+Worker in prod. */
@@ -176,7 +176,7 @@ export interface ProveV5Result {
  * Why a thin driver instead of calling `prover.prove()` directly:
  *  - Pins `side: 'v5'` so MockProver projects the witness into the
  *    V5 public-signal layout (callers don't have to remember the literal).
- *  - Length-checks `publicSignals.length` against `V5_PUBLIC_SIGNALS_LENGTHS`
+ *  - Length-checks `publicSignals.length` against `ALLOWED_PUBLIC_SIGNAL_LENGTHS`
  *    post-prove. A V4 zkey sneaking into the V5 path would emit 16 signals
  *    (rejected); a V5/V5.1/V5.2 zkey emits 14/19/22 (admitted). This fails
  *    fast on the V4-leakage case rather than letting the malformed array
@@ -198,14 +198,14 @@ export async function proveV5(
     ...(opts.signal ? { signal: opts.signal } : {}),
   });
   if (
-    !(V5_PUBLIC_SIGNALS_LENGTHS as readonly number[]).includes(
+    !(ALLOWED_PUBLIC_SIGNAL_LENGTHS as readonly number[]).includes(
       result.publicSignals.length,
     )
   ) {
     throw new QkbError('witness.fieldTooLong', {
       reason: 'v5-public-signals-length',
       got: result.publicSignals.length,
-      want: [...V5_PUBLIC_SIGNALS_LENGTHS],
+      want: [...ALLOWED_PUBLIC_SIGNAL_LENGTHS],
     });
   }
   return { proof: result.proof, publicSignals: result.publicSignals };
