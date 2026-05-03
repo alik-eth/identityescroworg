@@ -248,6 +248,7 @@ export {
 
 export { qkbRegistryV4Abi } from './abi/QKBRegistryV4.js';
 export { qkbRegistryV5_1Abi } from './abi/QKBRegistryV5_1.js';
+export { qkbRegistryV5_2Abi } from './abi/QKBRegistryV5_2.js';
 export { identityEscrowNftAbi } from './abi/IdentityEscrowNFT.js';
 
 export {

@@ -2,10 +2,11 @@
 pragma solidity ^0.8.24;
 
 /// @title IQKBRegistry — minimal read interface for QKB-verified identity gating.
-/// @notice Implemented by both `QKBRegistryV4` and `QKBRegistryV5` (incl.
-///         the V5.1 wallet-bound amendment). Third-party contracts depend
-///         only on this read interface — selectors and return types are
-///         stable across the V4 → V5 → V5.1 evolution.
+/// @notice Implemented by `QKBRegistryV4`, `QKBRegistryV5` (incl. V5.1
+///         wallet-bound amendment), and `QKBRegistryV5_2` (keccak-on-chain
+///         amendment). Third-party contracts depend only on this read
+///         interface — selectors and return types are stable across the
+///         V4 → V5 → V5.1 → V5.2 evolution.
 ///
 /// @dev    V5.1 invariant 4 (semantic shift, not ABI): `nullifierOf` is
 ///         WRITE-ONCE on first-claim. Repeat-claim register() against a
