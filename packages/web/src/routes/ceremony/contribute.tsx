@@ -77,7 +77,7 @@ export function CeremonyContribute() {
         'ceremony.contribute.step3Body',
         'Runs in seconds. Confirms your output zkey is structurally valid against the circuit r1cs and the Phase 1 powers-of-tau. If verify fails, do not upload.',
       ),
-      cmd: `snarkjs zkey verify qkb-v5.r1cs powersOfTau28_hez_final_23.ptau ${MINE_ZKEY}`,
+      cmd: `snarkjs zkey verify qkb-v5.r1cs powersOfTau28_hez_final_22.ptau ${MINE_ZKEY}`,
       testIdSuffix: 'verify',
     },
     {

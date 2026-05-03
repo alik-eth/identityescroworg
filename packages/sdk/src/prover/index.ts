@@ -133,9 +133,22 @@ export class MockProver implements IProver {
 // ===========================================================================
 // V5 single-proof driver — wraps IProver.prove() with V5-specific URL pinning
 // and public-signal-length validation. The V5 architecture collapses V4's
-// leaf+chain split into a single Groth16 proof emitting 14 public signals
-// (orchestration §0.1).
+// leaf+chain split into a single Groth16 proof. The public-signal count
+// shifts across V5 amendments:
+//   V5   (orchestration §0.1)                        — 14 signals
+//   V5.1 (privacy / wallet-bound nullifier)          — 19 signals
+//   V5.2 (keccak-on-chain / cross-chain portability) — 22 signals
 // ===========================================================================
+
+/**
+ * Allowed public-signal counts for any V5-family proof. Used by `proveV5`
+ * to reject a V4 zkey leaking into the V5 path (V4 leaf emits 16 signals,
+ * which is NOT in this set), while still admitting all current and prior
+ * V5 amendments. Exported so the V5.2 web pipeline can sanity-check the
+ * count post-prove without needing to hardcode literals at every call site.
+ */
+export const V5_PUBLIC_SIGNALS_LENGTHS = [14, 19, 22] as const;
+export type V5PublicSignalsLength = (typeof V5_PUBLIC_SIGNALS_LENGTHS)[number];
 
 export interface ProveV5Options {
   /** Swappable IProver — MockProver in tests, SnarkjsProver+Worker in prod. */
@@ -147,19 +160,29 @@ export interface ProveV5Options {
 
 export interface ProveV5Result {
   readonly proof: Groth16Proof;
-  /** 14 decimal-string field elements per orchestration §0.1. */
+  /**
+   * Decimal-string field elements. Shape varies by V5 amendment:
+   * 14 (V5 baseline), 19 (V5.1), or 22 (V5.2). Callers should use the
+   * version-specific `publicSignalsFromArray` / `publicSignalsV5_2FromArray`
+   * helpers to assert + decode into a typed struct.
+   */
   readonly publicSignals: string[];
 }
 
 /**
- * Run the V5 Groth16 prover once and assert the 14-signal output shape.
+ * Run a V5-family Groth16 prover once and assert the public-signal count
+ * is one of the V5 family's accepted lengths.
  *
  * Why a thin driver instead of calling `prover.prove()` directly:
  *  - Pins `side: 'v5'` so MockProver projects the witness into the
  *    V5 public-signal layout (callers don't have to remember the literal).
- *  - Length-checks `publicSignals.length === 14` post-prove. A V4 zkey
- *    sneaking into the V5 path would emit 16 signals; this fails fast
- *    rather than letting the malformed array reach `register()`.
+ *  - Length-checks `publicSignals.length` against `V5_PUBLIC_SIGNALS_LENGTHS`
+ *    post-prove. A V4 zkey sneaking into the V5 path would emit 16 signals
+ *    (rejected); a V5/V5.1/V5.2 zkey emits 14/19/22 (admitted). This fails
+ *    fast on the V4-leakage case rather than letting the malformed array
+ *    reach `register()` — but doesn't punish V5 amendments that grew the
+ *    public-signal count by adding new gates (V5.1 wallet binding, V5.2
+ *    keccak-on-chain).
  *  - Single seam for future V5-only behaviour (e.g., zkey signature
  *    validation, contract pre-flight reads).
  */
@@ -174,11 +197,15 @@ export async function proveV5(
     ...(opts.onProgress ? { onProgress: opts.onProgress } : {}),
     ...(opts.signal ? { signal: opts.signal } : {}),
   });
-  if (result.publicSignals.length !== 14) {
+  if (
+    !(V5_PUBLIC_SIGNALS_LENGTHS as readonly number[]).includes(
+      result.publicSignals.length,
+    )
+  ) {
     throw new QkbError('witness.fieldTooLong', {
       reason: 'v5-public-signals-length',
       got: result.publicSignals.length,
-      want: 14,
+      want: [...V5_PUBLIC_SIGNALS_LENGTHS],
     });
   }
   return { proof: result.proof, publicSignals: result.publicSignals };

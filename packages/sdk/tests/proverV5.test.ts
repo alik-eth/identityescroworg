@@ -98,11 +98,12 @@ describe('proveV5 — single-circuit driver', () => {
     expect(capturedSide).toBe('v5');
   });
 
-  it('rejects non-14 publicSignals (catches V4 zkey leaking into V5 path)', async () => {
-    // Simulate a V4 zkey emitting 16 signals where V5 expects 14. The
-    // V5 driver MUST fail loudly rather than passing the malformed
-    // array to register() — the contract's Gate 1 verifyProof would
-    // throw with a generic BadProof, losing the diagnostic.
+  it('rejects non-V5-family publicSignals (catches V4 zkey leaking into V5 path)', async () => {
+    // Simulate a V4 zkey emitting 16 signals where the V5 family expects
+    // 14 (V5), 19 (V5.1), or 22 (V5.2). The V5 driver MUST fail loudly
+    // rather than passing the malformed array to register() — the
+    // contract's Gate 1 verifyProof would throw with a generic BadProof,
+    // losing the diagnostic.
     const prover = {
       prove: async (): Promise<{ proof: unknown; publicSignals: string[] }> => ({
         proof: {} as unknown,
@@ -115,6 +116,31 @@ describe('proveV5 — single-circuit driver', () => {
         artifacts: V5_ARTIFACTS,
       }),
     ).rejects.toThrow(/v5-public-signals-length/);
+  });
+
+  it('admits V5.1 (19 signals) and V5.2 (22 signals) — not just baseline V5 (14)', async () => {
+    // Regression guard: before this fix `proveV5` hardcoded `!== 14`,
+    // which silently broke the V5.1 mock pipeline (19 signals always
+    // threw). V5.2 grows that to 22 — both must pass through here.
+    for (const n of [19, 22]) {
+      const prover = {
+        prove: async (): Promise<{ proof: unknown; publicSignals: string[] }> => ({
+          proof: {
+            pi_a: ['1', '2', '1'],
+            pi_b: [['3', '4'], ['5', '6'], ['1', '0']],
+            pi_c: ['7', '8', '1'],
+            protocol: 'groth16',
+            curve: 'bn128',
+          },
+          publicSignals: Array.from({ length: n }, (_, i) => String(i + 1)),
+        }),
+      };
+      const result = await proveV5({} as Record<string, unknown>, {
+        prover: prover as unknown as Parameters<typeof proveV5>[1]['prover'],
+        artifacts: V5_ARTIFACTS,
+      });
+      expect(result.publicSignals.length).toBe(n);
+    }
   });
 
   it('forwards onProgress callbacks', async () => {

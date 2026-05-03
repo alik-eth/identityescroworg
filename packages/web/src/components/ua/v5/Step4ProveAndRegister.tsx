@@ -12,7 +12,7 @@ import {
 } from 'wagmi';
 import {
   deploymentForChainId,
-  qkbRegistryV5_1Abi,
+  qkbRegistryV5_2Abi,
   parseP7s,
   findSubjectSerial,
 } from '@qkb/sdk';
@@ -20,9 +20,9 @@ import {
   isV5ArtifactsConfigured,
 } from '../../../lib/circuitArtifacts';
 import {
-  runV5Pipeline,
-  type V5PipelineProgress,
-} from '../../../lib/uaProofPipelineV5';
+  runV5_2Pipeline,
+  type V5_2PipelineProgress,
+} from '../../../lib/uaProofPipelineV5_2';
 import {
   deriveWalletSecretEoa,
   deriveWalletSecretScw,
@@ -42,20 +42,28 @@ export interface Step4Props {
 const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
 
 /**
- * Step 4 — produce the V5 proof and submit register() to QKBRegistryV5.
+ * Step 4 — produce the V5.2 proof and submit register() to QKBRegistryV5_2.
+ *
+ * V5.2 (keccak-on-chain amendment): public-signal layout drops msgSender
+ * and adds four bindingPk* limbs (22 signals total). The on-chain
+ * walletDerivationGate keccaks the limbs to derive the wallet bound to
+ * this proof, replacing V5.1's circuit-side keccak. From this component's
+ * standpoint nothing about the wallet-secret derivation flow changes —
+ * walletSecret is still HKDF (EOA) or Argon2id (SCW); the circuit still
+ * consumes it inside Poseidon₂ for the wallet-bound nullifier.
  *
  * Three runtime modes (resolved per session, not toggled mid-flow):
  *
- *   Mock prover + V5 deployed (rare; CI):
+ *   Mock prover + V5.2 deployed (rare; CI):
  *     pipeline runs mock → register() submits with zeroed raw bytes →
  *     contract reverts (Gate 2/3 fail) — useful only for ABI-shape
  *     verification. Not used by Playwright e2e (it stubs writeContract).
  *
- *   Mock prover + V5 NOT deployed (default in dev / CI):
+ *   Mock prover + V5.2 NOT deployed (default in dev / CI):
  *     pipeline runs mock → registerArgs surfaced to UI → submit is
  *     skipped → user sees "registration simulated" copy.
  *
- *   Real prover + V5 deployed (post-§9.4 + §9.6):
+ *   Real prover + V5.2 deployed (post-§9.4 + V5.2 ceremony):
  *     pipeline runs through the worker → register() submits → wait for
  *     receipt → navigate to /ua/mintNft on success.
  *
@@ -83,7 +91,7 @@ export function Step4ProveAndRegister({ p7s, bindingBytes, onBack }: Step4Props)
   // the flow against a non-deployed registry.
   const canProve = useMockProver || realProverConfigured;
 
-  const [stage, setStage] = useState<V5PipelineProgress | null>(null);
+  const [stage, setStage] = useState<V5_2PipelineProgress | null>(null);
   const [pipelineError, setPipelineError] = useState<string | null>(null);
 
   const { writeContract, data: txHash, isPending: txPending, error: writeError } =
@@ -108,7 +116,7 @@ export function Step4ProveAndRegister({ p7s, bindingBytes, onBack }: Step4Props)
    * in one place.
    */
   const runPipelineAndSubmit = async (walletSecret: Uint8Array | undefined) => {
-    const { registerArgs } = await runV5Pipeline(p7s, {
+    const { registerArgs } = await runV5_2Pipeline(p7s, {
       useMockProver,
       bindingBytes,
       ...(walletSecret !== undefined ? { walletSecret } : {}),
@@ -125,9 +133,13 @@ export function Step4ProveAndRegister({ p7s, bindingBytes, onBack }: Step4Props)
       );
       return;
     }
+    // V5.2 register() consumes the new 22-field sig tuple. msgSender is
+    // dropped from the public signals; the contract recomputes
+    // keccak(bindingPk) on-chain from the four proven bindingPk* limbs
+    // (slots 18-21) and gates against the caller's address.
     writeContract({
       address: dep!.registryV5,
-      abi: qkbRegistryV5_1Abi,
+      abi: qkbRegistryV5_2Abi,
       functionName: 'register',
       args: [
         registerArgs.proof,
@@ -150,7 +162,7 @@ export function Step4ProveAndRegister({ p7s, bindingBytes, onBack }: Step4Props)
     setPipelineDone(false);
     setSubmitSkippedReason(null);
     try {
-      // ---- V5.1 wallet-secret derivation ----
+      // ---- wallet-secret derivation (unchanged across V5.1 → V5.2) ----
       // Derive before entering the pipeline so the walletClient prompt
       // appears before the multi-minute prove step (better UX).
       let walletSecret: Uint8Array | undefined;
@@ -162,7 +174,7 @@ export function Step4ProveAndRegister({ p7s, bindingBytes, onBack }: Step4Props)
           throw new Error(t('registerV5.step4.walletNotConnected'));
         }
         // Quick parse to extract subjectSerial for HKDF signing.
-        // The full parse happens again inside runV5Pipeline; this
+        // The full parse happens again inside runV5_2Pipeline; this
         // pre-parse is fast (~1 ms) and keeps the derivation call
         // before the prover warm-up.
         const cms = parseP7s(Buffer.from(p7s));

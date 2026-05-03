@@ -17,7 +17,7 @@
  */
 export const FLY_FIXED_URLS = {
   R1CS: 'https://prove.identityescrow.org/ceremony/main.r1cs',
-  PTAU: 'https://prove.identityescrow.org/ceremony/pot/pot23.ptau',
+  PTAU: 'https://prove.identityescrow.org/ceremony/pot/pot22.ptau',
   /** Returns the previous-round URL given the current round N. */
   prevRound: (round: number): string =>
     `https://prove.identityescrow.org/ceremony/rounds/round-${round - 1}.zkey`,
@@ -94,7 +94,7 @@ export interface FlyLaunchInputs {
  *     ROUND="{round}" \
  *     PREV_ROUND_URL="…round-{round-1}.zkey" \
  *     R1CS_URL="…main.r1cs" \
- *     PTAU_URL="…pot23.ptau" \
+ *     PTAU_URL="…pot22.ptau" \
  *     SIGNED_PUT_URL='{signed}' \
  *     CONTRIBUTOR_NAME='{name}' \
  *     CONTRIBUTOR_ENTROPY={hex} \
