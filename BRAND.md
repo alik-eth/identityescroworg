@@ -34,15 +34,29 @@ A one-page reference for anyone writing public-facing copy, talks, slides, or th
 - Don't claim escrow as a V1 feature; V1 ships pure binding registration.
 - Don't introduce a fourth name. Three is enough.
 
+## Domains
+
+The public-facing surface uses three subdomains under `zkqes.org`. Locked 2026-05-03.
+
+| Subdomain | Purpose | Lifecycle |
+|---|---|---|
+| `zkqes.org` (root) | Pre-ceremony hero + ceremony recruitment CTA + three contribution paths (snarkjs local / VPS / Fly launcher) | Live pre-recruitment; persists post-launch as the project landing |
+| `app.zkqes.org` | The actual register flow — `/v5/registerV5` + `/account/rotate`. Hosts the SPA. End users come here only after Phase B ceremony completes + Sepolia E2E §9.4 green | Live post-ceremony |
+| `docs.zkqes.org` | VitePress-rendered docs from the `docs/` tree — install instructions, specs, ceremony attestations, SDK reference, this BRAND.md | Live pre-recruitment |
+| `prove.zkqes.org` | Ceremony coordinator (R2-backed status feed + manifest hosting) — successor to `prove.identityescrow.org` | Live post-DNS migration |
+| `identityescrow.org` | 301 alias to `zkqes.org` | Permanent backwards-compat |
+
+The split exists because the three audiences are distinct: ceremony contributors (zkqes.org root), end users registering with their QES (app.zkqes.org, post-launch), and developers / integrators / researchers (docs.zkqes.org). Surfacing all three on one page would mute the call-to-action that matters at the current lifecycle stage.
+
 ## Defensive registrations
 
 | Asset | Status | Action |
 |---|---|---|
-| `identityescrow.org` | Live, canonical | Keep |
-| `identityescroworg` (GitHub) | Live, canonical | Keep |
-| `zkqes.org` | Registered 2026-05-03 | 301 → `identityescrow.org` |
-| `zkqes.com` | Open call | Recommended buy + 301 |
-| `@qkb` (npm) | Live, in use | Keep |
+| `zkqes.org` | Live, canonical | Keep — primary public domain |
+| `identityescrow.org` | Live | 301 alias → `zkqes.org` |
+| `identityescroworg` (GitHub) | Live | Keep — repo name (renaming breaks every link in already-published specs and orchestration plans) |
+| `zkqes.com` | Open call | Recommended defensive buy + 301 → `zkqes.org` |
+| `@qkb` (npm) | Live, in use | Keep — protocol-noun scope |
 | `@zkqes` (npm) | Open call | Recommended defensive squat (no publishes) |
 
 ## When this document changes
