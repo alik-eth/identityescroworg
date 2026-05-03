@@ -237,6 +237,20 @@ export async function buildWitnessV5(
   const subjectSerialLimbs = subjectSerialBytesToLimbs(subjectSerialBytes);
   const subjectSerialValueOffsetInTbs = subjectSerial.offset - tbsLoc.offset;
 
+  // V5.3 F1 — OID-anchor offset (private witness input).  The value-
+  // offset above points at the bytes AFTER the `06 03 55 04 05 <13|0c> NN`
+  // ASN.1 frame inside the subject.serialNumber AttributeTypeAndValue.
+  // The frame is 7 bytes (5 OID bytes + 1 string-tag + 1 length), so
+  // the OID-offset is exactly value-offset − 7.  No parser change
+  // needed; the X.509 walker already locates the value bytes
+  // (subjectSerial.offset).  See V5.3 spec §F1.2 + §F1.5.
+  //
+  // The §6.9b in-circuit gate verifies the bytes at this offset spell
+  // `06 03 55 04 05 <0x13|0x0c> NN`, anchoring the value-offset to a
+  // real subject.serialNumber attribute frame and closing the V5.2
+  // Sybil vector.
+  const subjectSerialOidOffsetInTbs = subjectSerialValueOffsetInTbs - 7;
+
   // ctx field-domain hash (PoseidonChunkHashVar). Decode the binding's
   // hex-encoded ctx to bytes; for empty ctx (ctxHexLen=0) the digest is
   // Poseidon(16, [0×16]).
@@ -486,6 +500,8 @@ export async function buildWitnessV5(
     subjectSerialValueOffset: subjectSerial.offset,
     subjectSerialValueLength: subjectSerial.length,
     subjectSerialValueOffsetInTbs,
+    // V5.3 F1 — OID-anchor private input.
+    subjectSerialOidOffsetInTbs,
 
     // §6.7 — ctx canonical-padded SHA inputs.
     ctxPaddedIn: rightPadZero(ctxPaddedBuf, MAX_CTX_PADDED),
