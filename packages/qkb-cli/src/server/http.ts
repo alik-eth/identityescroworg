@@ -200,6 +200,13 @@ export class CliServer {
           busy: this.busy.isBusy(),
           provesCompleted: this.provesCompleted,
           uptimeSec: Math.floor((Date.now() - this.startedAt) / 1000),
+          // Per orchestration §1.1, downloadProgress is `null` while
+          // zkey is loaded (V1 CliServer takes pre-cached zkey path
+          // explicitly; manifest-driven download lives in T6+ and will
+          // populate this object during the download window).  The
+          // field MUST be present for web-eng's detectCli strict
+          // shape gate.
+          downloadProgress: null,
         }),
       );
       return;

@@ -156,22 +156,9 @@ function extractZip(archivePath: string, destDir: string): Promise<void> {
   });
 }
 
-// CLI entrypoint — invoked by package.json's "postinstall" script.
-// Wrapped in dynamic-only check so importing this module from tests
-// doesn't trigger the install side effect.
-const isMain = typeof require !== 'undefined' &&
-  typeof module !== 'undefined' &&
-  require.main === module;
-if (isMain) {
-  runPostinstall().catch((err: unknown) => {
-    process.stderr.write(
-      `[qkb-cli postinstall] fatal: ${err instanceof Error ? err.message : String(err)}\n`,
-    );
-    // Exit 0 — DO NOT fail the npm install.  Users on platforms
-    // without prebuilts should still get a working CLI; runtime will
-    // surface a clear "rapidsnark not found" error if they try
-    // `qkb serve` without --rapidsnark-bin.
-    process.exit(0);
-  });
-}
+// `runPostinstall` is the export — invoked by the CJS shim at
+// `scripts/postinstall-shim.cjs`, which is wired into package.json's
+// "postinstall" script.  Auto-run-when-main was tried first but the
+// require.main === module check is unreliable across CJS/ESM
+// interop; the explicit shim is more portable.
 

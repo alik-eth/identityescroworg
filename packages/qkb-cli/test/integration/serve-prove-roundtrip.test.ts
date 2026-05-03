@@ -76,15 +76,23 @@ describeIfFixtures('qkb serve — /prove end-to-end against V5.2 stub', () => {
     await server.stop();
   });
 
-  it('GET /status returns ok+ready', async () => {
+  it('GET /status returns the full §1.1 shape', async () => {
     const res = await fetch(`${baseUrl}/status`);
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
+    // Orchestration §1.1: full shape required for web-eng's
+    // detectCli strict gate. Adding a field here without surface
+    // discipline is an interface-contract drift.
     expect(body['ok']).toBe(true);
+    expect(typeof body['version']).toBe('string');
     expect(body['circuit']).toBe('v5.2');
     expect(body['zkeyLoaded']).toBe(true);
     expect(body['busy']).toBe(false);
     expect(body['provesCompleted']).toBe(0);
+    expect(typeof body['uptimeSec']).toBe('number');
+    // downloadProgress is null while the zkey is preloaded; T6 will
+    // populate the object during the manifest-driven download window.
+    expect(body['downloadProgress']).toBeNull();
   });
 
   it('POST /prove without origin header succeeds (curl-equivalent path)', async () => {
