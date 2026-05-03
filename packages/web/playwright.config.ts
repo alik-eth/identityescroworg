@@ -87,5 +87,13 @@ export default defineConfig({
       use: { browserName: 'chromium' },
       testMatch: /cli-flow\.spec\.ts/,
     },
+    {
+      // V5.4 T8 — same env-var gate as cli-flow. Exercises wire-level
+      // fallback dispatch sources (4xx no-fallback / network-error
+      // fallback) against the real CLI.
+      name: 'cli-fallback',
+      use: { browserName: 'chromium' },
+      testMatch: /cli-fallback\.spec\.ts/,
+    },
   ],
 });
