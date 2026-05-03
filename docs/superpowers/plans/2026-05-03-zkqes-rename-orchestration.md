@@ -108,9 +108,10 @@ Lead operates on `chore/zkqes-rename-train`. Touches root-level files only — d
 - [ ] **Step 0.5** Update root `package.json` `name` field (currently `identityescroworg`) to `zkqes`. Keep `private: true`.
 - [ ] **Step 0.6** Sweep root `CLAUDE.md` for QKB/QIE/Identity Escrow references; rewrite the worker team table (drop `qie-eng` row), rewrite the worktrees section to reflect the new layout, drop QKB/QIE/Identity-Escrow references from prose, soften the "Phase 1 QKB / Phase 2 QIE" framing into single-track zkqes orchestration.
 - [ ] **Step 0.7** Sweep root `Dockerfile.web` + `Caddyfile` + root `.env.example` for any QKB/QIE/identityescrow references.
-- [ ] **Step 0.8** Update `package.json` script `"flatten": "pnpm --filter @qkb/lotl-flattener run cli"` → `"flatten": "pnpm --filter @zkqes/lotl-flattener run cli"`.
-- [ ] **Step 0.9** Run `pnpm install` (will rewrite the lockfile to reflect the new top-level name; workers will further regenerate as their package.json files rename).
-- [ ] **Step 0.10** Commit on train branch: `chore(rename): foundation pass — root files`. Do NOT push yet.
+- [ ] **Step 0.8** Run `pnpm install` (will rewrite the lockfile to reflect the new top-level name; workers will further regenerate as their package.json files rename).
+- [ ] **Step 0.9** Commit on train branch: `chore(rename): foundation pass — root files`. Do NOT push yet.
+
+> Note: the root `package.json` `flatten` script reference (`pnpm --filter @qkb/lotl-flattener run cli`) is intentionally NOT updated here — it depends on flattener-eng's package rename landing first, otherwise the script breaks on the train branch. The lead-merge step M.1 (Phase 2) updates the root script atomically with the flattener-eng merge.
 
 ### Phase 1 — parallel worker dispatch (~3-4h wall, all workers in parallel)
 
@@ -184,7 +185,7 @@ Largest scope. SDK ABI mirrors + i18n + components + routes + Dockerfile + every
 
 Order matters — SDK rename must precede web/contracts consumers:
 
-- [ ] **M.1** Merge `chore/zkqes-rename-flattener` → `chore/zkqes-rename-train` (independent, can land first)
+- [ ] **M.1** Merge `chore/zkqes-rename-flattener` → `chore/zkqes-rename-train` (independent, can land first). After merge, on the train branch directly: update root `package.json` script `"flatten": "pnpm --filter @qkb/lotl-flattener run cli"` → `"flatten": "pnpm --filter @zkqes/lotl-flattener run cli"`. Single commit `chore(rename): rewire root flatten script post-flattener-merge`.
 - [ ] **M.2** Merge `chore/zkqes-rename-circuits` → `chore/zkqes-rename-train`
 - [ ] **M.3** Merge `chore/zkqes-rename-contracts` → `chore/zkqes-rename-train` (web-eng's SDK ABI mirrors depend on contracts naming being final)
 - [ ] **M.4** Merge `chore/zkqes-rename-web` → `chore/zkqes-rename-train` (last — depends on contracts + sdk)
@@ -200,7 +201,7 @@ On `chore/zkqes-rename-train` directly.
 - [ ] **L.3** `.github/workflows/release-cli.yml` — sweep `@qkb/cli` → `@zkqes/cli`, brew formula references, GHCR image tag.
 - [ ] **L.4** `scripts/dev-chain.sh` — sweep contract name references.
 - [ ] **L.5** `scripts/sync-deployments.mjs` — sweep field names (`identityEscrowNftAbi` → `zkqesCertificateAbi`, etc.).
-- [ ] **L.6** `scripts/ceremony-coord/.env.example` — `prove-identityescrow-org` bucket reference: ADD a comment noting Q5 decision (new `prove-zkqes-org` for V5+, old as historical mirror); leave the value to founder to flip.
+- [ ] **L.6** `scripts/ceremony-coord/.env.example` — flip the bucket VALUE from `prove-identityescrow-org` to `prove-zkqes-org` (per Q5: new bucket is canonical for V5+; old bucket is a historical-only mirror). Add a comment block: `# Founder must provision this R2 bucket before next ceremony run; old prove-identityescrow-org bucket remains read-only for V3/V4 historical artifacts. See specs/2026-05-03-zkqes-rename-design.md §1.Q5.` This way any train-branch run blocks on missing bucket rather than silently writing to the wrong storage.
 - [ ] **L.7** `scripts/ceremony-coord/cookbooks/fly/{Dockerfile,launcher.sh,entrypoint.sh,README.md}` — sweep QKB references in docs/comments. Note: ceremony cookbook GHCR image references (`identityescroworg/qkb-ceremony` per spec §1.Q6 → `alik-eth/zkqes-ceremony`) — update tag references in launcher + README. **Do NOT update the digest pin** (still pointing at old image until founder rebuilds the image under new name).
 - [ ] **L.8** Verify: `act` or eyeball-only on workflows.
 
