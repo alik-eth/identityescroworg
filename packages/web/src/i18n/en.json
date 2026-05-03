@@ -18,11 +18,37 @@
     }
   },
   "cli": {
-    "title": "Install the CLI",
-    "lede": "Your identity bytes never leave your machine. The CLI proves locally; the website only submits.",
-    "run": "Generate the proof",
-    "runNote": "Replace diia.p7s with your signed Diia bundle. The proof is bound to the wallet you supply.",
-    "next": "I have proof.json →"
+    "back": "back to home",
+    "title": "Install QKB CLI for native proof generation.",
+    "lede": "Optional. The browser prover works as-is. Install the CLI to make proof generation about 7× faster and 10× lighter on memory.",
+    "whyHeading": "Why install it",
+    "whyFasterTitle": "~7× faster.",
+    "whyFaster": "About 14 s native rapidsnark vs ~90 s in-browser snarkjs on the same machine.",
+    "whyLighterTitle": "~10× less memory.",
+    "whyLighter": "≈3.7 GB peak native vs ≈38 GB in-browser. Phones / low-RAM laptops can finally generate proofs.",
+    "whyOnlyOnInvokeTitle": "Runs only when invoked.",
+    "whyOnlyOnInvoke": "Not a daemon. You start it with `qkb serve`, leave it running while you generate proofs, then Ctrl+C when done.",
+    "whyPrivateTitle": "Keys never leave your machine.",
+    "whyPrivate": "The CLI binds to localhost:9080. The browser fetches it via the same-origin pin (https://identityescrow.org); no other origin can talk to it.",
+    "installHeading": "Install",
+    "installLede": "V1 ships via npm. Requires Node 20 or newer; works on macOS, Linux, and Windows + WSL.",
+    "installNpmNote": "Postinstall downloads the rapidsnark sidecar matching your OS + arch (~12 MB). The CLI itself is a ~32 KB tarball.",
+    "windowsCalloutLabel": "Windows note",
+    "windowsCalloutBody": "rapidsnark has no Windows prebuilt in V1. Native Windows users must build rapidsnark themselves and pass `qkb serve --rapidsnark-bin C:\\\\path\\\\to\\\\rapidsnark.exe`. WSL users install rapidsnark inside the WSL distro normally — no extra flag needed.",
+    "deferredChannels": "Homebrew formula and a one-line curl installer (`brew install identityescrow/qkb/qkb` and `curl -fsSL https://identityescrow.org/install.sh | sh`) are coming in V1.1. For V1, npm is the supported channel.",
+    "runHeading": "Run it",
+    "runBody": "Open a terminal and start the server. Leave it running while you generate proofs — it binds to localhost:9080 and accepts /prove POSTs from https://identityescrow.org only.",
+    "runStop": "Stop with Ctrl+C when finished. The server does not auto-start; nothing runs in the background.",
+    "verifyHeading": "Verify it",
+    "verifyBody": "With qkb serve running, go back to the register flow. The \"Install qkb\" banner disappears when the browser detects the running server, and your prove step shows \"proved via: cli\" instead of \"browser\".",
+    "verifyCta": "Back to the register flow →",
+    "troubleshootHeading": "Troubleshooting",
+    "troublePortLabel": "Port 9080 already in use",
+    "troublePortBody": "Another process is bound to :9080. Either stop it (`lsof -i :9080`, then kill the PID) or pass `qkb serve --port <other>`. The browser only auto-detects :9080 in V1; alternate ports work but the banner won't auto-disappear.",
+    "troubleSidecarLabel": "rapidsnark sidecar missing",
+    "troubleSidecarBody": "If postinstall couldn't download the sidecar (offline machine, restricted CI, or native Windows where iden3 v0.0.8 ships no prebuilt), pass `qkb serve --rapidsnark-bin <path>` with a binary you built yourself. Run `qkb cache rebuild` while online to retry the postinstall download on platforms that have a prebuilt.",
+    "troubleManifestLabel": "Manifest fetch fails",
+    "troubleManifestBody": "On first run the CLI fetches the V5.2 zkey manifest from identityescrow.org. If your network blocks it, pass `--manifest-url file:///path/to/local-manifest.json` with a vendored copy. The CLI verifies the manifest signature against the embedded public key in either case."
   },
   "submit": {
     "title": "Submit your proof",
@@ -40,6 +66,12 @@
     "cta": "Mint Certificate",
     "opensea": "View on OpenSea",
     "share": "Share"
+  },
+  "cliBanner": {
+    "title": "Faster proofs with the QKB CLI",
+    "body": "Install qkb for native proof generation — about 7× faster (≈14 s vs ≈90 s) and 10× less memory (≈3.7 GB vs ≈38 GB) than the in-browser prover. Optional — the browser prover works as-is.",
+    "cta": "Install qkb →",
+    "dismiss": "Dismiss"
   },
   "registerV5": {
     "title": "Register your identity",

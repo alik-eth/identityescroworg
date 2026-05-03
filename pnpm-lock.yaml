@@ -352,6 +352,9 @@ importers:
       '@playwright/test':
         specifier: ^1.45.0
         version: 1.59.1
+      '@qkb/cli':
+        specifier: file:./test/fixtures/qkb-cli-0.5.2-pre.tgz
+        version: file:packages/web/test/fixtures/qkb-cli-0.5.2-pre.tgz
       '@testing-library/jest-dom':
         specifier: ^6.4.6
         version: 6.9.1
@@ -1205,6 +1208,11 @@ packages:
   '@playwright/test@1.59.1':
     resolution: {integrity: sha512-PG6q63nQg5c9rIi4/Z5lR5IVF7yU5MqmKaPOe0HSc0O2cX1fPi96sUQu5j7eo4gKCkB2AnNGoWt7y4/Xx3Kcqg==}
     engines: {node: '>=18'}
+    hasBin: true
+
+  '@qkb/cli@file:packages/web/test/fixtures/qkb-cli-0.5.2-pre.tgz':
+    resolution: {integrity: sha512-Y4eqHnDSQ2WtUxzPQaFKDar5UlVzvw+sX0s/FO68mlTBrhgD9djusstNtzVv+Y+xyl5BydCXhdZWSrYx45p+Lg==, tarball: file:packages/web/test/fixtures/qkb-cli-0.5.2-pre.tgz}
+    version: 0.5.2-pre
     hasBin: true
 
   '@rainbow-me/rainbowkit@2.2.10':
@@ -6070,6 +6078,12 @@ snapshots:
   '@playwright/test@1.59.1':
     dependencies:
       playwright: 1.59.1
+
+  '@qkb/cli@file:packages/web/test/fixtures/qkb-cli-0.5.2-pre.tgz':
+    dependencies:
+      commander: 12.1.0
+      snarkjs: 0.7.6
+      zod: 3.25.76
 
   '@rainbow-me/rainbowkit@2.2.10(@tanstack/react-query@5.99.0(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)(viem@2.48.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6))(wagmi@2.19.5(@tanstack/query-core@5.99.0)(@tanstack/react-query@5.99.0(react@18.3.1))(@types/react@18.3.28)(bufferutil@4.1.0)(react@18.3.1)(typescript@5.9.3)(utf-8-validate@5.0.10)(viem@2.48.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6))(zod@4.3.6))':
     dependencies:

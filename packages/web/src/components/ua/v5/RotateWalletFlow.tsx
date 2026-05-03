@@ -64,9 +64,11 @@ import {
   proveV5,
   buildWitnessV5_2,
   MockProver,
+  CliProveError,
   type Groth16ProofV5_2,
   type PublicSignalsV5_2,
   type CircuitArtifactUrls,
+  type Groth16Proof,
 } from '@qkb/sdk';
 import { SnarkjsWorkerProver } from '@qkb/sdk/prover/snarkjsWorker';
 import {
@@ -78,6 +80,9 @@ import {
   isSmartContractWallet,
   type GetCodeClient,
 } from '../../../lib/walletSecret';
+import { runCliFirstProver } from '../../../lib/cliFallbackProver';
+import { useCliPresence } from '../../../hooks/useCliPresence';
+import { CliBanner } from './CliBanner';
 import { PaperGrain } from '../../PaperGrain';
 import { DocumentFooter } from '../../DocumentFooter';
 
@@ -175,6 +180,18 @@ export function RotateWalletFlow() {
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isWorking, setIsWorking] = useState(false);
+
+  // V5.4 CLI-server presence — same hook as Step4ProveAndRegister.
+  // Drives both the CliBanner render and the prove-path branching.
+  const cliPresence = useCliPresence();
+
+  /** Source of the proof from the LAST `onProve` invocation. Surfaced
+   *  as a small receipt under the prove step. */
+  const [proofSource, setProofSource] = useState<'cli' | 'browser' | 'mock' | null>(null);
+  /** Toast copy when the CLI failed in a fallback-eligible way and
+   *  the rotation prove fell through to the browser. Cleared at
+   *  start of each onProve call. */
+  const [cliFallbackToast, setCliFallbackToast] = useState<string | null>(null);
 
   const useMockProver =
     typeof import.meta !== 'undefined' &&
@@ -338,6 +355,31 @@ export function RotateWalletFlow() {
     }
   };
 
+  /** Map a rotation-flow CliProveError → user-facing toast copy. Same
+   *  shape as Step4's `cliFallbackCopy` — three semantic buckets:
+   *    - 0 (network)          → "CLI server stopped"
+   *    - 429 (transient busy) → "CLI busy"
+   *    - -1 + 5xx             → "CLI server error"
+   */
+  const cliFallbackCopy = (err: CliProveError): string => {
+    if (err.status === 0) {
+      return t(
+        'accountRotate.prove.cliFallbackNetwork',
+        'CLI server stopped; using browser prover.',
+      );
+    }
+    if (err.status === 429) {
+      return t(
+        'accountRotate.prove.cliFallbackBusy',
+        'CLI busy; using browser prover for this proof.',
+      );
+    }
+    return t(
+      'accountRotate.prove.cliFallback5xx',
+      'CLI server error; using browser prover.',
+    );
+  };
+
   /** Stage 5: build witness with rotationMode=1, prove. */
   const onProve = async () => {
     if (
@@ -354,6 +396,19 @@ export function RotateWalletFlow() {
     setErrorMsg(null);
     setIsWorking(true);
     setStatusMsg(t('accountRotate.prove.building'));
+    setProofSource(null);
+    setCliFallbackToast(null);
+
+    // CLI-presence race-fix: same posture as Step4's onProveAndRegister.
+    // If useCliPresence is still 'detecting' when prove auto-fires,
+    // wait for the probe to settle (≤500 ms). Skip in mock mode where
+    // we never want to hit fetch.
+    let cliPresent = cliPresence.status === 'present';
+    if (cliPresence.status === 'detecting' && !useMockProver) {
+      const observed = await cliPresence.recheck();
+      cliPresent = observed === 'present';
+    }
+
     try {
       const cms = parseP7s(Buffer.from(p7s));
 
@@ -389,48 +444,71 @@ export function RotateWalletFlow() {
         zkeySha256: V5_PROVER_ARTIFACTS.zkeySha256,
       };
 
-      let proofResult: Groth16ProofV5_2;
-      let signals: PublicSignalsV5_2;
-
-      if (useMockProver) {
-        const mockProver = new MockProver({ delayMs: 30, result: {
-          proof: {
-            pi_a: ['0x1', '0x2', '0x1'],
-            pi_b: [['0x3', '0x4'], ['0x5', '0x6'], ['0x1', '0x0']],
-            pi_c: ['0x7', '0x8', '0x1'],
-            protocol: 'groth16', curve: 'bn128',
-          },
-          // 22-signal canned output (V5.2 FROZEN layout). Deltas vs V5.1:
-          //   - msgSender removed (slot 0 in V5.1) — slots 1-18 shift to 0-17.
-          //   - bindingPk* limbs added at slots 18-21 (synthetic <2^128).
-          // Slot 13 holds identityFingerprint (was slot 14 in V5.1);
-          // slot 15 is rotationMode=1; slot 17 is rotationNewWallet.
-          publicSignals: [
-            String(Math.floor(Date.now() / 1000)),           // 0  timestamp
-            '0',                                              // 1  nullifier (unused under rotation mode)
-            '0', '0',                                         // 2-3 ctxHashHi/Lo (unused)
-            '6', '7', '8', '9', '10', '11', '12', '13', '14', // 4-12 unchanged
-            String(fingerprint),                              // 13 identityFingerprint
-            '16',                                             // 14 identityCommitment (new)
-            '1',                                              // 15 rotationMode
-            String(rotationOldCommitment),                    // 16 rotationOldCommitment
-            String(BigInt(newWalletAddress)),                 // 17 rotationNewWallet
-            '100', '101', '102', '103',                       // 18-21 bindingPk* limbs (synthetic)
-          ],
-        }});
-        const r = await proveV5(witness as Record<string, unknown>, { prover: mockProver, artifacts });
-        signals = publicSignalsV5_2FromArray(r.publicSignals);
-        proofResult = unpackProof(r.proof);
-      } else {
+      // Browser-prover closure for the rotate flow — captures witness +
+      // artifacts. In mock mode, drives MockProver with a canned
+      // 22-signal output; in real mode, spawns a fresh Worker. Either
+      // way, returns the {proofRaw, publicSignalsRaw} shape that
+      // runCliFirstProver expects.
+      const runBrowser = async (): Promise<{
+        proofRaw: Groth16Proof;
+        publicSignalsRaw: string[];
+      }> => {
+        if (useMockProver) {
+          const mockProver = new MockProver({ delayMs: 30, result: {
+            proof: {
+              pi_a: ['0x1', '0x2', '0x1'],
+              pi_b: [['0x3', '0x4'], ['0x5', '0x6'], ['0x1', '0x0']],
+              pi_c: ['0x7', '0x8', '0x1'],
+              protocol: 'groth16', curve: 'bn128',
+            },
+            // 22-signal canned output (V5.2 FROZEN layout). Deltas vs V5.1:
+            //   - msgSender removed (slot 0 in V5.1) — slots 1-18 shift to 0-17.
+            //   - bindingPk* limbs added at slots 18-21 (synthetic <2^128).
+            // Slot 13 holds identityFingerprint (was slot 14 in V5.1);
+            // slot 15 is rotationMode=1; slot 17 is rotationNewWallet.
+            publicSignals: [
+              String(Math.floor(Date.now() / 1000)),           // 0  timestamp
+              '0',                                              // 1  nullifier (unused under rotation mode)
+              '0', '0',                                         // 2-3 ctxHashHi/Lo (unused)
+              '6', '7', '8', '9', '10', '11', '12', '13', '14', // 4-12 unchanged
+              String(fingerprint),                              // 13 identityFingerprint
+              '16',                                             // 14 identityCommitment (new)
+              '1',                                              // 15 rotationMode
+              String(rotationOldCommitment),                    // 16 rotationOldCommitment
+              String(BigInt(newWalletAddress)),                 // 17 rotationNewWallet
+              '100', '101', '102', '103',                       // 18-21 bindingPk* limbs (synthetic)
+            ],
+          }});
+          const r = await proveV5(witness as Record<string, unknown>, { prover: mockProver, artifacts });
+          return { proofRaw: r.proof, publicSignalsRaw: r.publicSignals };
+        }
         const proverWorker = new Worker(
           new URL('../../../workers/v5-prover.worker.ts', import.meta.url),
           { type: 'module' },
         );
         const prover = new SnarkjsWorkerProver({ worker: proverWorker, terminateAfterProve: true });
         const r = await proveV5(witness as Record<string, unknown>, { prover, artifacts });
-        signals = publicSignalsV5_2FromArray(r.publicSignals);
-        proofResult = unpackProof(r.proof);
-      }
+        return { proofRaw: r.proof, publicSignalsRaw: r.publicSignals };
+      };
+
+      const { proofRaw, publicSignalsRaw, source } = await runCliFirstProver(
+        witness,
+        {
+          // Mock mode forces browser path (mock prover) — never hit
+          // fetch when VITE_USE_MOCK_PROVER=1 is set for e2e.
+          cliPresent: !useMockProver && cliPresent,
+          onCliFallback: (err) => {
+            setCliFallbackToast(cliFallbackCopy(err));
+          },
+          runBrowser,
+        },
+      );
+
+      const signals = publicSignalsV5_2FromArray(publicSignalsRaw);
+      const proofResult = unpackProof(proofRaw);
+      // useMockProver short-circuits to 'mock' source for the receipt
+      // UI to distinguish it from real CLI / browser proves.
+      setProofSource(useMockProver ? 'mock' : source);
 
       setProof(proofResult);
       setPublicSignals(signals);
@@ -723,6 +801,9 @@ export function RotateWalletFlow() {
               <p className="text-base max-w-prose" style={{ color: 'var(--ink)' }}>
                 {t('accountRotate.prove.body')}
               </p>
+              {/* CLI nudge banner. Self-suppresses when CLI is detected,
+                  dismissed, or still detecting — see CliBanner.tsx. */}
+              <CliBanner />
               {!realProverConfigured && !useMockProver && (
                 <p className="text-sm" role="status" data-testid="rotate-ceremony-pending"
                   style={{ color: 'var(--ink)', opacity: 0.6 }}>
@@ -733,6 +814,20 @@ export function RotateWalletFlow() {
                 <p className="text-sm" role="status" data-testid="rotate-status"
                   style={{ color: 'var(--ink)', opacity: 0.7 }}>
                   {statusMsg}
+                </p>
+              )}
+              {cliFallbackToast && (
+                <p className="text-sm" role="status"
+                  data-testid="rotate-cli-fallback-toast"
+                  style={{ color: 'var(--ink)', opacity: 0.85 }}>
+                  {cliFallbackToast}
+                </p>
+              )}
+              {proofSource && (
+                <p className="text-mono text-xs" role="status"
+                  data-testid="rotate-proof-source"
+                  style={{ color: 'var(--ink)', opacity: 0.55 }}>
+                  proved via: {proofSource}
                 </p>
               )}
               {errorMsg && (
@@ -752,6 +847,27 @@ export function RotateWalletFlow() {
               <h2 id="rotate-submit-heading" className="text-3xl" style={{ color: 'var(--ink)' }}>
                 {t('accountRotate.submit.title')}
               </h2>
+              {/* Receipt + fallback-toast carried over from the prove
+                  step. The state is set in onProve, but onProve's
+                  success path advances `step` to 'submit' immediately —
+                  so to render these on the screen the user actually
+                  sees post-prove, they must be mounted under both
+                  'prove' (visible during dispatch) and 'submit'
+                  (visible after completion). Codex T5 catch. */}
+              {cliFallbackToast && (
+                <p className="text-sm" role="status"
+                  data-testid="rotate-cli-fallback-toast"
+                  style={{ color: 'var(--ink)', opacity: 0.85 }}>
+                  {cliFallbackToast}
+                </p>
+              )}
+              {proofSource && (
+                <p className="text-mono text-xs" role="status"
+                  data-testid="rotate-proof-source"
+                  style={{ color: 'var(--ink)', opacity: 0.55 }}>
+                  proved via: {proofSource}
+                </p>
+              )}
               <aside
                 className="p-4 space-y-2 border"
                 style={{ borderColor: 'var(--seal)', color: 'var(--seal)' }}

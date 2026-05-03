@@ -15,6 +15,7 @@ import {
   qkbRegistryV5_2Abi,
   parseP7s,
   findSubjectSerial,
+  CliProveError,
 } from '@qkb/sdk';
 import {
   isV5ArtifactsConfigured,
@@ -29,6 +30,8 @@ import {
   isSmartContractWallet,
   type GetCodeClient,
 } from '../../../lib/walletSecret';
+import { useCliPresence } from '../../../hooks/useCliPresence';
+import { CliBanner } from './CliBanner';
 import { ScwPassphraseModal } from './ScwPassphraseModal';
 
 export interface Step4Props {
@@ -91,8 +94,23 @@ export function Step4ProveAndRegister({ p7s, bindingBytes, onBack }: Step4Props)
   // the flow against a non-deployed registry.
   const canProve = useMockProver || realProverConfigured;
 
+  // V5.4 CLI-server presence detection. The hook polls /status at
+  // mount + on visibilitychange; status === 'present' switches the
+  // pipeline to the CLI prove path with browser fallback on 5xx /
+  // 429 / network. CliBanner uses the same hook to decide whether to
+  // render the install nudge.
+  const cliPresence = useCliPresence();
+  const cliPresent = cliPresence.status === 'present';
+
   const [stage, setStage] = useState<V5_2PipelineProgress | null>(null);
   const [pipelineError, setPipelineError] = useState<string | null>(null);
+  /** Source of the proof actually generated. 'cli' = native fast path,
+   *  'browser' = in-browser snarkjs, 'mock' = e2e/dev. Set after a
+   *  successful pipeline run; surfaced as a small receipt under the CTA. */
+  const [proofSource, setProofSource] = useState<'cli' | 'browser' | 'mock' | null>(null);
+  /** Toast copy emitted by the pipeline when CLI prove failed and
+   *  fallback to browser fired. Cleared at start of each new attempt. */
+  const [cliFallbackToast, setCliFallbackToast] = useState<string | null>(null);
 
   const { writeContract, data: txHash, isPending: txPending, error: writeError } =
     useWriteContract();
@@ -115,13 +133,59 @@ export function Step4ProveAndRegister({ p7s, bindingBytes, onBack }: Step4Props)
    * Shared between EOA and SCW paths so the post-derivation logic stays
    * in one place.
    */
-  const runPipelineAndSubmit = async (walletSecret: Uint8Array | undefined) => {
-    const { registerArgs } = await runV5_2Pipeline(p7s, {
+  /** Map a CliProveError → user-facing toast copy. Three distinct
+   *  failure modes per the SDK's status sentinel taxonomy:
+   *    - status 0  (network failure / abort) → "CLI server stopped"
+   *    - status -1 (server returned malformed 2xx body — server bug,
+   *                 not a network outage) → "CLI server error"
+   *    - status 429 (transient busy)        → "CLI busy"
+   *    - status 5xx (rapidsnark crash, OOM) → "CLI server error"
+   *  Mirrors the canonical string set in `proveViaCli.ts` (header
+   *  comment) so the discipline is stated once.
+   */
+  const cliFallbackCopy = (err: CliProveError): string => {
+    if (err.status === 0) {
+      return t(
+        'registerV5.step4.cliFallbackNetwork',
+        'CLI server stopped; using browser prover.',
+      );
+    }
+    if (err.status === 429) {
+      return t(
+        'registerV5.step4.cliFallbackBusy',
+        'CLI busy; using browser prover for this proof.',
+      );
+    }
+    // 5xx + status:-1 (malformed body) → both indicate a server-side
+    // problem (vs status:0 which is a network/transport problem).
+    return t(
+      'registerV5.step4.cliFallback5xx',
+      'CLI server error; using browser prover.',
+    );
+  };
+
+  const runPipelineAndSubmit = async (
+    walletSecret: Uint8Array | undefined,
+    /** Caller-resolved CLI presence. Distinct from the hook's reactive
+     *  `cliPresent` because the EOA path resolves it at click time
+     *  (after waiting for the 'detecting' probe to settle) and the
+     *  SCW path re-reads at modal-completion time — neither matches
+     *  the live state on every re-render. */
+    cliPresentResolved: boolean,
+  ) => {
+    setCliFallbackToast(null);
+    setProofSource(null);
+    const { registerArgs, source } = await runV5_2Pipeline(p7s, {
       useMockProver,
       bindingBytes,
+      cliPresent: cliPresentResolved,
+      onCliFallback: (err) => {
+        setCliFallbackToast(cliFallbackCopy(err));
+      },
       ...(walletSecret !== undefined ? { walletSecret } : {}),
       onProgress: setStage,
     });
+    setProofSource(source);
     setPipelineDone(true);
     if (!v5Deployed) {
       setSubmitSkippedReason(t('mintV5.awaitingDeploy'));
@@ -158,9 +222,32 @@ export function Step4ProveAndRegister({ p7s, bindingBytes, onBack }: Step4Props)
   };
 
   const onProveAndRegister = async () => {
+    // Clear ALL prior-attempt state at the top so a retry after a
+    // partial success doesn't show stale "proved via" / fallback toast
+    // lines. Pre-flight failures (walletNotConnected, parseP7s,
+    // SCW cancel) take exit branches BEFORE runPipelineAndSubmit
+    // reaches its own clears, so we mirror them here.
     setPipelineError(null);
     setPipelineDone(false);
     setSubmitSkippedReason(null);
+    setProofSource(null);
+    setCliFallbackToast(null);
+    setStage(null);
+
+    // CLI-presence race-fix: the user can click Generate Proof before
+    // useCliPresence's mount probe resolves (status === 'detecting').
+    // Without this, an immediate click would skip the CLI path even
+    // when a local CLI is available. Wait for the probe to settle —
+    // bounded by detectCli's 500 ms timeout, so worst case is half a
+    // second of perceived delay before either CLI or browser prove
+    // starts. Re-checks via cliPresence.recheck() so we don't depend
+    // on the hook's render cycle.
+    let cliReady = cliPresent;
+    if (cliPresence.status === 'detecting' && !useMockProver) {
+      const observed = await cliPresence.recheck();
+      cliReady = observed === 'present';
+    }
+
     try {
       // ---- wallet-secret derivation (unchanged across V5.1 → V5.2) ----
       // Derive before entering the pipeline so the walletClient prompt
@@ -203,7 +290,7 @@ export function Step4ProveAndRegister({ p7s, bindingBytes, onBack }: Step4Props)
 
       // Single submit path for EOA + mock — SCW path returned early above
       // and resumes through onScwPassphraseSubmit.
-      await runPipelineAndSubmit(walletSecret);
+      await runPipelineAndSubmit(walletSecret, cliReady);
     } catch (err) {
       setPipelineError(err instanceof Error ? err.message : String(err));
     }
@@ -233,7 +320,13 @@ export function Step4ProveAndRegister({ p7s, bindingBytes, onBack }: Step4Props)
     try {
       const secret = await deriveWalletSecretScw(passphrase, address);
       resetScwState();
-      await runPipelineAndSubmit(secret);
+      // Re-read CLI presence at SCW-completion time. The user spent
+      // a few seconds in the passphrase modal — the hook may have
+      // resolved 'detecting' → 'present'/'absent' in the interim.
+      // Re-checking here gives us a fresh observation without
+      // depending on the React render cycle.
+      const observed = await cliPresence.recheck();
+      await runPipelineAndSubmit(secret, observed === 'present');
     } catch (err) {
       resetScwState();
       setPipelineError(err instanceof Error ? err.message : String(err));
@@ -260,6 +353,9 @@ export function Step4ProveAndRegister({ p7s, bindingBytes, onBack }: Step4Props)
         {p7s.byteLength.toLocaleString()} bytes
         {address ? ` — ${address.slice(0, 6)}…${address.slice(-4)}` : ''}
       </p>
+      {/* CLI nudge banner. Self-suppresses when CLI is detected,
+          dismissed, or still detecting — see CliBanner.tsx. */}
+      <CliBanner />
       {!canProve && (
         <p
           className="text-sm"
@@ -285,6 +381,26 @@ export function Step4ProveAndRegister({ p7s, bindingBytes, onBack }: Step4Props)
       {pipelineError && (
         <p className="text-sm" role="alert" style={{ color: 'var(--ink)' }}>
           {pipelineError}
+        </p>
+      )}
+      {cliFallbackToast && (
+        <p
+          className="text-sm"
+          role="status"
+          data-testid="v5-cli-fallback-toast"
+          style={{ color: 'var(--ink)', opacity: 0.85 }}
+        >
+          {cliFallbackToast}
+        </p>
+      )}
+      {proofSource && (
+        <p
+          className="text-mono text-xs"
+          role="status"
+          data-testid="v5-proof-source"
+          style={{ color: 'var(--ink)', opacity: 0.55 }}
+        >
+          proved via: {proofSource}
         </p>
       )}
       {pipelineDone && submitSkippedReason && (
