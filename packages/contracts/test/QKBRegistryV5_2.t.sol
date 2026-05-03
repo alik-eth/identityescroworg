@@ -642,6 +642,79 @@ contract QKBRegistryV5_2Test is Test {
         registry.rotateWallet(_baselineProof(), sig, authSig);
     }
 
+    /* ============ V5.3 F2: rotationNewWallet 160-bit range check ============ */
+
+    /// V5.3 F2 negative: rotationNewWallet with high bits set (>= 2^160)
+    /// must revert InvalidNewWallet at the F2 range-check gate, BEFORE the
+    /// silent `address(uint160(...))` truncation at the unpack site.
+    /// Without this gate, the cast would discard bits 160..255, yielding a
+    /// 160-bit address the prover controls (e.g., msg.sender), bypassing
+    /// the public-signal binding the prover claims to commit to.
+    function test_rotateWallet_v53_revertsInvalidNewWallet_whenRotationNewWalletExceeds160Bits() public {
+        _firstClaim();
+        uint256 baselineFp = uint256(keccak256(abi.encodePacked("v52-test-fp", holder)));
+        uint256 baselineCommit = uint256(keccak256(abi.encodePacked("v52-test-commit", holder)));
+        // Build a baseline rotation-mode PublicSignals, then OVERRIDE
+        // rotationNewWallet to a value with bit 160 set (one bit above
+        // uint160 range). The downstream `address(uint160(...))` cast
+        // would silently truncate this to 0x00...00 (since the lower
+        // 160 bits are zero); without F2, the contract would pass the
+        // truncated value through to the wallet-uniqueness gates.
+        QKBRegistryV5_2.PublicSignals memory sig = _rotationSignals(
+            baselineFp, uint256(0xFACE), baselineCommit, _addrOf(BOB_PK)
+        );
+        // 1 << 160: smallest value above uint160.max. uint256.max is also
+        // valid here (any value with bit >= 160 set fails F2); we use
+        // 1 << 160 because the truncation would yield address(0) — a
+        // particularly sharp variant that would otherwise succeed in
+        // bypassing every wallet-validity check that uses == address(0)
+        // semantics.
+        sig.rotationNewWallet = uint256(1) << 160;
+        bytes memory authSig = _rotateAuthSig(ALICE_PK, bytes32(baselineFp), _addrOf(BOB_PK));
+        vm.expectRevert(QKBRegistryV5_2.InvalidNewWallet.selector);
+        vm.prank(_addrOf(BOB_PK));
+        registry.rotateWallet(_baselineProof(), sig, authSig);
+    }
+
+    /// V5.3 F2 positive (regression guard): rotationNewWallet at the
+    /// uint160 boundary value (2^160 - 1) must NOT trip the F2 range
+    /// check — a 160-bit-shaped value is exactly what the gate accepts.
+    /// Confirmed by asserting the revert happens DOWNSTREAM of F2
+    /// (specifically at `InvalidRotationAuth` from the wrong-key auth
+    /// sig). If F2 were too tight (e.g., compared `< 2^160 - 1`), this
+    /// test would flip to `InvalidNewWallet` and fail.
+    ///
+    /// We can't drive a full happy-path here because the rotation auth
+    /// sig needs the privkey for `identityWallets[fp] = holder`, and
+    /// `holder` is a keccak-derived synthetic address (no known privkey
+    /// in the V5.2 unit-test fixture). Confirming the F2 gate doesn't
+    /// fire at the boundary by reaching the downstream auth gate is the
+    /// right surrogate; a true round-trip rotation lives in
+    /// `RealTupleGasSnapshotV5_2.t.sol` once that suite grows a rotate-
+    /// path fixture.
+    function test_rotateWallet_v53_succeeds_atUint160Boundary_2pow160Minus1() public {
+        _firstClaim();
+        uint256 baselineFp = uint256(keccak256(abi.encodePacked("v52-test-fp", holder)));
+        uint256 baselineCommit = uint256(keccak256(abi.encodePacked("v52-test-commit", holder)));
+        // newWallet at the literal uint160 boundary: address(0xFF...FF).
+        address boundaryAddr = address(uint160(type(uint160).max));
+        QKBRegistryV5_2.PublicSignals memory sig = _rotationSignals(
+            baselineFp, uint256(0xFACE), baselineCommit, boundaryAddr
+        );
+        // Sanity: _rotationSignals sets rotationNewWallet = uint256(uint160(
+        // boundaryAddr)) == type(uint160).max == 2^160 - 1 — exactly the F2
+        // gate's accept-edge.
+        assertEq(sig.rotationNewWallet, uint256(type(uint160).max),
+                 "test setup: rotationNewWallet must be at uint160 boundary");
+        // Sign with BOB_PK (sig won't recover to identityWallets[fp] =
+        // holder), so the rotation auth gate fires downstream of F2.
+        // F2 not tripping at the boundary is the asserted invariant.
+        bytes memory authSig = _rotateAuthSig(BOB_PK, bytes32(baselineFp), boundaryAddr);
+        vm.expectRevert(QKBRegistryV5_2.InvalidRotationAuth.selector);
+        vm.prank(boundaryAddr);
+        registry.rotateWallet(_baselineProof(), sig, authSig);
+    }
+
     /* ============ Fixture-search helpers ============ */
 
     function _readEmptySubtreeRoots() internal view returns (bytes32[16] memory out) {

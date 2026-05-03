@@ -619,6 +619,41 @@ contract QKBRegistryV5_2 is IQKBRegistry {
         // ----- Mode gate -----
         if (sig.rotationMode != 1) revert WrongMode();
 
+        // ----- V5.3 F2: rotationNewWallet 160-bit range check -----
+        // Closes a silent-truncation vector at the `address(uint160(sig.
+        // rotationNewWallet))` cast below: without this gate, a malicious
+        // prover can submit a `rotationNewWallet` value with high bits
+        // (>= 2^160) set; the cast at line below would discard the upper
+        // 96 bits, yielding a 160-bit address the prover controls (e.g.,
+        // msg.sender) — passing the `newWallet != msg.sender` check
+        // downstream while the proof's public signal carries an
+        // arbitrarily-shaped 254-bit field element. This range check
+        // forces `sig.rotationNewWallet` to be a true Ethereum-address-
+        // shaped value, eliminating the truncation surface.
+        //
+        // Defense-in-depth: pairs with circuits-eng's V5.3 in-circuit
+        // `Num2Bits(160)` constraint over `rotationNewWallet`. Either
+        // alone is sufficient for the 160-bit gate; both together are
+        // the load-bearing-on-each-other discipline.
+        //
+        // Cost: ~50 gas (single uint256↔uint160 round-trip + comparison +
+        // SLOAD-free conditional revert). Fires early (before Groth16
+        // verify) so malformed inputs don't pay the ~400K verifier cost.
+        //
+        // Note on register(): the V5.2 register() flow's `WrongRegisterModeNoOp`
+        // gate already enforces `sig.rotationNewWallet == uint256(uint160(
+        // msg.sender))`, which is structurally < 2^160 (any uint160 cast
+        // produces a value bounded by 2^160). So register() is already
+        // safe against this vector via the existing gate; the F2 check
+        // is added only to rotateWallet() where the silent-truncation
+        // surface actually exists. (Surfaced to team-lead with the T4
+        // commit; spec §F2.2 mentions adding to both flows for symmetry,
+        // but the contract-side scope is rotateWallet-only per the load-
+        // bearing-vector analysis.)
+        if (sig.rotationNewWallet != uint256(uint160(sig.rotationNewWallet))) {
+            revert InvalidNewWallet();
+        }
+
         // ----- Groth16 verify (mode-flag enforced inside circuit too) -----
         // V5.2: 22-element public-signal vector (V5.1 was 19). Same helper
         // backs both register() and rotateWallet().
