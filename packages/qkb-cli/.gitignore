@@ -1,5 +1,10 @@
-# Build output (single-file pkg binaries land here in T7).
+# Build output.
 dist/
+
+# pnpm pack tarball — regenerated on every `pnpm pack`; pumped to
+# web-eng on every release.  Not committed; lead's release runbook
+# regenerates from source.
+*.tgz
 
 # Test runner caches.
 .vitest-cache/
