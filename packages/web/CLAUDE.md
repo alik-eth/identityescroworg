@@ -361,6 +361,70 @@ Fields written per route:
     — the type-machinery routes their string identifier into the
     bundle even when the component is excluded).
 
+22. **Root-domain GH Pages deploys serve `dist/index.html` at
+    `dist/404.html` via the workflow `cp` step. NO source-side
+    `public/404.html`, NO rafgraph/spa-github-pages query-string
+    dance.** Hotfix history:
+    `hotfix/zkqes-404-loop @ c7828ca` (merged at `abdc288`,
+    2026-05-04) eliminated an infinite redirect loop on
+    `https://zkqes.org/ceremony/contribute` where the URL grew one
+    `~and~/contribute` per reload (`?/&/~and~/~and~/...`). The
+    user-visible bug was a stale `var segmentCount = 1; //
+    /identityescroworg` left over from the pre-#60 subpath deploy;
+    with `VITE_BASE='/'` (zkqes.org root) the dance must use
+    `segmentCount=0`, but the cleaner answer is to skip the dance
+    entirely on root-domain deploys.
+
+    **Mechanism.** GH Pages serves `dist/404.html` for any URL that
+    doesn't map to a static asset. The workflow's `cp
+    packages/web/dist/index.html packages/web/dist/404.html` step
+    (in `.github/workflows/pages.yml`, post-CNAME write,
+    pre-`upload-pages-artifact`) makes every 404 response boot the
+    same SPA bundle as the apex; TanStack Router then resolves the
+    original pathname client-side. The HTTP status remains 404 —
+    GH Pages has no rewriting tier — but the rendered page is
+    correct. Cosmetic 404 status is the accepted trade-off for
+    root-domain SPA hosting on GH Pages.
+
+    **Hard rules.** (a) Never reintroduce `packages/web/public/404.html`.
+    Source-side dead code at root-domain deploys; the workflow
+    `cp` step is the canonical and ONLY producer of `dist/404.html`.
+    A reintroduced source file would ship its broken redirect dance
+    raw because Vite copies `public/*` to `dist/` BEFORE the
+    workflow's post-build steps overwrite. (b) Never carry a
+    `segmentCount != 0` anywhere in source. The dance pattern
+    (`l.replace(... + '/?/' + ...)`) is only correct for
+    repo-subpath deploys like `<user>.github.io/<repo>/`; at a
+    root domain it appends `~and~`-encoded path segments to the
+    URL on every cycle, growing without bound. (c) `dist/index.html`
+    retains a companion restoration script
+    (`if (l.search.indexOf('?/') === 1) {...}`) that decodes
+    `~and~`-encoded paths from cached tabs still carrying the
+    pre-fix URL. The script is a no-op when the search is empty
+    and harmless to keep; do not remove it before the cached-tab
+    population fully cycles out.
+
+    **Reach test.** `VITE_TARGET=landing VITE_BASE=/ pnpm -F
+    @qkb/web build` produces `dist/index.html` only — confirm
+    `dist/404.html` is absent post-build, then verify the
+    workflow's `cp` step would produce a byte-identical copy:
+    `cp dist/index.html dist/404.html && diff dist/index.html
+    dist/404.html` must succeed silently. If `public/404.html`
+    re-appears in source, the `dist/404.html` will exist
+    pre-cp and be silently replaced by the cp step — surface this
+    in code review (the diff between pre-cp and post-cp 404.html
+    is the leak signal).
+
+    **app.zkqes.org caveat.** The same rule applies once the app
+    target's separate workflow lands (post-Sepolia §9.4). Whatever
+    static-host backend serves app.zkqes.org (Cloudflare Pages /
+    Vercel / GH Pages with a second workflow), the SPA-fallback
+    pattern is identical: the not-found page IS the SPA shell.
+    Hosts that natively rewrite (Cloudflare Pages with
+    `_redirects` `/* /index.html 200`, Vercel with
+    `vercel.json` rewrites) get a real 200; GH Pages keeps the
+    cosmetic 404. Both are acceptable.
+
 ## What this package does NOT own
 
 - **Flattener outputs** (`trusted-cas.json`, `layers.json`, `root.json`).
