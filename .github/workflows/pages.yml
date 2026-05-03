@@ -61,6 +61,7 @@ jobs:
         run: |
           pnpm -F @qkb/qie-core build
           pnpm -F @qkb/qie-agent build
+          pnpm -F @qkb/sdk build
 
       - name: Build SPA (landing target → zkqes.org root)
         env:
