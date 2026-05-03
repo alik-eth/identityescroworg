@@ -14,11 +14,15 @@
     "build": "pnpm -r run build",
     "flatten": "pnpm --filter @qkb/lotl-flattener run cli",
     "binding:admin": "node --import tsx packages/web/scripts/build-admin-binding.mjs",
-    "verify:real-qes": "node --import tsx packages/web/scripts/verify-real-qes.mjs"
+    "verify:real-qes": "node --import tsx packages/web/scripts/verify-real-qes.mjs",
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:preview": "vitepress preview docs"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.8.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitepress": "^1.5.0"
   }
 }
