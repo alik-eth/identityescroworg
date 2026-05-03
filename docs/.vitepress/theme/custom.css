@@ -1,0 +1,183 @@
+/*
+ * docs.zkqes.org — civic-monumental theme override.
+ *
+ * Lifts the civic-monumental palette + type stack from
+ * `packages/web/src/styles.css`. The same warm-bone background, ink
+ * text, sovereign indigo + sienna seal accents the SPA carries — so
+ * the doc site reads as the same project, not a different one.
+ *
+ * Override strategy: VitePress's default theme uses CSS variables
+ * (`--vp-c-*`, `--vp-font-family-*`, etc.) for all visual tokens.
+ * We rebind those vars to our civic-monumental palette in
+ * `:root[data-theme]` (light + dark via `[class~="dark"]` selector
+ * VitePress applies to <html> in dark mode).
+ *
+ * Light mode is the default for the doc site (dark mode kept
+ * functional — VitePress's toggle still works — but the civic-
+ * monumental aesthetic is principally a light-mode design;
+ * dark-mode just gets the inverted-palette VitePress gives by
+ * default with a subtle override for the brand color).
+ */
+
+/* ---------------------------------------------------------------- */
+/* Civic-monumental tokens — duplicated from
+ * `packages/web/src/styles.css`. Source-of-truth note in
+ * `theme/index.ts`.                                                  */
+/* ---------------------------------------------------------------- */
+:root {
+  --bone:      #F4EFE6;
+  --ink:       #14130E;
+  --sovereign: #1F2D5C;
+  --seal:      #8B3A1B;
+  --rule:      #C8BFA8;
+  --brick:     #A0392E;
+  --olive:     #5A7A45;
+
+  /* Type stack (lifted from styles.css). The fallback chain pulls
+   * EB Garamond from Google Fonts (loaded via `head` in
+   * `config.mts`); GT Sectra Display + Söhne are designer fonts the
+   * SPA loads when shipped to production but not redistributed in
+   * the docs build, so the public doc surface uses the open-source
+   * EB Garamond / Inter Tight pairing. Visually very close to the
+   * SPA on most viewport sizes. */
+  --font-display: "EB Garamond", "Tiempos Headline", Georgia, serif;
+  --font-body:    "Inter Tight", "Helvetica Neue", system-ui, sans-serif;
+  --font-mono:    "JetBrains Mono", "Söhne Mono", "Courier New", monospace;
+}
+
+/* ---------------------------------------------------------------- */
+/* VitePress var overrides — light mode (default).                  */
+/* ---------------------------------------------------------------- */
+:root {
+  /* Surface + text */
+  --vp-c-bg:           var(--bone);
+  --vp-c-bg-soft:      var(--bone);
+  --vp-c-bg-mute:      #E9E1D2;       /* slightly darker bone */
+  --vp-c-bg-alt:       var(--bone);
+  --vp-c-text-1:       var(--ink);
+  --vp-c-text-2:       #3a382f;       /* ink with reduced contrast */
+  --vp-c-text-3:       #6a675c;
+  --vp-c-divider:      var(--rule);
+  --vp-c-gutter:       var(--rule);
+
+  /* Brand → sovereign indigo (for links, brand color in nav, etc.) */
+  --vp-c-brand-1:      var(--sovereign);
+  --vp-c-brand-2:      #2A3D74;       /* lighter sovereign for hover */
+  --vp-c-brand-3:      var(--seal);   /* tertiary brand → sienna */
+  --vp-c-brand-soft:   rgba(31, 45, 92, 0.14);
+
+  /* Type families */
+  --vp-font-family-base: var(--font-body);
+  --vp-font-family-mono: var(--font-mono);
+
+  /* Home hero — flatten the gradient name + use civic palette.
+     Default theme paints the hero name in a multicolor gradient;
+     civic-monumental is anti-gradient + anti-ornament, so we flatten
+     to ink + EB Garamond display. */
+  --vp-home-hero-name-color:       var(--ink);
+  --vp-home-hero-name-background:  none;
+  --vp-home-hero-image-background-image: none;
+  --vp-home-hero-image-filter:     none;
+
+  /* Custom block accents — info / tip / warning / danger panels */
+  --vp-custom-block-info-bg:    rgba(31, 45, 92, 0.06);
+  --vp-custom-block-info-text:  var(--ink);
+  --vp-custom-block-tip-bg:     rgba(90, 122, 69, 0.10);   /* olive */
+  --vp-custom-block-tip-text:   var(--ink);
+  --vp-custom-block-warning-bg: rgba(139, 58, 27, 0.08);    /* seal */
+  --vp-custom-block-warning-text: var(--ink);
+  --vp-custom-block-danger-bg:  rgba(160, 57, 46, 0.10);    /* brick */
+  --vp-custom-block-danger-text: var(--ink);
+
+  /* Buttons — flatten + civic */
+  --vp-button-brand-bg:           var(--sovereign);
+  --vp-button-brand-hover-bg:     var(--seal);
+  --vp-button-brand-active-bg:    var(--seal);
+  --vp-button-brand-border:       var(--sovereign);
+  --vp-button-brand-hover-border: var(--seal);
+  --vp-button-brand-active-border: var(--seal);
+  --vp-button-brand-text:         var(--bone);
+  --vp-button-brand-hover-text:   var(--bone);
+  --vp-button-brand-active-text:  var(--bone);
+
+  --vp-button-alt-bg:             transparent;
+  --vp-button-alt-hover-bg:       var(--vp-c-bg-mute);
+  --vp-button-alt-border:         var(--rule);
+  --vp-button-alt-hover-border:   var(--sovereign);
+  --vp-button-alt-text:           var(--ink);
+}
+
+/* Dark mode — keep VitePress's default-theme dark palette but flip
+ * the brand color to a brighter sovereign so links remain readable.
+ * Civic-monumental is principally a light-mode design; dark mode
+ * is functional but not the canonical view. */
+.dark {
+  --vp-c-brand-1:    #6c80c2;
+  --vp-c-brand-2:    #8395d0;
+  --vp-c-brand-3:    #c6824f;  /* lighter seal for dark surface */
+  --vp-c-brand-soft: rgba(108, 128, 194, 0.20);
+
+  --vp-home-hero-name-color: var(--vp-c-text-1);
+}
+
+/* ---------------------------------------------------------------- */
+/* Heading typography — display font on h1-h3, tight letter spacing. */
+/* ---------------------------------------------------------------- */
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3,
+.VPHero .name,
+.VPHero .text,
+.VPFeature .title {
+  font-family: var(--font-display) !important;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Hero name is the most prominent surface — pull weight up. */
+.VPHero .name {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* ---------------------------------------------------------------- */
+/* Civic-monumental polish.                                          */
+/* ---------------------------------------------------------------- */
+
+/* Underline links by default — anti-frictionless-modern, pro-document. */
+.vp-doc a:not(.header-anchor) {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--rule);
+  transition: text-decoration-color 0.12s ease;
+}
+.vp-doc a:not(.header-anchor):hover {
+  text-decoration-color: var(--seal);
+  color: var(--seal);
+}
+
+/* hr.rule from the SPA — VitePress's <hr> renders too thin / muted.
+ * Bump to a thin sovereign rule matching the SPA. */
+.vp-doc hr {
+  border: 0;
+  border-top: 1px solid var(--sovereign);
+  margin: 2.5rem 0;
+}
+
+/* No shadows on feature cards (they're not ours; civic-monumental
+ * is anti-shadow). Replace with a flat rule + bone-soft fill. */
+.VPFeature {
+  border: 1px solid var(--rule);
+  box-shadow: none;
+  background-color: transparent;
+}
+.VPFeature:hover {
+  border-color: var(--sovereign);
+  box-shadow: none;
+}
+
+/* Selection color — sovereign on bone. Matches the SPA. */
+::selection {
+  background-color: var(--sovereign);
+  color: var(--bone);
+}
