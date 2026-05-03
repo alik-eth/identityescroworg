@@ -205,13 +205,16 @@ importers:
       commander:
         specifier: ^12.0.0
         version: 12.1.0
-      snarkjs:
-        specifier: ^0.7
-        version: 0.7.6
+      zod:
+        specifier: ^3.22.0
+        version: 3.25.76
     devDependencies:
       '@types/node':
-        specifier: ^20.11.0
+        specifier: ^20.12.0
         version: 20.19.39
+      tsx:
+        specifier: ^4.7.0
+        version: 4.21.0
       typescript:
         specifier: ^5.5.0
         version: 5.9.3

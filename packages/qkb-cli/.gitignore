@@ -1,0 +1,5 @@
+# Build output (single-file pkg binaries land here in T7).
+dist/
+
+# Test runner caches.
+.vitest-cache/
