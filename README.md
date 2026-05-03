@@ -51,7 +51,7 @@ Full issuer-blindness on registration occurrence requires Pedersen-set-membershi
 
 ## Try it
 
-- **Live demo** — pending Base Sepolia deploy. URL will land on [`https://app.zkqes.org/v5/registerV5`](https://app.zkqes.org/v5/registerV5) after the trusted setup ceremony completes.
+- **Live demo** — pending Base Sepolia deploy. URL will land on [`https://app.zkqes.org/ua/registerV5`](https://app.zkqes.org/ua/registerV5) after the trusted setup ceremony completes.
 - **Wallet rotation** — `/account/rotate` lets a registered holder migrate to a new wallet under their existing identity. Three signatures: HKDF on the new wallet, HKDF + rotation-auth on the old wallet, register tx from the new wallet. The rotation-auth signature is bound to `chainId + registryAddress` to prevent cross-deployment replay.
 - **Local end-to-end** — see [Build & fork](#build--fork).
 
@@ -99,18 +99,18 @@ pnpm -F @qkb/circuits test               # circuit + integration suite, ~10 min
 Local end-to-end (Anvil + V5.2 registry + browser proving):
 
 ```bash
-./scripts/dev-chain.sh                   # Anvil + deploy QKBRegistryV5_2 + IdentityEscrowNFT
+./scripts/dev-chain.sh                   # Anvil + deploy QKBRegistry + AuthorityArbitrator → /local.json
 pnpm -F @qkb/web dev                     # http://localhost:5173
 ```
 
-The V5 stub ceremony zkey (~2.1 GB) is **not** committed to the repo — it's gitignored and produced locally via `pnpm -F @qkb/circuits ceremony:v5_2:stub`, or fetched at runtime from `prove.zkqes.org/qkb-v5-stub.zkey` once the ceremony hosting is up. The smaller derived artifacts (`Groth16VerifierV5_2Stub.sol`, `verification_key.json`, sample proof triple) **are** committed under `packages/circuits/ceremony/v5_2/` and pumped to consumer worktrees during integration; the historical `v5_1/` directory remains for V5.1 reproducibility. The full prove + register flow takes ~75 seconds wall time on a 32 GB-RAM workstation; in-browser proving requires a flagship 2024+ phone or a desktop browser.
+The V5 stub ceremony zkey (~2.1 GB) is **not** committed to the repo — it's gitignored and produced locally via `pnpm -F @qkb/circuits ceremony:v5_2:stub`, or fetched at runtime from `prove.zkqes.org/qkb-v5_2-stub.zkey` once the ceremony hosting is up. The smaller derived artifacts (`Groth16VerifierV5_2Stub.sol`, `verification_key.json`, sample proof triple) **are** committed under `packages/circuits/ceremony/v5_2/` and pumped to consumer worktrees during integration; the historical `v5_1/` directory remains for V5.1 reproducibility. The full prove + register flow takes ~75 seconds wall time on a 32 GB-RAM workstation; in-browser proving requires a flagship 2024+ phone or a desktop browser.
 
 ## Packages
 
 - [`packages/circuits`](packages/circuits) — Circom V5 main circuit (3.90 M constraints @ V5.3, 22 frozen public signals), Groth16 stub artifacts, ceremony scripts (round-zero, contribute, finalize).
 - [`packages/contracts`](packages/contracts) — `QKBRegistryV5_2` registry, `IdentityEscrowNFT`, deploy scripts, real-pairing gas snapshot (~2.0 M for `register()` against 2.5 M ceiling).
 - [`packages/sdk`](packages/sdk) — viem helpers, `qkbRegistryV5_2Abi`, witness builder, walletSecret derivation (EOA HKDF + SCW Argon2id).
-- [`packages/qkb-cli`](packages/qkb-cli) — `qkb serve` localhost native prover (V5.4) bundled with rapidsnark; browser at `app.zkqes.org/v5/registerV5` auto-detects via `GET :9080/status` and offloads proof generation when present, with silent fallback to the in-browser worker.
+- [`packages/qkb-cli`](packages/qkb-cli) — `qkb serve` localhost native prover (V5.4) bundled with rapidsnark; browser at `app.zkqes.org/ua/registerV5` auto-detects via `GET :9080/status` and offloads proof generation when present, with silent fallback to the in-browser worker.
 - [`packages/web`](packages/web) — TanStack Router static SPA. EN + UK i18n. Browser proving via Web Worker + snarkjs. Civic-monumental visual language.
 - [`packages/lotl-flattener`](packages/lotl-flattener) — EU LOTL → Poseidon Merkle CA set; combined EU LOTL + Ukrainian national TSL.
 - [`scripts/ceremony-coord`](scripts/ceremony-coord) — admin tooling for the Phase 2 ceremony (R2 + signed URLs with `If-None-Match: '*'` write-once + chain-prefix verification).
