@@ -175,16 +175,18 @@ commit, or test suites in other packages will silently drift off it.
 
 ---
 
-## V5 architecture (current — `feat/v5arch-circuits`)
+## V5 architecture (current)
 
-V5 collapses the V4 leaf+chain split into a **single ~4.02M-constraint
+V5 collapses the V4 leaf+chain split into a **single ~3.88M-constraint
 circuit** (`circuits/QKBPresentationV5.circom`) that takes the QES
 verification on-chain via EIP-7212 P256Verify. **V5.1 amends V5 in-place
-on the same .circom file** — empirical envelope is now ~4.022M
-constraints with a **19-signal** public-input layout (V5 base shipped 14;
-V5.1 adds 5 — see §V5.11 below). The layout is FROZEN per V5 spec §0.1
-+ V5.1 orchestration §1.1 — adding / reordering fields is a cross-worker
-breaking change.
+on the same .circom file (wallet-bound nullifier); V5.2 amends in-place
+again (keccak-on-chain).** Empirical envelope is now ~3.876M constraints
+with a **22-signal** public-input layout (V5 base shipped 14; V5.1 added
+5 → 19; V5.2 dropped 1 + added 4 → 22 — see §V5.11 + §V5.18 below).
+The layout is FROZEN per V5 spec §0.1 + V5.1 orchestration §1.1 + V5.2
+keccak-on-chain spec §"Public-signal layout V5.1 → V5.2" — adding /
+reordering fields is a cross-worker breaking change.
 
 The V4 invariants above (`.p7s` hygiene, test cache stickiness,
 fixture provenance, etc.) remain in force. V5 adds the items below;
@@ -547,3 +549,174 @@ exclusively after the Task 4 pump.
 
 Reproduce: `bash ceremony/scripts/stub-v5_1.sh` (~20-30 min wall with
 pot23 cached, ~30-50 GB peak RSS).
+
+---
+
+## V5.2 — Keccak-on-chain amendment (current)
+
+V5.2 layers on top of V5.1 per
+`docs/superpowers/specs/2026-05-01-keccak-on-chain-amendment.md`
+(v0.5 draft — user-review gate pending). Every V5.1 invariant
+(§V5.11–§V5.17 above —
+wallet-bound nullifier, mod-p reduction, rotationMode gate semantics,
+wallet-uniqueness rule, usedCtx no-reset stance, witness-builder API
+shape) remains in force; the V5.2 items below are amendments to layout
++ ceremony + cross-chain claim, NOT to soundness story.
+
+### V5.18 — Public-signal layout grows from 19 → 22 (FROZEN)
+
+V5.2 inherits the V5.1 19-signal layout, **drops `msgSender` from slot
+0** (V5.1's slot 0 was `msgSender`), shifts every other slot up by 1,
+then **appends 4 new wallet-pk limb signals at slots 18-21**:
+
+| Slot | Signal | Source / V5.1→V5.2 delta |
+|---|---|---|
+| 0 | `timestamp` | V5.1 was slot 1; shifted up to 0 after `msgSender` removal |
+| 1 | `nullifier` | unchanged from V5.1 (Poseidon₂(walletSecret, ctxFieldHash)) |
+| 2-12 | (all V5 base + V5.1 SPKI-commit slots) | unchanged values; slot indices match V5.1 minus 1 |
+| 13 | `identityFingerprint` | V5.1 slot 14 → V5.2 slot 13 |
+| 14 | `identityCommitment` | V5.1 slot 15 → V5.2 slot 14 |
+| 15 | `rotationMode` | V5.1 slot 16 → V5.2 slot 15 |
+| 16 | `rotationOldCommitment` | V5.1 slot 17 → V5.2 slot 16 |
+| 17 | `rotationNewWallet` | V5.1 slot 18 → V5.2 slot 17 (now contract-enforced equality vs `msg.sender` under register mode, was in-circuit in V5.1) |
+| **18** | **`bindingPkXHi`** | **V5.2 NEW** — upper 128 bits big-endian of binding-attested wallet pkX |
+| **19** | **`bindingPkXLo`** | **V5.2 NEW** — lower 128 bits big-endian of binding-attested wallet pkX |
+| **20** | **`bindingPkYHi`** | **V5.2 NEW** — upper 128 bits big-endian of binding-attested wallet pkY |
+| **21** | **`bindingPkYLo`** | **V5.2 NEW** — lower 128 bits big-endian of binding-attested wallet pkY |
+
+This layout is **FROZEN** per spec §"Public-signal layout V5.1 → V5.2".
+Reorderings or insertions are cross-worker breaking changes — the
+contracts-eng calldata indices (`uint[22] publicInputs[18..21]`) and
+web-eng SDK (`packages/sdk/fixtures/v5_2/verification_key.json`) both
+pin against this exact order. V5.1 fixtures at `ceremony/v5_1/`
+(19-signal layout) will NOT round-trip against the V5.2 stub vkey.
+
+### V5.19 — In-circuit keccak gate removed; contract reconstructs
+
+V5 §6.8 had an in-circuit keccak chain that reduced the binding pk to
+`msg.sender` and asserted equality. V5.2 removes that chain entirely:
+
+- `Secp256k1PkMatch.circom` and `Secp256k1AddressDerive.circom` are
+  no longer included from the main circuit (still in-tree for V5.1
+  archive consumers).
+- `bkomuves/hash-circuits` keccak primitive (§V5.6) is no longer
+  invoked from the V5.2 main circuit.
+- The 4 V5.2 limb publics are byte-identical to V5.1's
+  `Secp256k1PkMatch` input bytes (`parser.pkBytes[1..65]`), packed at
+  128-bit instead of 64-bit granularity. Contract reassembles via
+  `pkX = (Hi << 128) | Lo` per coordinate, prepends `0x04` (SEC1
+  uncompressed prefix), runs `keccak256(uncompressed_pk)`, casts the
+  low-160 bits, asserts `== msg.sender`. ~150 gas overhead vs V5.1's
+  in-circuit gate (the contract-side keccak is the cheap leg).
+
+The SEC1 prefix byte `0x04` IS still asserted in-circuit (`parser.pkBytes[0] === 4`)
+to lock the wire format. Removing that constraint would let a malicious
+prover supply `0x06`/`0x07` (SEC1 compressed encodings) and the contract
+keccak would then hash the wrong bytes.
+
+**Cross-chain implication** (informational): V5.2 unblocks deploying the
+verifier on chains without a 256-bit-word keccak gas profile (cheap
+keccak is EVM-native). Practical scope today is bounded to EVM-family —
+the OTHER chain dependency, P-256 ECDSA via EIP-7212 / RIP-7212, is
+still required (mainnet, Base, OP have it; Arbitrum + Polygon zkEVM
+do NOT). Non-EVM chains need separate auth shims.
+
+### V5.20 — Constraint envelope drops; pot22 supersedes pot23
+
+| | V5.1 | V5.2 |
+|---|---|---|
+| Constraints | 4,022,171 | **3,876,304** (-145,867) |
+| Public inputs | 19 | **22** |
+| Private inputs | 10,526 | **10,518** (`pkX[4]` + `pkY[4]` removed; net -8. `msgSender` was a V5.1 PUBLIC signal, not a private input — its removal shifts public-signal count, not private-input count) |
+| Wires | ~3,956,793 | ~3,818,735 |
+| Powers-of-tau | pot23 | **pot22** (cap 4,194,304 — 8% headroom over 3.876M) |
+| ptau download | 9.1 GB | **4.83 GB** (Phase B contributors save 4.6 GB) |
+
+**Pot22 sha256 (first-trust-on-use)**:
+`68a21bef870d5d4a9de39c8f35ebcf04e18ef97e14b2cd3f4c3e39876821d362`
+measured 2026-05-03 against the Polygon zkEVM mirror at
+`https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_22.ptau`.
+Stub-ceremony script `ceremony/scripts/stub-v5_2.sh` pins to this
+hash unconditionally on every run. **Phase B real ceremony MUST
+cross-validate against an independent Hermez announcement source**
+before dispatch (open question #5 in the V5.2 spec).
+
+The `4.5M` constraint cap from §V5.4 still applies; the V5.2 envelope
+sits comfortably under both that cap and the pot22 cap. **Don't widen
+the cap** — same reasoning as §V5.4 (mobile-browser prove-time + zkey
+download).
+
+### V5.21 — Witness-builder API: pk-limb fields are OUTPUT, not input
+
+`buildWitnessV5` no longer accepts `pkX[4]` or `pkY[4]` private-input
+fields — those were V5.1's in-circuit Secp256k1PkMatch inputs and have
+no analog under V5.2. (V5.1 `BuildWitnessV5Input` never had a `msgSender`
+field either — V5.1 derived `msgSender` internally and emitted it as
+public-signal output; V5.2 still derives it internally for the
+register-mode `rotationNewWallet` no-op default but no longer emits it
+to the public-signal vector.) The 4 V5.2 wallet-pk limb fields are
+emitted as witness OUTPUT (auto-derived from the SEC1-uncompressed pk
+parsed out of `bindingBytes`):
+
+```ts
+const witness = await buildWitnessV5({
+  bindingBytes,
+  leafCertDer, leafSpki, intSpki,
+  signedAttrsDer, signedAttrsMdOffset,
+  walletSecret,                 // V5.1 required, unchanged
+  rotationMode: 0,              // V5.1, unchanged
+  // …rotation fields, V5.1, unchanged…
+});
+// witness.bindingPkXHi / bindingPkXLo / bindingPkYHi / bindingPkYLo
+// are computed by the witness builder from parser.pkBytes[1..65],
+// packed big-endian at 128-bit halves.  Contract reassembles + keccaks.
+```
+
+**Caller responsibility**: NONE for the new fields — the witness
+builder owns the derivation. Web-eng SDK consumers do NOT need to
+supply pk-limb inputs. The cross-package isomorphism check (§V5.10)
+covers the byte-identical packing between Node + browser builds.
+
+The packing is `bytesBeToBigInt(slice)` over 16-byte windows from
+`parser.pkBytes[1..17]` / `[17..33]` / `[33..49]` / `[49..65]`. An
+asymmetric-pk unit test in `test/integration/build-witness-v5.test.ts`
+locks down the windowing — symmetric synthetic fixtures (X = 0x11×32,
+Y = 0x22×32) would let a Hi/Lo swap or off-by-16 bug pass silently.
+
+### V5.22 — Stub ceremony at `ceremony/v5_2/` supersedes `ceremony/v5_1/`
+
+T3 of A7.1 produces V5.2-specific stub artifacts at `ceremony/v5_2/`:
+
+- `Groth16VerifierV5_2Stub.sol` — 22-public-input Solidity verifier.
+- `verification_key.json` — V5.2 vkey (no "-stub" suffix per pump
+  contract; web-eng pins to this filename).
+- `proof-sample.json` + `public-sample.json` + `witness-input-sample.json`
+  — the (witness, public, proof) triple for round-trip integration tests.
+- `qkb-v5_2-stub.zkey` — gitignored (~2.0 GB; pump via R2).
+- `zkey.sha256` — atomic-write integrity manifest. Manifest invariant:
+  `zkey.sha256 exists ⇔ ceremony script reached the last line`.
+
+The V5.1 stub at `ceremony/v5_1/` is left as an archive (different
+circuit, 19 public signals, in-circuit keccak chain). Downstream
+consumers (contracts-eng's V5.2 register/rotateWallet, web-eng SDK
+fixtures) consume `ceremony/v5_2/` exclusively after the T3 pump.
+The V5 stub at `ceremony/v5-stub/` (14 public signals, pre-A6.1)
+remains the older archive.
+
+Reproduce: `pnpm -F @qkb/circuits ceremony:v5_2:stub` (~25 min wall
+with pot22 cached + R1CS+wasm cached, ~30-50 GB peak RSS; ~60-120 min
+cold including pot22 fetch over EU broadband). The script is
+idempotent — re-runs short-circuit through cached artifacts and
+re-emit a bytewise-stable manifest. Cascade pre-wipe pattern: any
+upstream regen wipes `zkey.sha256` BEFORE the risky operation runs,
+so a mid-run failure cannot leave a stale manifest validating against
+an incoherent bundle.
+
+**Per-step cookbook detail** (calibrated to 2026-05-03 T3 run):
+- `snarkjs zkey contribute` runs **~5-7 min** on V5.2's ~2 GB zkey,
+  not "~30s" as V5.1's README implied — snarkjs 0.7.6 emits DEBUG-level
+  per-65,536-wire progress that V5.1's contribute log didn't surface.
+  Phase B contributors who watch their machine sit at "L Section
+  327680/3818712" for several minutes will assume something is broken
+  unless they read this section first. The work is real; the wall
+  scales with L+M+H section size.
