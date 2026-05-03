@@ -134,6 +134,15 @@ export default defineConfig({
       'specs/person-nullifier.md',
     'superpowers/specs/2026-04-18-split-proof-pivot.md':
       'specs/split-proof-pivot.md',
+    // Orchestration plans surfaced in the Contributing section.
+    'superpowers/plans/2026-04-29-v5-architecture-orchestration.md':
+      'contributing/plans/v5-architecture.md',
+    'superpowers/plans/2026-04-30-wallet-bound-nullifier-orchestration.md':
+      'contributing/plans/v5_1-wallet-bound-nullifier.md',
+    'superpowers/plans/2026-05-03-qkb-cli-server-orchestration.md':
+      'contributing/plans/v5_4-qkb-cli-server.md',
+    'superpowers/plans/2026-05-03-v5_3-orchestration.md':
+      'contributing/plans/v5_3-orchestration.md',
     'cli-release.md': 'install/qkb-cli.md',
     'integrations.md': 'reference/integrations.md',
     'release-notes/v0.5.2-contracts.md':
@@ -221,6 +230,27 @@ export default defineConfig({
           text: 'Contributing',
           items: [{ text: 'Overview', link: '/contributing/' }],
         },
+        {
+          text: 'Orchestration plans',
+          items: [
+            {
+              text: 'V5 architecture',
+              link: '/contributing/plans/v5-architecture',
+            },
+            {
+              text: 'V5.1 — wallet-bound nullifier',
+              link: '/contributing/plans/v5_1-wallet-bound-nullifier',
+            },
+            {
+              text: 'V5.3 — OID anchor',
+              link: '/contributing/plans/v5_3-orchestration',
+            },
+            {
+              text: 'V5.4 — QKB CLI server',
+              link: '/contributing/plans/v5_4-qkb-cli-server',
+            },
+          ],
+        },
       ],
     },
 
@@ -258,6 +288,15 @@ export default defineConfig({
     config: () => {
       // No-op; VitePress's default markdown-it config already
       // includes the markdownItIncludeFile plugin via the framework.
+    },
+    // Alias `circom` to a similar grammar so shiki stops falling back
+    // to plaintext on V5 circuit code blocks. Circom's syntax is
+    // closer to Rust (pragma, template, signal) than TypeScript;
+    // pragma + template highlight reasonably under the rust grammar.
+    // Not perfect but eliminates the 11 build-time warnings without
+    // needing a full custom textmate grammar (overkill for V1).
+    languageAlias: {
+      circom: 'rust',
     },
   },
 
