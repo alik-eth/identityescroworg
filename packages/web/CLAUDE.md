@@ -285,8 +285,41 @@ Fields written per route:
    callers that need the freshest observation should re-render on
    `status` rather than chain on the recheck return value.
 
-20. **(reserved for V5.3 T5 OID-anchor invariant — see
-    `feat/v5_3-web` branch, will land on main as V5.20.)**
+20. **V5.3 witness MUST emit `subjectSerialOidOffsetInTbs` (F1
+    OID-anchor).** Spec ref:
+    `2026-05-03-v5_3-oid-anchor-amendment.md` §F1.2 (founder-approved
+    minimal). Closes the V5.2 Sybil vector where a prover could pick
+    any 32-byte window in the signed TBS that "looks like" a serial
+    number — V5.3's circuit (`feat/v5_3-circuits` commit `25bf103`)
+    constrains the chosen offset to point at a real
+    `AttributeTypeAndValue { type=2.5.4.5, value=DirectoryString }`
+    ASN.1 frame.
+
+    The witness builder
+    (`@qkb/sdk` `src/witness/v5/build-witness-v5_2.ts`) computes
+    `oidOffsetInTbs = subjectSerialValueOffsetInTbs - 7` (5 OID
+    bytes + 1 string-tag + 1 length-byte) and emits it as a decimal
+    string alongside the V5.2 fields. The circuit's §6.9b block
+    pins the algebraic identity
+    `subjectSerialValueOffsetInTbs === subjectSerialOidOffsetInTbs + 7`,
+    so SDK and circuit MUST agree on the constant `7`.
+
+    SDK-side defense-in-depth: the V5.2 builder verifies the bytes
+    at the computed offset match `06 03 55 04 05 <13|0c> NN`
+    (DER OID 2.5.4.5 + PrintableString|UTF8String + length =
+    subjectSerialValueLength) and throws a pointed build-time error
+    on mismatch — catches parser drift before reaching the prover
+    and saves ~10 s on the cryptic snarkjs constraint failure that
+    would otherwise surface. Removing the SDK self-check in favor
+    of "trust the circuit" is a regression: the circuit's failure
+    mode is "constraint not satisfied" with no offset context.
+
+    **Public-signal layout UNCHANGED** — `subjectSerialOidOffsetInTbs`
+    is a PRIVATE input. `verifyProof(uint[22])` keeps its signature;
+    no SDK ABI re-pump. Real-Diia certs encode `subject.serialNumber`
+    as PrintableString (0x13) per ETSI EN 319 412-1; the UTF8String
+    (0x0c) branch is in spec §F1.2 for forward compatibility but
+    QTSP-canonical Diia output uses 0x13.
 
 21. **`VITE_TARGET` slices the SPA into landing/app builds for the
     three-subdomain split.** Per BRAND.md §Domains (locked
