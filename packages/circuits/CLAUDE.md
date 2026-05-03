@@ -720,3 +720,214 @@ an incoherent bundle.
   327680/3818712" for several minutes will assume something is broken
   unless they read this section first. The work is real; the wall
   scales with L+M+H section size.
+
+## V5.3 — OID-anchor + rotationNewWallet range-check amendment (current)
+
+The V5.3 amendment adds three changes to `QKBPresentationV5.circom`
+in-place: F1 OID-anchor (closes the V5.2 Sybil vector via
+"any 32-byte window in signed TBS"), F2 rotationNewWallet 160-bit
+range-check (defense-in-depth; circuit + contract on rotateWallet),
+F3 walletSecret↔msgSender contract-side doc note. **Public-signal
+layout UNCHANGED** — V5.3 keeps V5.2's frozen 22-signal shape;
+contracts-eng's `verifyProof(uint[22])` calldata + web-eng's SDK fixture
+shape carry across unchanged.
+
+Spec: `docs/superpowers/specs/2026-05-03-v5_3-oid-anchor-amendment.md`
+(v0.2; v0.1 → v0.2 amendments folded same-day from T1+T2 measurements).
+Orchestration: `docs/superpowers/plans/2026-05-03-v5_3-orchestration.md`.
+
+### V5.31 — Subject-serial OID-anchor (F1)
+
+The V5.2 §6.9 leafTbs↔leafCert byte-consistency gate proves the 32-byte
+serial-number window is present in the signed TBS, but the offset is a
+free witness — a malicious prover could pick ANY 32-byte window in the
+TBS that survives the §6.6 X509SubjectSerial range-check. Combined with
+rotateWallet (which clears the old `identityCommitment` slot), this
+becomes a multi-mint Sybil vector (one QES → N identities by selecting
+different sub-windows).
+
+V5.31 closes this by adding a NEW private witness input
+`subjectSerialOidOffsetInTbs` and 7 multiplexer reads (5 OID bytes +
+1 string-tag + 1 length) at that offset:
+
+```circom
+// OID 2.5.4.5 (id-at-serialNumber): 06 03 55 04 05
+// String tag: 0x13 PrintableString OR 0x0c UTF8String (XOR check)
+// Length byte == subjectSerialValueLength
+// subjectSerialValueOffsetInTbs === subjectSerialOidOffsetInTbs + 7
+```
+
+Cost: **+19,892 R1CS constraints** (V5.2 baseline 3,876,304 →
+3,896,196 after F1 alone). The cost dominates V5.3's footprint;
+circomlib `Multiplexer(1, 1408)` is **~2,800 constraints/mux**, not
+~1,408 linear (uses MultiMux{n} binary-tree decomposition + per-bit
+Num2Bits selector). Spec v0.1 projected ~10K from a per-mux ≈ MAX
+linear scan; v0.2 corrected to ~2,800/mux.
+
+The accepted string-tag scope is intentionally `0x13`/`0x0c` only.
+X.520's `0x14` (TeletexString), `0x16` (IA5String), `0x1e` (BMPString)
+are rejected because §6.6's byte-pack assumes 1-byte-per-character
+PrintableString-or-UTF8String semantics — accepting BMPString (UTF-16BE)
+would silently produce wrong identityFingerprint values. ETSI EN 319
+412-1 §5.1.3 namespace strings (`TINUA-…`, `PNODE-…`, `IDC??-`, etc.)
+are all PrintableString-compatible, so widening to the X.520 superset
+adds attack surface without serving a real namespace.
+
+Witness builder: the new private input is **derived trivially** —
+`subjectSerialOidOffsetInTbs = subjectSerialValueOffsetInTbs - 7` (the
+7-byte ASN.1 frame is fixed-shape per X.690 + X.520 length is single-
+byte definite-form because the ETSI namespace strings are ≤ 127 bytes).
+No X.509 walker change in `src/build-witness-v5.ts`; just a single-line
+addition + emission.
+
+### V5.32 — rotationNewWallet 160-bit range-check (F2)
+
+V5.32 adds an in-circuit `Num2Bits(160)` over `rotationNewWallet`,
+bounding it to a true Ethereum-address-shaped value before the proof
+ships to the contract. Eliminates the "trust the contract to bound it"
+assumption.
+
+**Critical optimizer footgun**: a bare `Num2Bits(160)` whose bit-outputs
+are unused is dead-code-eliminated by **circom 2.1.9 -O1** when the
+input has no other downstream consumer in the circuit. Empirically
+measured during T2: bare pattern adds **0 R1CS constraints**. The V5.2
+walletSecret/oldWalletSecret Num2Bits(254) checks DO fire (verified
+empirically via task #63 — V5.2 minus those two checks shows exactly
+−508 = 254+254 constraint delta) because walletSecret feeds Poseidon₂
+for nullifier + identityCommitment; the input is consumed downstream,
+forcing the bit-decomposition alive.
+
+For `rotationNewWallet` (orphaned post-V5.2 keccak-on-chain when the
+in-circuit equality gate dropped), the bare pattern fails. Fix is the
+**parent-level boolean re-assertion + weighted-sum equality** pattern:
+
+```circom
+component rotationNewWalletBits = Num2Bits(160);
+rotationNewWalletBits.in <== rotationNewWallet;
+var rotationBitWeightedSum = 0;
+for (var rnb = 0; rnb < 160; rnb++) {
+    rotationNewWalletBits.out[rnb] * (rotationNewWalletBits.out[rnb] - 1) === 0;
+    rotationBitWeightedSum += rotationNewWalletBits.out[rnb] * (1 << rnb);
+}
+rotationBitWeightedSum === rotationNewWallet;
+```
+
+Booleanity re-assertion + weighted-sum equality together force both
+legs of the optimizer rule to engage. Cost: **+161 R1CS constraints**
+(160 booleanity + 1 sum-eq). This is the canonical optimizer-aliveness
+pattern for any future amendment that needs an in-circuit range-check
+on an otherwise-orphaned input — DO NOT use bare `Num2Bits(N)` or
+`LessThan(N+1)` (both empirically observed to be optimized away).
+
+#### Post-mortem — V5.1 → V5.2 cascading aliveness loss
+
+The optimizer-pruning vulnerability for `rotationNewWallet` is a
+**cascading effect from the V5.2 amendment**, not a V5.3-introduced
+regression. Timeline:
+
+- **V5.1**: `rotationNewWallet` was kept alive (under -O1) by the
+  in-circuit equality gate `rotationNewWallet === msgSender`
+  (V5.1's wallet-uniqueness anchor). That gate's existence
+  forced `rotationNewWallet`'s value to be consumed by another
+  constraint, which in turn forced any range-check chain on it
+  to stay live. A bare `Num2Bits(160)` would have fired in V5.1.
+- **V5.2 keccak-on-chain amendment**: dropped the in-circuit
+  `=== msgSender` equality (keccak gate moved to the contract,
+  msgSender removed from public signals). That dropped the
+  ONLY consumer of `rotationNewWallet` inside the circuit.
+- **Latent effect**: any future bare `Num2Bits(160)` over
+  `rotationNewWallet` would silently be optimized away, because
+  the input is now orphaned. V5.3's defense-in-depth range-check
+  was the first amendment to attempt one, exposing the issue.
+
+**Generalized rule (canonical for any future bit-range work):**
+
+> When a public-signal slot is no longer constrained by any
+> in-circuit gate (e.g., V5.2's `rotationNewWallet` after dropping
+> the in-circuit equality with `msgSender`), bare `Num2Bits()`
+> range checks may be optimized away by circom -O1. Use parent-
+> aliveness pattern (boolean re-assert outputs at parent scope +
+> weighted-sum equality reconstruction) for orphaned signals.
+
+The previous-amendment lesson: **constraint deletions can void
+range-check assumptions in unrelated amendments** added later.
+When dropping an in-circuit constraint, audit downstream amendments
+that may have implicitly relied on it for aliveness.
+
+#### Why V5.2's `walletSecret` / `oldWalletSecret` Num2Bits(254) ARE sound
+
+Empirical verification (task #63, 2026-05-03): V5.2 baseline 3,876,304
+constraints minus `walletSecret` and `oldWalletSecret` Num2Bits(254)
+checks = 3,875,796. Delta: **−508 = 254 + 254** — both bare Num2Bits
+chains DID land in the r1cs.
+
+Why these are different from `rotationNewWallet`'s case: `walletSecret`
+flows into Poseidon₂ for nullifier (`Poseidon₂(walletSecret, ctxHash)`)
++ identityCommitment (`Poseidon₂(subjectPack, walletSecret)`) — the
+input is **consumed downstream**, which forces the bit-decomposition
+chain alive even without parent-aliveness. `oldWalletSecret`
+similarly flows into identityCommitment-of-old-fp via Poseidon₂
+under the rotate-mode gate. Both have a downstream consumer that
+keeps their range-check chain alive.
+
+**T2.5 fold-in NOT needed for V5.2 walletSecret/oldWalletSecret.**
+The bare `Num2Bits(254)` checks are sound at V5.2 because of the
+Poseidon-downstream consumption. V5.3 amendment scope stays at T1
+(F1 OID-anchor) + T2 (witness builder + tests) + T3 (ceremony stub)
++ docs. Pot22 headroom remains 7.10%.
+
+**Workers should question "skip verification, just fix" calls when
+verification is cheap** (process learning logged 2026-05-03 by lead).
+The empirical compile (~10 min) was cheaper than the cost of a
+defensive fix that would have added 508 redundant constraints,
+muddied the auditor narrative, and committed the team to a non-
+needed amendment.
+
+Contract side (V5.3 §F2.2): the contract-side range check belongs on
+**`rotateWallet()` only** (per contracts-eng commit `1b260d8`). In
+`register()` the contract derives `rotationNewWallet` from keccak
+internally → naturally 160-bit by construction, so a check would be
+dead code. In `rotateWallet()` the holder supplies the value as a free
+witness (the new EOA address); a buggy SDK or malicious client could
+pass high-bit-set garbage, the contract-side check catches it.
+
+### V5.33 — walletSecret ↔ msgSender doc (F3)
+
+V5.33 is **documentation-only** — a comment block at the walletSecret
+private input declaration in `QKBPresentationV5.circom` referencing the
+V5.1 wallet-bound nullifier amendment §"Wallet-uniqueness gate
+location" and stating that the wallet-uniqueness invariant is
+enforced contract-side at `identityWallets[fp]`, not circuit-side.
+
+Reason for the explicit doc: a future contributor seeing
+"msgSender isn't a private input in the circuit, must be wrong, let's
+add it" would either be ineffective (V5.2 dropped msgSender as a public
+signal) or break the rotation flow's storage semantics (the circuit
+can't see on-chain state; the wallet-uniqueness gate requires reading
+ALL prior identities for the same fp, which requires storage reads).
+
+No constraint cost.
+
+### V5.34 — Constraint envelope (V5.3 measured)
+
+| Source | V5.2 measured | V5.3 measured |
+|---|---|---|
+| Base | 3,876,304 | 3,876,304 |
+| F1 OID-anchor | — | +19,892 |
+| F2 rotationNewWallet aliveness | — | +161 |
+| F3 doc | — | 0 |
+| **Total** | 3,876,304 | **3,896,356** |
+| pot22 cap | 4,194,304 | 4,194,304 |
+| Headroom | 7.6% | **7.10%** |
+
+Pot22 reused; no jump to pot23. V5.3 ceremony is a fresh single-
+contributor stub (pre-Phase B) at `ceremony/v5_3/` produced by
+`ceremony/scripts/stub-v5_3.sh` (mirrors V5.2's stub script with
+`v5_2/` → `v5_3/` path renames + `Groth16VerifierV5_3Stub` contract
+name). Reproduce: `pnpm -F @qkb/circuits ceremony:v5_3:stub`. The V5.2
+stub at `ceremony/v5_2/` becomes the V5.2 archive, matching the V5.1 →
+V5.2 supersession pattern.
+
+If a future amendment grows constraints another ~120K (lands above
+4.05M ≈ 96.6% of pot22 cap), spec amendment + ceremony pot22 → pot23
+step-up is required.

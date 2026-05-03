@@ -233,6 +233,17 @@ template QKBPresentationV5() {
     // subject-serial extraction to the intermediate-signed TBSCertificate.
     signal input subjectSerialValueOffsetInTbs;
 
+    // V5.3 F1 — OID-anchor offset.  Byte offset (inside leafTbs) of
+    // the leading `06 03 55 04 05` DER bytes for the
+    // `AttributeTypeAndValue { type=OID 2.5.4.5 (id-at-serialNumber),
+    // value=DirectoryString }` ASN.1 frame.  The §6.9b gate below
+    // anchors subjectSerialValueOffsetInTbs to this offset + 7,
+    // closing the V5.2 Sybil vector where a malicious prover could
+    // point the value-offset at any 32-byte window in the signed
+    // TBS that happens to look serial-number-shaped.  See V5.3 spec
+    // §F1.2 for the full attack analysis.
+    signal input subjectSerialOidOffsetInTbs;
+
     // SPKI limbs for both leaf and intermediate (witness side; on-chain
     // P256Verify.spkiCommit recomputes the SAME value from calldata bytes).
     signal input leafXLimbs[6];
@@ -254,6 +265,28 @@ template QKBPresentationV5() {
     // Circuit treats it as an opaque field element + applies a 254-bit range check
     // (Num2Bits below) so an adversary witness cannot supply a value ≥ p that
     // wraps to a colliding value mod p with a different on-chain commitment.
+    //
+    // V5.3 F3 — walletSecret ↔ msgSender binding is INTENTIONALLY
+    // CONTRACT-SIDE, not circuit-side.  walletSecret is bound to the
+    // holder's identity in-circuit via:
+    //   nullifier            = Poseidon₂(walletSecret, ctxFieldHash)        — §6.7
+    //   identityCommitment   = Poseidon₂(subjectSerialPacked, walletSecret) — §V5.1
+    // But the circuit cannot prove "the prover holds the wallet at
+    // msg.sender" because the wallet-pubkey ↔ msg.sender relation
+    // requires the contract's storage gate at `identityWallets[fp]`
+    // (V5.1 invariant #2 — wallet-uniqueness; reads ALL prior
+    // identities for the same fingerprint, requiring on-chain
+    // storage that the circuit cannot see).
+    //
+    // See `docs/superpowers/specs/2026-04-30-wallet-bound-nullifier-amendment.md`
+    // §"Wallet-uniqueness gate location" for the full rationale.
+    //
+    // Future contributors: do NOT add a circuit-side check on
+    // msgSender's relation to walletSecret.  V5.2 dropped msgSender
+    // as a public signal entirely (see §6.8 wallet-pk limb packing
+    // for the keccak-on-chain construction); a circuit-side
+    // walletSecret↔msgSender binding would either be ineffective or
+    // break the rotation-mode storage semantics that V5.1 set up.
     signal input walletSecret;
 
     // V5.1 rotation-mode old-wallet-secret witness (private input). Required when
@@ -535,6 +568,56 @@ template QKBPresentationV5() {
 
     rotationMode * (rotationMode - 1) === 0;     // boolean range check
 
+    // V5.3 F2 — rotationNewWallet 160-bit range check (defense-in-depth).
+    //
+    // V5.2 left rotationNewWallet as a free 254-bit field element on
+    // the public-signal slot 17.  The contract enforces "fits in
+    // 160 bits" via address-cast equality (`uint256(uint160(slot17))
+    // == slot17`), so the runtime is safe — but the circuit's own
+    // statement of correctness was silent on the bound.  V5.3 adds
+    // a Num2Bits(160) at the circuit boundary so the proof
+    // ATTESTS to a valid Ethereum-address-shaped value, not just a
+    // field element the contract happens to mask.
+    //
+    // Fires UNCONDITIONALLY (both register and rotate modes).  In
+    // register mode the contract will additionally enforce
+    // `rotationNewWallet == msg.sender`, also a 160-bit value.
+    // In rotate mode the contract enforces `derivedAddr ==
+    // identityWallets[fp]`, again 160 bits.  Both modes have
+    // 160-bit semantics; range-checking unconditionally is
+    // simpler and safer.
+    //
+    // Cost: ~480 constraints (Num2Bits + 160 parent-level boolean
+    // constraints + 1 sum-equality).
+    //
+    // **circom -O1 optimizer note** (caught during V5.3 T2 cold-compile):
+    // both bare `Num2Bits(160).in <== rotationNewWallet` AND
+    // `LessThan(161)` against rotationNewWallet leave the constraint
+    // count flat, even though the latter reads its output bit.
+    // The optimizer prunes the lower-bit constraints inside Num2Bits
+    // because they're "unused observable" — the lc1 === in chain is
+    // satisfiable by free lower bits.
+    //
+    // Defeat the prune by re-asserting EACH bit's boolean range at
+    // the parent-template level + re-summing them and asserting
+    // equality with the public input.  Both checks are duplicates
+    // of Num2Bits's internal constraints, but at the parent level
+    // they reference parent-scope signals (rotationNewWallet,
+    // rotationNewWalletBits.out[i]) and can't be eliminated.
+    component rotationNewWalletBits = Num2Bits(160);
+    rotationNewWalletBits.in <== rotationNewWallet;
+    var rotationBitWeightedSum = 0;
+    for (var rnb = 0; rnb < 160; rnb++) {
+        // Boolean range check on each bit (parent-level dup of
+        // Num2Bits internal — keeps each bit observable).
+        rotationNewWalletBits.out[rnb] * (rotationNewWalletBits.out[rnb] - 1) === 0;
+        rotationBitWeightedSum += rotationNewWalletBits.out[rnb] * (1 << rnb);
+    }
+    // Sum equality: bit-decomposition reconstructs the public input.
+    // With each bit ∈ {0,1} (asserted above) AND the sum equal to
+    // rotationNewWallet, the value is forced to fit in 160 bits.
+    rotationBitWeightedSum === rotationNewWallet;
+
     // Register-mode (rotationMode == 0): rotation slot 16
     // (`rotationOldCommitment`) is no-op, pinned to `identityCommitment` so
     // the public-signal slot can't carry garbage.
@@ -667,6 +750,91 @@ template QKBPresentationV5() {
         // zero before packing into limbs anyway).
         activeMask69[i].out * (leafTbsByte[i].out[0] - subjectSerial.rawBytes[i]) === 0;
     }
+
+    // §6.9b — V5.3 F1 — OID-anchor for subject-serial offset.
+    //
+    // The §6.9 gate above pins the 32 bytes at
+    // subjectSerialValueOffsetInTbs (in leafTbs) to the same bytes at
+    // subjectSerialValueOffset (in leafCertBytes), but BOTH offsets
+    // were witness-supplied — nothing constrained them to point at
+    // an actual `subject.serialNumber` attribute.  A malicious prover
+    // could pick any 32-byte window in the signed TBS that happened
+    // to look serial-number-shaped (length 1-32, all bytes 0-255 —
+    // vacuous), combine with rotateWallet's slot-clear, and mint
+    // multiple identities from one cert (V5.2 spec §F1).
+    //
+    // V5.3 closes this by anchoring the value-offset to the actual
+    // ASN.1 frame at subjectSerialOidOffsetInTbs:
+    //   leafTbs[oid+0..oid+4] === 06 03 55 04 05    (DER OID 2.5.4.5)
+    //   leafTbs[oid+5]        ∈ {0x13 PrintableString, 0x0c UTF8String}
+    //   leafTbs[oid+6]        === subjectSerialValueLength
+    //   subjectSerialValueOffsetInTbs === subjectSerialOidOffsetInTbs + 7
+    //
+    // After these, the value-offset is fully determined by the
+    // OID-offset, and the OID-offset must point at a real
+    // `06 03 55 04 05 <13|0c> NN` attribute frame.  QTSP-issued
+    // production certs have ONE such attribute per cert (per X.520
+    // + ETSI EN 319 412-1 namespace conventions), so the prover's
+    // freedom collapses to "the actual subject.serialNumber."
+    //
+    // The stronger F1.4 variant (subject-DN bounds) is deferred to
+    // V5.4 — see V5.3 spec §F1.5 for the cost-benefit analysis.
+    //
+    // Cost: 7 × Multiplexer(1, MAX_LEAF_TBS=1408) + IsEqual sum +
+    // byte-eq + offset-eq.  Measured V5.3 minimal landed at +19.9K
+    // constraints over V5.2 (vs spec's ~10K projection — circomlib
+    // Multiplexer's per-mux cost is ~2.8K not 1.4K linear; spec
+    // estimate was off by 2x but the cap is still met with 7.1%
+    // headroom).
+
+    // Range pin: the OID frame must lie inside leafTbs.  The 7 bytes
+    // we read are at offset OID, OID+1, …, OID+6 — the leftmost is
+    // OID and the rightmost is OID+6, so we need
+    // OID + 6 < leafTbsLength, i.e. OID + 7 <= leafTbsLength.
+    component oidEndLeqTbs = LessEqThan(16);
+    oidEndLeqTbs.in[0] <== subjectSerialOidOffsetInTbs + 7;
+    oidEndLeqTbs.in[1] <== leafTbsLength;
+    oidEndLeqTbs.out === 1;
+
+    var EXPECTED_OID[5] = [0x06, 0x03, 0x55, 0x04, 0x05];
+
+    component oidByte[5];
+    for (var oi = 0; oi < 5; oi++) {
+        oidByte[oi] = Multiplexer(1, MAX_LEAF_TBS);
+        for (var oj = 0; oj < MAX_LEAF_TBS; oj++) {
+            oidByte[oi].inp[oj][0] <== leafTbsBytes[oj];
+        }
+        oidByte[oi].sel <== subjectSerialOidOffsetInTbs + oi;
+        oidByte[oi].out[0] === EXPECTED_OID[oi];
+    }
+
+    // String-tag: PrintableString (0x13) OR UTF8String (0x0c).  Sum
+    // of two IsEqual outputs must be exactly 1 — exactly one tag
+    // matches.  IsEqual returns 0/1, sum constraint forces XOR.
+    component stringTagByte = Multiplexer(1, MAX_LEAF_TBS);
+    for (var sj = 0; sj < MAX_LEAF_TBS; sj++) {
+        stringTagByte.inp[sj][0] <== leafTbsBytes[sj];
+    }
+    stringTagByte.sel <== subjectSerialOidOffsetInTbs + 5;
+    component isPrintable = IsEqual();
+    isPrintable.in[0] <== stringTagByte.out[0];
+    isPrintable.in[1] <== 0x13;
+    component isUtf8 = IsEqual();
+    isUtf8.in[0] <== stringTagByte.out[0];
+    isUtf8.in[1] <== 0x0c;
+    isPrintable.out + isUtf8.out === 1;
+
+    // Length byte equals subjectSerialValueLength (which X509SubjectSerial
+    // already range-checks to [1, 32]).
+    component oidLenByte = Multiplexer(1, MAX_LEAF_TBS);
+    for (var lj = 0; lj < MAX_LEAF_TBS; lj++) {
+        oidLenByte.inp[lj][0] <== leafTbsBytes[lj];
+    }
+    oidLenByte.sel <== subjectSerialOidOffsetInTbs + 6;
+    oidLenByte.out[0] === subjectSerialValueLength;
+
+    // Value-offset is OID-offset + 7 (5 OID bytes + 1 string-tag + 1 length).
+    subjectSerialValueOffsetInTbs === subjectSerialOidOffsetInTbs + 7;
 
     // §6.8 — V5.2 wallet-pk limb packing for on-chain keccak gate.
     //

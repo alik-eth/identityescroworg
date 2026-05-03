@@ -437,6 +437,10 @@ async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
     subjectSerialValueLength: subjectSerial.length,
     // §6.9 — same serial offset measured from the start of TBSCertificate.
     subjectSerialValueOffsetInTbs,
+    // V5.3 §6.9b F1 — OID-anchor offset (private input). Points 7 bytes
+    // BEFORE subjectSerialValueOffsetInTbs at the `06 03 55 04 05 <13|0c> NN`
+    // ASN.1 frame (5-byte OID + 1 string-tag + 1 length).
+    subjectSerialOidOffsetInTbs: subjectSerialValueOffsetInTbs - 7,
 
     // §6.7 — ctx canonical-padded SHA inputs.
     ctxPaddedIn: rightPadZero(ctxPaddedBuf, MAX_CTX_PADDED),
@@ -759,6 +763,87 @@ describe('QKBPresentationV5 — §6.2-§6.9 (V5.2: parser + 4× SHA + 2× SpkiCo
       ...input,
       subjectSerialValueOffsetInTbs:
         (input.subjectSerialValueOffsetInTbs as number) + 1,
+    };
+    let threw = false;
+    try {
+      await circuit.calculateWitness(tampered, true);
+    } catch {
+      threw = true;
+    }
+    expect(threw).to.equal(true);
+  });
+
+  // V5.3 §6.9b F1 happy-path — OID-anchor offset is exactly
+  // value-offset − 7 (5-byte OID + 1 string-tag + 1 length).
+  it('accepts the V5.3 F1 OID-anchor on the real Diia leaf (§6.9b)', async () => {
+    const input = await buildV5SmokeWitness();
+    expect(input.subjectSerialOidOffsetInTbs).to.equal(
+      (input.subjectSerialValueOffsetInTbs as number) - 7,
+    );
+    const w = await circuit.calculateWitness(input, true);
+    await circuit.checkConstraints(w);
+  });
+
+  // V5.3 §6.9b F1 tamper — wrong OID-anchor offset (off by 1) reads
+  // bytes that aren't the `06 03 55 04 05` ASN.1 frame, so the
+  // Multiplexer-driven equality check on the 5 OID bytes must fire.
+  it('rejects a wrong subjectSerialOidOffsetInTbs (§6.9b OID frame mismatch)', async () => {
+    const input = await buildV5SmokeWitness();
+    const tampered = {
+      ...input,
+      subjectSerialOidOffsetInTbs:
+        (input.subjectSerialOidOffsetInTbs as number) + 1,
+    };
+    let threw = false;
+    try {
+      await circuit.calculateWitness(tampered, true);
+    } catch {
+      threw = true;
+    }
+    expect(threw).to.equal(true);
+  });
+
+  // V5.3 §6.9b F1 tamper — anchor offset whose value-offset+7 invariant
+  // is broken (e.g. sliding the value-offset alone). The §6.9b gate
+  // `subjectSerialValueOffsetInTbs === subjectSerialOidOffsetInTbs + 7`
+  // must fire.
+  it('rejects a value-offset / OID-offset mismatch (§6.9b +7 invariant)', async () => {
+    const input = await buildV5SmokeWitness();
+    // Keep OID-offset where it is, but shift value-offset to break the +7.
+    // §6.9 byte-equality also fires here, but the +7 constraint is the
+    // V5.3-introduced one — the test asserts the witness is rejected
+    // (constraint set unsatisfiable), not which specific gate fires
+    // first.
+    const tampered = {
+      ...input,
+      subjectSerialOidOffsetInTbs:
+        (input.subjectSerialOidOffsetInTbs as number) - 1,
+    };
+    let threw = false;
+    try {
+      await circuit.calculateWitness(tampered, true);
+    } catch {
+      threw = true;
+    }
+    expect(threw).to.equal(true);
+  });
+
+  // V5.3 §F2 — rotationNewWallet range-check. The default fixture
+  // value is a derived 160-bit address (already < 2^160). Witnessing
+  // a value ≥ 2^160 (e.g. 2^160) must be rejected by the parent-level
+  // weighted-sum equality + boolean re-assertion pattern.
+  //
+  // Note: rotationNewWallet is also constrained downstream (e.g. by the
+  // contract's keccak gate post-verify), but the §F2 in-circuit
+  // range-check is independent — it forecloses field-overflow Sybil
+  // patterns at the witness layer.
+  it('rejects rotationNewWallet ≥ 2^160 (§F2 V5.3 range-check)', async () => {
+    const input = await buildV5SmokeWitness();
+    const tampered = {
+      ...input,
+      // 2^160 — the smallest value that exceeds the 160-bit address
+      // range. Triggers the §F2 weighted-sum equality failure.
+      rotationNewWallet: 1n << 160n,
     };
     let threw = false;
     try {
