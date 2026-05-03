@@ -1,7 +1,7 @@
 // Embedded manifest-signing public key — compile-time constant.
 //
 // Production builds embed lead's production Ed25519 public key (which
-// signs `https://identityescrow.org/qkb-cli-manifest.json`).  Dev
+// signs `https://app.zkqes.org/qkb-cli-manifest.json`).  Dev
 // builds embed the lead-issued dev key at
 // `/tmp/qkb-cli-dev-keys/manifest.pub.pem` so workers can exercise
 // the signature path against the dev manifest at

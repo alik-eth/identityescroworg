@@ -47,7 +47,7 @@ export function serveCommand(program: Command): void {
     .option(
       '--allowed-origin <url>',
       'CORS origin allowed to /prove',
-      'https://identityescrow.org',
+      'https://app.zkqes.org',
     )
     .action(async (rawOpts: ServeOptions) => {
       const opts: ServeOptions = rawOpts;

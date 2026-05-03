@@ -3,7 +3,7 @@
 Localhost-bound native rapidsnark prover for the V5.2 register flow.
 
 `qkb serve` boots an HTTP server on `127.0.0.1:9080` that the browser
-flow at `identityescrow.org/v5/registerV5` detects and offloads the
+flow at `app.zkqes.org/v5/registerV5` detects and offloads the
 prove step to. Same proof, **6× faster, ~10× less memory** than the
 in-browser snarkjs path:
 
@@ -50,7 +50,7 @@ qkb serve \
   --vkey ~/.local/share/qkb-cli/circuits/qkb-v5.2-vkey.json
 # Listening on http://127.0.0.1:9080
 # zkey:           …
-# allowed origin: https://identityescrow.org
+# allowed origin: https://app.zkqes.org
 # endpoints:      GET /status   POST /prove
 
 # In another terminal: probe.
@@ -63,7 +63,7 @@ curl -s http://127.0.0.1:9080/status
 # Stop with Ctrl-C — clean shutdown via SIGINT.
 ```
 
-The browser at `identityescrow.org/v5/registerV5` auto-detects a
+The browser at `app.zkqes.org/v5/registerV5` auto-detects a
 running `qkb serve` instance via a `/status` probe on page load and
 switches its prove path automatically. No browser configuration
 needed.
@@ -86,7 +86,7 @@ qkb cache clear [-c id]  Remove cached artifacts for one or all circuits.
   devices cannot reach it. The `--host` flag rejects non-loopback
   bind addresses with a startup error.
 - **Origin-pinned** — `POST /prove` accepts only the configured
-  `--allowed-origin` (default: `https://identityescrow.org`). A
+  `--allowed-origin` (default: `https://app.zkqes.org`). A
   malicious tab on a different origin cannot co-opt your local
   prover.
 - **No background process** — `qkb serve` runs only while you've
@@ -150,7 +150,7 @@ qkb serve --allowed-origin http://localhost:5173 …
 ```
 
 Production CLI builds reject this flag — `--allowed-origin` is
-hard-coded to `https://identityescrow.org` to prevent a malicious
+hard-coded to `https://app.zkqes.org` to prevent a malicious
 local script from surreptitiously authorizing a bad origin.
 
 ## V1.1 roadmap (deferred from V1 scope)

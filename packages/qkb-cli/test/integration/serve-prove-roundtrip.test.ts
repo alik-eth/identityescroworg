@@ -61,7 +61,7 @@ describeIfFixtures('qkb serve — /prove end-to-end against V5.2 stub', () => {
       rapidsnarkBinPath: RAPIDSNARK_BIN,
       port: 0, // ephemeral port — avoids collision with anything else on :9080
       host: '127.0.0.1',
-      allowedOrigin: 'https://identityescrow.org',
+      allowedOrigin: 'https://app.zkqes.org',
       version: 'qkb-cli@test',
       circuit: 'v5.2',
       log: (msg) => {
@@ -126,13 +126,13 @@ describeIfFixtures('qkb serve — /prove end-to-end against V5.2 stub', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Origin: 'https://identityescrow.org',
+        Origin: 'https://app.zkqes.org',
       },
       body: JSON.stringify(witness),
     });
     expect(res.status).toBe(200);
     expect(res.headers.get('access-control-allow-origin')).toBe(
-      'https://identityescrow.org',
+      'https://app.zkqes.org',
     );
     expect(res.headers.get('access-control-allow-private-network')).toBe('true');
     const body = (await res.json()) as { verifyOk: unknown };
@@ -151,14 +151,14 @@ describeIfFixtures('qkb serve — /prove end-to-end against V5.2 stub', () => {
     expect(res.status).toBe(403);
     const body = (await res.json()) as { error: string; allowed: string };
     expect(body.error).toBe('origin not allowed');
-    expect(body.allowed).toBe('https://identityescrow.org');
+    expect(body.allowed).toBe('https://app.zkqes.org');
   });
 
   it('OPTIONS /prove returns 204 with PNA + CORS headers', async () => {
     const res = await fetch(`${baseUrl}/prove`, {
       method: 'OPTIONS',
       headers: {
-        Origin: 'https://identityescrow.org',
+        Origin: 'https://app.zkqes.org',
         'Access-Control-Request-Method': 'POST',
         'Access-Control-Request-Private-Network': 'true',
       },
