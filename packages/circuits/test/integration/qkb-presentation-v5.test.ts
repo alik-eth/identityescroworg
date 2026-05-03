@@ -212,28 +212,9 @@ function buildSyntheticSignedAttrs(bindingDigest: Buffer): {
   return { bytes, length, mdAttrOffset: SYNTH_MD_OFFSET };
 }
 
-/**
- * Pack a 32-byte big-endian secp256k1 coordinate into 4 × uint64 limbs, in
- * the order Secp256k1PkMatch.circom expects (LE across limbs, BE within):
- *
- *   limb[3] = bytes[0..7]   (most-significant 64 bits)
- *   limb[2] = bytes[8..15]
- *   limb[1] = bytes[16..23]
- *   limb[0] = bytes[24..31] (least-significant 64 bits)
- *
- * Each limb is the BE concatenation of 8 bytes packed into a single uint64.
- */
-function pkCoordToLimbs(bytes32: Buffer): bigint[] {
-  if (bytes32.length !== 32) throw new Error('expected 32-byte coordinate');
-  const limbs: bigint[] = [0n, 0n, 0n, 0n];
-  for (let l = 0; l < 4; l++) {
-    const off = (3 - l) * 8;
-    let acc = 0n;
-    for (let j = 0; j < 8; j++) acc = (acc << 8n) | BigInt(bytes32[off + j] as number);
-    limbs[l] = acc;
-  }
-  return limbs;
-}
+// V5.2: V5.1's local `pkCoordToLimbs` helper (4 × 64-bit limb packing for
+// Secp256k1PkMatch) is no longer used — V5.2 packs at 128-bit granularity
+// directly inline via `bytesBeToBigInt` over `pkBytes.subarray(...)`.
 
 /**
  * Build a minimal V5-main witness exercising §6.2-§6.9:
@@ -250,8 +231,10 @@ function pkCoordToLimbs(bytes32: Buffer): bigint[] {
  * X509SubjectSerial reads from leafCertBytes to match leafTbsBytes at the
  * corresponding offset, which only holds if leafTbs is the genuine TBS.
  *
- * Public signals not yet wired (msgSender) stay anchored by _unusedHash;
- * §6.8 wires Secp256k1PkMatch + keccak256 → msgSender.
+ * V5.2 (2026-05-01): §6.8 in-circuit keccak chain (Secp256k1PkMatch +
+ * Secp256k1AddressDerive) is GONE; the binding's wallet pk is now exposed
+ * as 4 × 128-bit public-signal limbs (bindingPkX/Y Hi/Lo) for the contract
+ * to keccak natively. The fixture builder below emits those limbs.
  */
 async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
   const v2core = buildV2CoreWitnessFromFixture(FIXTURE_DIR);
@@ -345,11 +328,13 @@ async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
   const ctxHashLo = BigInt('0x' + ctxDigest.subarray(16, 32).toString('hex'));
   const ctxPaddedBuf = shaPad(ctxPlain);
 
-  // §6.8 — Bind msg.sender to the binding's `pk` field (signed-over by
-  // Diia). The fixture's pk is `0x04 || 0x11×32 || 0x22×32` (synthetic
-  // SEC1-uncompressed admin-ecdsa key); decode → split into X (32) || Y
-  // (32) → pack as 4×64-bit limbs (LE across limbs, BE within) for the
-  // Secp256k1PkMatch witness side. msgSender = uint160(keccak256(pk[1:65])).
+  // §6.8 V5.2 — Expose the binding's `pk` field (signed-over by Diia) as
+  // 4 × 128-bit public-signal limbs. Fixture pk = `0x04 || 0x11×32 || 0x22×32`
+  // (synthetic SEC1-uncompressed admin-ecdsa key); decode → split into
+  // X (32 bytes) || Y (32 bytes) → big-endian-pack into Hi/Lo halves
+  // (16 bytes each) for the V5.2 Bits2Num witness side. The contract
+  // reconstructs `(0x04 || X || Y)`, keccaks, and asserts msg.sender ==
+  // address(low-160).
   const bindingObj = JSON.parse(bindingBuf.toString('utf8'));
   if (!bindingObj.pk || typeof bindingObj.pk !== 'string') {
     throw new Error('binding.qkb2.json: missing/non-string pk field');
@@ -361,33 +346,47 @@ async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
   if (pkBytes.length !== 65 || pkBytes[0] !== 0x04) {
     throw new Error('binding.pk must be 65-byte SEC1 uncompressed (0x04 || X || Y)');
   }
-  const pkX = pkCoordToLimbs(pkBytes.subarray(1, 33));
-  const pkY = pkCoordToLimbs(pkBytes.subarray(33, 65));
+  // V5.2: pkX/pkY 4×64-bit limbs from V5.1 are no longer circuit inputs.
+  // The 4 × 128-bit Hi/Lo limbs are computed below for the public-signal
+  // shape; pkBytes-derived address is kept for fixture-default of
+  // rotationNewWallet (V5.2 contract-side check msg.sender == that addr).
+  const bytesBeToBigInt = (slice: Buffer): bigint =>
+    BigInt('0x' + (slice.length === 0 ? '0' : slice.toString('hex')));
+  const expectedBindingPkXHi = bytesBeToBigInt(pkBytes.subarray(1, 17));
+  const expectedBindingPkXLo = bytesBeToBigInt(pkBytes.subarray(17, 33));
+  const expectedBindingPkYHi = bytesBeToBigInt(pkBytes.subarray(33, 49));
+  const expectedBindingPkYLo = bytesBeToBigInt(pkBytes.subarray(49, 65));
   const addrHex = ethersKeccak256(pkBytes.subarray(1, 65)) as string;
   const expectedMsgSender = BigInt('0x' + addrHex.slice(2 + 24));
 
   return {
-    // 19 public inputs (canonical V5.1 order — orchestration §1.1, FROZEN).
-    msgSender: expectedMsgSender,                  // §6.8
-    timestamp: fix.expected.timestamp,             // §6.2
-    nullifier: expectedNullifier,                  // §6.6 (V5.1: walletSecret-based)
-    ctxHashHi,                                     // §6.7
-    ctxHashLo,                                     // §6.7
-    bindingHashHi,                                  // §6.3
-    bindingHashLo,                                  // §6.3
-    signedAttrsHashHi,                              // §6.3
-    signedAttrsHashLo,                              // §6.3
-    leafTbsHashHi,                                  // §6.3
-    leafTbsHashLo,                                  // §6.3
-    policyLeafHash,                                 // §6.2
-    leafSpkiCommit,                                 // §6.5
-    intSpkiCommit,                                  // §6.5
-    // V5.1 additions (slots 14-18).
-    identityFingerprint: expectedIdentityFingerprint,
-    identityCommitment: expectedIdentityCommitment,
-    rotationMode: 0n,                              // register-mode default
-    rotationOldCommitment: expectedIdentityCommitment, // no-op under register
-    rotationNewWallet: expectedMsgSender,              // no-op under register
+    // 22 public inputs (canonical V5.2 order — V5.2 spec §"Public-signal
+    // layout V5.1 (19) → V5.2 (22)", FROZEN). msgSender removed from V5.1
+    // slot 0; bindingPkX/Y limbs appended at V5.2 slots 18-21.
+    timestamp: fix.expected.timestamp,             // §6.2 [0]
+    nullifier: expectedNullifier,                  // §6.6 [1] (V5.1 wallet-bound)
+    ctxHashHi,                                     // §6.7 [2]
+    ctxHashLo,                                     // §6.7 [3]
+    bindingHashHi,                                  // §6.3 [4]
+    bindingHashLo,                                  // §6.3 [5]
+    signedAttrsHashHi,                              // §6.3 [6]
+    signedAttrsHashLo,                              // §6.3 [7]
+    leafTbsHashHi,                                  // §6.3 [8]
+    leafTbsHashLo,                                  // §6.3 [9]
+    policyLeafHash,                                 // §6.2 [10]
+    leafSpkiCommit,                                 // §6.5 [11]
+    intSpkiCommit,                                  // §6.5 [12]
+    // V5.1 amendment slots — shifted to 13-17 (V5.2 numbering).
+    identityFingerprint: expectedIdentityFingerprint,    // [13]
+    identityCommitment: expectedIdentityCommitment,      // [14]
+    rotationMode: 0n,                                    // [15] register
+    rotationOldCommitment: expectedIdentityCommitment,   // [16] no-op (== identityCommitment)
+    rotationNewWallet: expectedMsgSender,                // [17] V5.2 contract-enforced
+    // V5.2 amendment slots — wallet-pk limbs for on-chain keccak gate.
+    bindingPkXHi: expectedBindingPkXHi,                  // [18]
+    bindingPkXLo: expectedBindingPkXLo,                  // [19]
+    bindingPkYHi: expectedBindingPkYHi,                  // [20]
+    bindingPkYLo: expectedBindingPkYLo,                  // [21]
 
     // Parser inputs (§6.2).
     bindingBytes: v2core.bytes,
@@ -443,11 +442,10 @@ async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
     ctxPaddedIn: rightPadZero(ctxPaddedBuf, MAX_CTX_PADDED),
     ctxPaddedLen: ctxPaddedBuf.length,
 
-    // §6.8 — pkX/pkY limbs of the binding's wallet pubkey (Secp256k1PkMatch
-    // asserts they repack identically to parser.pkBytes; Secp256k1AddressDerive
-    // separately hashes parser.pkBytes[1..65] and binds to msgSender public).
-    pkX: pkX.map((x) => x.toString()),
-    pkY: pkY.map((y) => y.toString()),
+    // V5.2: pkX/pkY 4×64-bit limb private inputs from V5.1 are removed.
+    // The 4 × 128-bit limbs (bindingPkX/Y Hi/Lo) are constrained as
+    // public-signal slots 18-21 above; the circuit packs them in-line
+    // from `parser.pkBytes[1..65]` via Bits2Num.
 
     // V5.1 — wallet-bound nullifier secret (private input, range-checked
     // in-circuit via Num2Bits(254)).
@@ -459,7 +457,7 @@ async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
   };
 }
 
-describe('QKBPresentationV5 — §6.2-§6.9 (full body — parser + 4× SHA + 2× SpkiCommit + nullifier + ctxHash + tbs↔cert + msgSender via keccak)', function () {
+describe('QKBPresentationV5 — §6.2-§6.9 (V5.2: parser + 4× SHA + 2× SpkiCommit + nullifier + ctxHash + tbs↔cert + bindingPk limb packing)', function () {
   this.timeout(1800000);
 
   let circuit: CompiledCircuit;
@@ -771,31 +769,47 @@ describe('QKBPresentationV5 — §6.2-§6.9 (full body — parser + 4× SHA + 2�
     expect(threw).to.equal(true);
   });
 
-  // §6.8 happy-path — assert the witnessed msgSender matches the off-circuit
-  // address derivation `keccak256(parser.pkBytes[1..65])[12..32]`.
-  it('derives msgSender from the binding pk via keccak256 (§6.8)', async () => {
+  // §6.8 happy-path — assert the witnessed bindingPk limbs encode the
+  // synthetic admin-ecdsa fixture's pkBytes (0x04 || 0x11×32 || 0x22×32)
+  // in big-endian order. V5.2 contract reconstructs uncompressed pk via
+  // ((Hi<<128)|Lo) per coord, prepends 0x04, keccaks, and asserts
+  // address(low-160) == msg.sender. We verify the limb encoding here.
+  it('emits bindingPk Hi/Lo limbs that big-endian-encode the binding pk (§6.8 V5.2)', async () => {
     const input = await buildV5SmokeWitness();
     const w = await circuit.calculateWitness(input, true);
     await circuit.checkConstraints(w);
-    // Synthetic admin-ecdsa fixture pk = 0x04 || 0x11×32 || 0x22×32. Derive
-    // address off-circuit and verify the witness matches.
+    // Synthetic admin-ecdsa pk:
+    //   X = 0x11×32  → XHi = 0x1111…11 (16 bytes), XLo same.
+    //   Y = 0x22×32  → YHi = 0x2222…22 (16 bytes), YLo same.
+    const expectedXHi = BigInt('0x' + '11'.repeat(16));
+    const expectedXLo = BigInt('0x' + '11'.repeat(16));
+    const expectedYHi = BigInt('0x' + '22'.repeat(16));
+    const expectedYLo = BigInt('0x' + '22'.repeat(16));
+    expect(input.bindingPkXHi as bigint).to.equal(expectedXHi);
+    expect(input.bindingPkXLo as bigint).to.equal(expectedXLo);
+    expect(input.bindingPkYHi as bigint).to.equal(expectedYHi);
+    expect(input.bindingPkYLo as bigint).to.equal(expectedYLo);
+
+    // Sanity: contract-side keccak chain on the reconstructed pk should
+    // match keccak over the same bytes (this is what the contract will
+    // do post-Groth16-verify).
     const pkUncompressed = Buffer.concat([
       Buffer.alloc(32, 0x11),
       Buffer.alloc(32, 0x22),
     ]);
     const expectedAddrHex = ethersKeccak256(pkUncompressed).slice(2 + 24);
-    expect((input.msgSender as bigint).toString(16).padStart(40, '0'))
-      .to.equal(expectedAddrHex);
+    expect(expectedAddrHex.length).to.equal(40);  // shape sanity only
   });
 
-  // §6.8 tamper — flip a limb of pkX. The Secp256k1PkMatch limb-equality
-  // with parser.pkBytes (extracted from binding) fails on any single-limb
-  // mismatch.
-  it('rejects a tampered pkX[0] (§6.8 Secp256k1PkMatch)', async () => {
+  // §6.8 tamper — flip a bindingPk limb. The in-circuit Bits2Num packing
+  // asserts each limb equals the bits of the corresponding 16-byte slice
+  // of `parser.pkBytes`; any mismatch fails the constraint check.
+  it('rejects a tampered bindingPkXHi public signal (§6.8 V5.2 Bits2Num)', async () => {
     const input = await buildV5SmokeWitness();
-    const pkXTampered = [...(input.pkX as string[])];
-    pkXTampered[0] = (BigInt(pkXTampered[0] as string) + 1n).toString();
-    const tampered = { ...input, pkX: pkXTampered };
+    const tampered = {
+      ...input,
+      bindingPkXHi: (input.bindingPkXHi as bigint) ^ 1n,
+    };
     let threw = false;
     try {
       await circuit.calculateWitness(tampered, true);
@@ -805,12 +819,46 @@ describe('QKBPresentationV5 — §6.2-§6.9 (full body — parser + 4× SHA + 2�
     expect(threw).to.equal(true);
   });
 
-  // §6.8 tamper — flip the public msgSender signal. The keccak256
-  // chain (Secp256k1AddressDerive) outputs an address that no longer
-  // matches the witnessed public signal.
-  it('rejects a tampered msgSender public signal (§6.8 keccak link)', async () => {
+  // §6.8 tamper — bumping `pkValueOffset` by 1 fails the constraint check.
+  // The earlier-firing assertion is BindingParseV2CoreFast's `"0x"` lead-in
+  // shape check (`pkSlice.out[0] === 0x30 ('0')`, `pkSlice.out[1] === 0x78 ('x')`),
+  // which trips before the standalone `parser.pkBytes[0] === 4` SEC1 gate
+  // even has a chance to read the hex-decoded byte. Both gates protect
+  // against the same class of attacker (non-uncompressed SEC1 pk in the
+  // binding); this test covers the parser-level lead-in defense in depth.
+  // The standalone SEC1 gate at QKBPresentationV5.circom:701
+  // (`parser.pkBytes[0] === 4`) is verified by inspection — driving it
+  // independently requires constructing a binding whose pk field starts
+  // with `"0x` followed by hex other than `04`, which is out of scope for
+  // the fixture-based tests in this suite (would require fixture surgery
+  // + signedAttrs regen). Codex T2 review pass 1 [P2] noted the original
+  // test name overclaimed which gate it exercised; renamed accordingly.
+  it('rejects a tampered pkValueOffset (binding "0x" lead-in shape check fires; SEC1 prefix gate by-inspection)', async () => {
     const input = await buildV5SmokeWitness();
-    const tampered = { ...input, msgSender: (input.msgSender as bigint) ^ 1n };
+    const tampered = {
+      ...input,
+      pkValueOffset: (input.pkValueOffset as number) + 1,
+    };
+    let threw = false;
+    try {
+      await circuit.calculateWitness(tampered, true);
+    } catch {
+      threw = true;
+    }
+    expect(threw).to.equal(true);
+  });
+
+  // §6.8 V5.2 NOTE: the V5.1 `rejects a tampered msgSender public signal`
+  // test no longer applies — msgSender is no longer a circuit public
+  // signal in V5.2. The equivalent V5.2 check (msg.sender ==
+  // address(uint160(uint256(keccak256(reconstructedPk))))) is enforced
+  // by QKBRegistryV5_2.register(), exercised in contracts-eng's test
+  // suite. The circuit-side soundness contract is now: bindingPk
+  // limbs must equal parser.pkBytes[1..65] big-endian (covered by the
+  // tamper test above).
+  it.skip('V5.1 msgSender tamper test (no-op in V5.2 — moved to contract)', async () => {
+    const input = await buildV5SmokeWitness();
+    const tampered = { ...input, msgSender: 0n };
     let threw = false;
     try {
       await circuit.calculateWitness(tampered, true);

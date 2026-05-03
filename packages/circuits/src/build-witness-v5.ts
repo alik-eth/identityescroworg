@@ -1,15 +1,28 @@
-// V5.1 witness builder — production entry point.
+// V5.2 witness builder — production entry point.
 //
 // Consumes pre-extracted CMS / fixture artifacts (signedAttrs DER, leaf
 // cert DER, leaf/intermediate SPKIs, JCS-canonicalized binding bytes,
 // wallet-bound secret) and emits a JSON witness that
-// `snarkjs.wtns.calculate` can hand directly to the V5.1 main circuit's
+// `snarkjs.wtns.calculate` can hand directly to the V5.2 main circuit's
 // witness-calculator wasm.
 //
 // Output ordering matches QKBPresentationV5.circom's input declaration
-// order — the 19 public inputs (msgSender → rotationNewWallet,
-// orchestration §1.1) followed by every private witness input the
-// circuit consumes (including the new V5.1 `walletSecret`).
+// order — the 22 public inputs (timestamp → bindingPkYLo, V5.2 spec
+// §"Public-signal layout") followed by every private witness input the
+// circuit consumes (including the V5.1 `walletSecret`).
+//
+// V5.1 → V5.2 changes in this file:
+//   - DROPPED: `msgSender` from public-signals output (no longer a
+//     circuit public signal — keccak-derived contract-side from the
+//     new bindingPk limbs).
+//   - DROPPED: `pkX` / `pkY` private witness inputs (V5.1's 4×64-bit
+//     Secp256k1PkMatch limbs — gone with the in-circuit keccak chain).
+//   - ADDED: 4 public-signal limb fields `bindingPkXHi`/`Lo` +
+//     `bindingPkYHi`/`Lo`, packed big-endian from `parser.pkBytes[1..65]`
+//     in 16-byte chunks. These are the cross-package handshake with
+//     contracts-eng's keccak gate — bytes-identical to V5.1's
+//     Secp256k1PkMatch input bytes, just packed at 128-bit instead of
+//     64-bit granularity.
 //
 // Cross-package contract:
 //   - web-eng's witness builder (browser-side) and this CLI MUST produce
@@ -17,9 +30,9 @@
 //     integration test in test/integration/build-witness-v5.test.ts
 //     asserts byte-identity against the existing `buildV5SmokeWitness`
 //     test helper — keep them in sync.
-//   - The 19-field public-signal layout is FROZEN per orchestration
-//     §1.1 (commit 7f5c517); adding/reordering fields here ≡ a
-//     cross-worker breaking change.
+//   - The 22-field public-signal layout is FROZEN per V5.2 spec
+//     `2026-05-01-keccak-on-chain-amendment.md`; adding/reordering
+//     fields here ≡ a cross-worker breaking change.
 
 import { Buffer } from 'node:buffer';
 // Browser-isomorphic hash primitives. @noble/hashes works identically in
@@ -37,7 +50,7 @@ import { keccak_256 } from '@noble/hashes/sha3.js';
 
 import { extractBindingOffsets } from './binding-offsets';
 import { findSubjectSerial, findTbsInCert } from './leaf-cert-walk';
-import { pkCoordToLimbs, subjectSerialBytesToLimbs } from './limbs';
+import { subjectSerialBytesToLimbs } from './limbs';
 import {
   poseidon2,
   poseidon5,
@@ -112,7 +125,9 @@ function digestHiLo(digest: Buffer): { hi: bigint; lo: bigint } {
  *   §6.5  2× SpkiCommit over leaf + intermediate SPKIs.
  *   §6.6  X509SubjectSerial walk → NullifierDerive (Poseidon-domain ctx).
  *   §6.7  Sha256Var(ctxBytes) + Bytes32ToHiLo for the public ctxHashHi/Lo.
- *   §6.8  Secp256k1PkMatch + Keccak256 → msgSender bind.
+ *   §6.8  V5.2 wallet-pk limb packing — Bits2Num over parser.pkBytes[1..65]
+ *         into 4 × 128-bit big-endian public-signal limbs (bindingPkX/Y
+ *         Hi/Lo). Contract reconstructs + keccaks + checks msg.sender.
  *   §6.9  leafTbs ↔ leafCert byte-consistency over the serial window.
  */
 export async function buildWitnessV5(
@@ -269,7 +284,23 @@ export async function buildWitnessV5(
   const ctxHash = digestHiLo(ctxDigest);
   const ctxPaddedBuf = shaPad(ctxBytes);
 
-  // -------- §6.8 — pkX/pkY limbs + msgSender via keccak --------
+  // -------- §6.8 — V5.2 wallet-pk limb packing (4 × 128-bit, big-endian) --------
+  //
+  // V5.1 derived msgSender in-circuit via Secp256k1PkMatch + keccak (~200K
+  // constraints). V5.2 emits the binding's claimed pubkey as 4 × 128-bit
+  // public-signal limbs and the contract reconstructs the 64-byte
+  // uncompressed pk + runs keccak natively.
+  //
+  // Cross-package handshake (load-bearing):
+  //   bindingPkXHi = bytes-to-bigint-BE(pkBytes[1..17])    // upper 16 bytes of X
+  //   bindingPkXLo = bytes-to-bigint-BE(pkBytes[17..33])   // lower 16 bytes of X
+  //   bindingPkYHi = bytes-to-bigint-BE(pkBytes[33..49])   // upper 16 bytes of Y
+  //   bindingPkYLo = bytes-to-bigint-BE(pkBytes[49..65])   // lower 16 bytes of Y
+  //
+  // Contract reassembles via `(pkXHi << 128) | pkXLo` for X, same for Y,
+  // concatenates `(0x04 || X || Y)` (the SEC1 prefix is contract-known
+  // because the circuit asserts pkBytes[0] === 4) and keccaks. Identical
+  // input bytes to V5.1's in-circuit keccak; identical address output.
   const pkBytes = (() => {
     const start = offsets.pkValueOffset + 2; // skip "0x" leadIn
     const hex = input.bindingBytes
@@ -283,11 +314,23 @@ export async function buildWitnessV5(
     }
     return buf;
   })();
-  const pkX = pkCoordToLimbs(pkBytes.subarray(1, 33));
-  const pkY = pkCoordToLimbs(pkBytes.subarray(33, 65));
-  // Ethereum address = keccak256(pk[1:65])[12:32] interpreted big-endian.
+  const bytesBeToBigInt = (slice: Buffer): bigint =>
+    BigInt('0x' + (slice.length === 0 ? '0' : slice.toString('hex')));
+  const bindingPkXHi = bytesBeToBigInt(pkBytes.subarray(1, 17));
+  const bindingPkXLo = bytesBeToBigInt(pkBytes.subarray(17, 33));
+  const bindingPkYHi = bytesBeToBigInt(pkBytes.subarray(33, 49));
+  const bindingPkYLo = bytesBeToBigInt(pkBytes.subarray(49, 65));
+  // V5.2: msgSender is no longer a circuit public signal. We still derive
+  // the Ethereum address here for fixture-default convenience: under
+  // register mode the contract enforces `rotationNewWallet == msg.sender`,
+  // and tests want the witness's rotationNewWallet to match what
+  // msg.sender will be when the proof is submitted (= keccak-derived
+  // address from the binding's pk). The value is purely advisory at the
+  // witness-builder layer; it does NOT bind any circuit constraint.
   const pkKeccak = Buffer.from(keccak_256(pkBytes.subarray(1, 65)));
-  const msgSender = BigInt('0x' + pkKeccak.subarray(12, 32).toString('hex'));
+  const fixtureDerivedAddress = BigInt(
+    '0x' + pkKeccak.subarray(12, 32).toString('hex'),
+  );
 
   // -------- timestamp + policyLeafHash (parsed out of binding) --------
   const tsValue = (() => {
@@ -312,12 +355,21 @@ export async function buildWitnessV5(
     return BigInt('0x' + hex);
   })();
 
-  // -------- V5.1 rotation-mode payload --------
+  // -------- V5.1 rotation-mode payload (V5.2 amendment: rotationNewWallet
+  //                                       no longer constrained by circuit
+  //                                       under register mode; contract
+  //                                       enforces == msg.sender) --------
   // Defaults to register mode (rotationMode === 0). Under register mode the
-  // in-circuit `ForceEqualIfEnabled` gates pin slot 17 == identityCommitment
-  // and slot 18 == msgSender; we set those values here so the no-op constraint
-  // is trivially satisfied. Under rotateWallet mode (rotationMode === 1), the
-  // caller supplies the actual prior commitment + new wallet address.
+  // in-circuit `ForceEqualIfEnabled` gate (V5.1's `oldCommitNoOp`) still
+  // pins slot 16 == identityCommitment; the V5.1 `newWalletNoOp` gate
+  // (`rotationNewWallet === msgSender`) was DROPPED in V5.2 because
+  // msgSender is no longer a circuit public signal. Slot 17
+  // (rotationNewWallet) is therefore a witness pass-through that the
+  // contract enforces post-verifier. We default it to the binding-pk-
+  // derived address so that test fixtures pre-match what msg.sender will
+  // be when the proof is submitted on-chain. Under rotateWallet mode
+  // (rotationMode === 1), the caller supplies the actual new wallet
+  // address.
   const rotationMode = input.rotationMode ?? 0;
   const rotationOldCommitment = ((): bigint => {
     if (rotationMode === 1) {
@@ -343,7 +395,7 @@ export async function buildWitnessV5(
         ? input.rotationNewWalletAddress
         : BigInt(input.rotationNewWalletAddress);
     }
-    return msgSender;
+    return fixtureDerivedAddress;
   })();
   // Under rotation mode, oldWalletSecret is REQUIRED (input.oldWalletSecret
   // must be supplied and produce a commitment that opens to rotationOldCommitment;
@@ -357,27 +409,35 @@ export async function buildWitnessV5(
 
   // -------- Witness assembly --------
   return {
-    // 19 public inputs (canonical V5.1 order — orchestration §1.1, FROZEN).
-    msgSender: msgSender.toString(),
-    timestamp: tsValue,
-    nullifier: nullifier.toString(),
-    ctxHashHi: ctxHash.hi.toString(),
-    ctxHashLo: ctxHash.lo.toString(),
-    bindingHashHi: bindingHash.hi.toString(),
-    bindingHashLo: bindingHash.lo.toString(),
-    signedAttrsHashHi: saHash.hi.toString(),
-    signedAttrsHashLo: saHash.lo.toString(),
-    leafTbsHashHi: leafTbsHash.hi.toString(),
-    leafTbsHashLo: leafTbsHash.lo.toString(),
-    policyLeafHash: policyLeafHash.toString(),
-    leafSpkiCommit: leafSpkiCommit.toString(),
-    intSpkiCommit: intSpkiCommit.toString(),
-    // V5.1 additions (slots 14-18).
-    identityFingerprint: identityFingerprint.toString(),
-    identityCommitment: identityCommitment.toString(),
-    rotationMode: rotationMode,
-    rotationOldCommitment: rotationOldCommitment.toString(),
-    rotationNewWallet: rotationNewWallet.toString(),
+    // 22 public inputs (canonical V5.2 order — V5.2 spec §"Public-signal
+    // layout V5.1 (19) → V5.2 (22)", FROZEN).
+    timestamp: tsValue,                              // [0]
+    nullifier: nullifier.toString(),                 // [1]
+    ctxHashHi: ctxHash.hi.toString(),                // [2]
+    ctxHashLo: ctxHash.lo.toString(),                // [3]
+    bindingHashHi: bindingHash.hi.toString(),        // [4]
+    bindingHashLo: bindingHash.lo.toString(),        // [5]
+    signedAttrsHashHi: saHash.hi.toString(),         // [6]
+    signedAttrsHashLo: saHash.lo.toString(),         // [7]
+    leafTbsHashHi: leafTbsHash.hi.toString(),        // [8]
+    leafTbsHashLo: leafTbsHash.lo.toString(),        // [9]
+    policyLeafHash: policyLeafHash.toString(),       // [10]
+    leafSpkiCommit: leafSpkiCommit.toString(),       // [11]
+    intSpkiCommit: intSpkiCommit.toString(),         // [12]
+    // V5.1 amendment additions (slots 13-17 in V5.2 numbering).
+    identityFingerprint: identityFingerprint.toString(),  // [13]
+    identityCommitment: identityCommitment.toString(),    // [14]
+    rotationMode: rotationMode,                            // [15]
+    rotationOldCommitment: rotationOldCommitment.toString(), // [16]
+    rotationNewWallet: rotationNewWallet.toString(),       // [17]
+    // V5.2 amendment additions (slots 18-21) — wallet-pk limbs for
+    // contract-side keccak gate. Big-endian, byte-identical to V5.1
+    // Secp256k1PkMatch's input bytes (`parser.pkBytes[1..65]`), just
+    // packed at 128-bit instead of 64-bit granularity.
+    bindingPkXHi: bindingPkXHi.toString(),                 // [18]
+    bindingPkXLo: bindingPkXLo.toString(),                 // [19]
+    bindingPkYHi: bindingPkYHi.toString(),                 // [20]
+    bindingPkYLo: bindingPkYLo.toString(),                 // [21]
 
     // Binding parser inputs (§6.2).
     bindingBytes: rightPadZero(input.bindingBytes, MAX_BCANON),
@@ -431,9 +491,11 @@ export async function buildWitnessV5(
     ctxPaddedIn: rightPadZero(ctxPaddedBuf, MAX_CTX_PADDED),
     ctxPaddedLen: ctxPaddedBuf.length,
 
-    // §6.8 — pkX/pkY limbs (Secp256k1PkMatch repacks parser.pkBytes into these).
-    pkX: pkX.map((x) => x.toString()),
-    pkY: pkY.map((y) => y.toString()),
+    // V5.2: pkX/pkY 4×64-bit limb private inputs from V5.1 are dropped.
+    // The 4 × 128-bit public-signal limbs (bindingPkX/Y Hi/Lo above)
+    // are constrained by Bits2Num packing of `parser.pkBytes[1..65]`
+    // directly inside the circuit — no separate witness-side limb
+    // decomposition required.
 
     // V5.1 — wallet-bound nullifier secret (private, range-checked in-circuit).
     walletSecret: walletSecretField.toString(),

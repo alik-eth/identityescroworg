@@ -199,8 +199,14 @@ describe('V5 §6.10 — real-Diia E2E round-trip via .p7s', function () {
     expect(witnessA.identityCommitment).to.not.equal(witnessB.identityCommitment);
     // Nullifier varies — Poseidon₂(walletSecret, ctxHash).
     expect(witnessA.nullifier).to.not.equal(witnessB.nullifier);
-    // msgSender unchanged (derived from binding.pk, not walletSecret).
-    expect(witnessA.msgSender).to.equal(witnessB.msgSender);
+    // V5.2: msgSender removed. The bindingPk Hi/Lo limbs (derived from
+    // binding.pk, not walletSecret) are unchanged across walletSecret
+    // values — the cross-package handshake to contracts-eng's keccak
+    // gate is byte-stable.
+    expect(witnessA.bindingPkXHi).to.equal(witnessB.bindingPkXHi);
+    expect(witnessA.bindingPkXLo).to.equal(witnessB.bindingPkXLo);
+    expect(witnessA.bindingPkYHi).to.equal(witnessB.bindingPkYHi);
+    expect(witnessA.bindingPkYLo).to.equal(witnessB.bindingPkYLo);
   });
 
   it('V5.1: rotateWallet happy path proves OLD-wallet ownership via oldWalletSecret', async () => {

@@ -1,20 +1,38 @@
-// Type definitions for the V5.1 witness-builder public API.
+// Type definitions for the V5.2 witness-builder public API.
 //
-// The 19-field public-signal layout is FROZEN per orchestration §1.1
-// (commit 7f5c517 on main); any change here is a cross-worker breaking
-// change (snarkjs's `[outputs..., public_inputs...]` emission order is
-// bound to these names). Keep this file in lockstep with
-// QKBPresentationV5.circom's `component main { public [...] }` declaration.
+// The 22-field public-signal layout is FROZEN per V5.2 spec
+// `2026-05-01-keccak-on-chain-amendment.md` §"Public-signal layout V5.1
+// (19) → V5.2 (22)". Any change here is a cross-worker breaking change
+// (snarkjs's `[outputs..., public_inputs...]` emission order is bound to
+// these names). Keep this file in lockstep with QKBPresentationV5.circom's
+// `component main { public [...] }` declaration.
 //
-// V5 → V5.1 deltas (per spec
-// `2026-04-30-wallet-bound-nullifier-amendment.md` v0.6, user-approved):
-//   - 5 new public-signal slots [14..18]: identityFingerprint,
-//     identityCommitment, rotationMode, rotationOldCommitment,
-//     rotationNewWallet.
+// V5.1 → V5.2 deltas (per V5.2 spec):
+//   - DROPPED public signal: msgSender (was V5.1 slot 0). The
+//     keccak-derived address is now reconstructed contract-side from the
+//     4 new pk-limb signals + EVM-native keccak256.
+//   - ADDED 4 public signals at slots 18-21: bindingPkXHi, bindingPkXLo,
+//     bindingPkYHi, bindingPkYLo (each 128-bit, big-endian halves of the
+//     binding's claimed wallet pk). Constrained in-circuit by Bits2Num
+//     packing of `parser.pkBytes[1..65]` (V5.2 spec §"Construction
+//     delta"). Cross-package handshake: contract reassembles
+//     `(0x04 || pkXHi<<128|pkXLo || pkYHi<<128|pkYLo)` and
+//     `address(uint160(uint256(keccak256(...))))` to derive the address.
+//   - DROPPED private witness inputs: pkX[4], pkY[4] (V5.1 4×64-bit
+//     limbs consumed by Secp256k1PkMatch — gone in V5.2).
+//   - All V5.1 amendment slots (identityFingerprint, identityCommitment,
+//     rotationMode, rotationOldCommitment, rotationNewWallet) shift down
+//     by 1 to slots 13-17 (msgSender was slot 0 in V5.1).
+//   - V5.1 register-mode `rotationNewWallet === msgSender` no-op moves
+//     to contract-side (see `rotationNewWalletAddress` field comments
+//     below).
+//
+// V5 → V5.1 deltas (preserved from prior amendment for context):
+//   - Slot reshuffle: 14 → 19 signals (added 5 V5.1 fields).
 //   - 1 new private witness input: walletSecret (single field element,
 //     254-bit range-checked in-circuit).
-//   - nullifier construction changes: was Poseidon₂(secret-from-serial,
-//     ctxHashField); now Poseidon₂(walletSecret, ctxHashField).
+//   - nullifier construction: was Poseidon₂(secret-from-serial, ctxHashField);
+//     now Poseidon₂(walletSecret, ctxHashField). UNCHANGED in V5.2.
 
 import type { Buffer } from 'node:buffer';
 
@@ -127,10 +145,14 @@ export interface BuildWitnessV5Input {
    * 32-byte secret — proves ownership of the old commitment in-circuit).
    *
    * Under register mode (default), these fields are computed/defaulted
-   * by the builder to satisfy the in-circuit no-op constraints
-   * (`rotationOldCommitment === identityCommitment` and
-   * `rotationNewWallet === msgSender`); `oldWalletSecret` defaults to
-   * the same value as `walletSecret` (its constraint is gated OFF).
+   * by the builder. `rotationOldCommitment` defaults to
+   * `identityCommitment` (in-circuit no-op gate `oldCommitNoOp`).
+   * `rotationNewWalletAddress` defaults to the keccak-derived address
+   * from the binding's pk — this is purely advisory at the witness
+   * layer (V5.2 dropped V5.1's in-circuit `newWalletNoOp` gate; the
+   * contract enforces `rotationNewWallet == msg.sender` post-verifier).
+   * `oldWalletSecret` defaults to `walletSecret` (gated OFF under
+   * register mode).
    */
   rotationMode?: 0 | 1;
   /** REQUIRED when `rotationMode === 1`. bigint or hex string. */

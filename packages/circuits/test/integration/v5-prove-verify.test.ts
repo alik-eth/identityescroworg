@@ -79,15 +79,20 @@ const haveLightArtifacts = existsSync(VKEY_PATH) && existsSync(PROOF_SAMPLE_PATH
       console.log('[test] after  fullProve, rss=', Math.round(process.memoryUsage().rss / 1e6), 'MB');
 
       expect(Array.isArray(publicSignals)).to.equal(true);
-      expect(publicSignals.length).to.equal(19);  // V5.1 — was 14 in V5
-      expect(publicSignals[0]).to.equal(witness.msgSender);
-      expect(publicSignals[1]).to.equal(String(witness.timestamp));
-      // V5.1 slots 14-18 (frozen layout per orchestration §1.1).
-      expect(publicSignals[14]).to.equal(witness.identityFingerprint);
-      expect(publicSignals[15]).to.equal(witness.identityCommitment);
-      expect(publicSignals[16]).to.equal('0');  // rotationMode = register
-      expect(publicSignals[17]).to.equal(witness.identityCommitment); // no-op
-      expect(publicSignals[18]).to.equal(witness.msgSender);          // no-op
+      expect(publicSignals.length).to.equal(22);  // V5.2 — was 19 in V5.1, 14 in V5
+      // V5.2 layout — slot 0 is timestamp (msgSender removed from V5.1 slot 0).
+      expect(publicSignals[0]).to.equal(String(witness.timestamp));
+      // V5.1 amendment slots shift down by 1 → V5.2 slots 13-17.
+      expect(publicSignals[13]).to.equal(witness.identityFingerprint);
+      expect(publicSignals[14]).to.equal(witness.identityCommitment);
+      expect(publicSignals[15]).to.equal('0');                       // rotationMode = register
+      expect(publicSignals[16]).to.equal(witness.identityCommitment); // rotationOldCommitment no-op
+      expect(publicSignals[17]).to.equal(witness.rotationNewWallet); // V5.2 contract-enforced post-verifier
+      // V5.2 NEW slots 18-21 — wallet-pk limbs for on-chain keccak gate.
+      expect(publicSignals[18]).to.equal(witness.bindingPkXHi);
+      expect(publicSignals[19]).to.equal(witness.bindingPkXLo);
+      expect(publicSignals[20]).to.equal(witness.bindingPkYHi);
+      expect(publicSignals[21]).to.equal(witness.bindingPkYLo);
 
       const vkey = JSON.parse(readFileSync(VKEY_PATH, 'utf8'));
       const ok: boolean = await snarkjs.groth16.verify(vkey, publicSignals, proof);
@@ -101,13 +106,16 @@ const haveLightArtifacts = existsSync(VKEY_PATH) && existsSync(PROOF_SAMPLE_PATH
   function () {
     this.timeout(60000);
 
-    it('rejects a tampered public input (msgSender flip)', async () => {
+    it('rejects a tampered public input (timestamp flip)', async () => {
       const vkey = JSON.parse(readFileSync(VKEY_PATH, 'utf8'));
       const proof = JSON.parse(readFileSync(PROOF_SAMPLE_PATH, 'utf8'));
       const publicSignals = JSON.parse(readFileSync(PUBLIC_SAMPLE_PATH, 'utf8')) as string[];
 
       expect(await snarkjs.groth16.verify(vkey, publicSignals, proof)).to.equal(true);
 
+      // V5.2 layout: slot 0 is timestamp (V5.1 had msgSender there). The
+      // tamper test is semantically the same — flip ANY public signal,
+      // verifier rejects.
       const tampered = [...publicSignals];
       tampered[0] = (BigInt(tampered[0]!) + 1n).toString();
       expect(await snarkjs.groth16.verify(vkey, tampered, proof)).to.equal(false);
