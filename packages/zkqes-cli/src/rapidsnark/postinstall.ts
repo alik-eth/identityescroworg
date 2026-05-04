@@ -1,6 +1,6 @@
-// `qkb-cli` postinstall hook.  Invoked when the user runs
-// `npm install -g @qkb/cli`.  Downloads the matching iden3 rapidsnark
-// prebuilt for the host platform + extracts to ~/.cache/qkb-bin/.
+// `zkqes-cli` postinstall hook.  Invoked when the user runs
+// `npm install -g @zkqes/cli`.  Downloads the matching iden3 rapidsnark
+// prebuilt for the host platform + extracts to ~/.cache/zkqes-bin/.
 //
 // Not invoked on `pkg`-bundled installs — the prover binary is
 // embedded as a pkg asset for those distributions (homebrew, GitHub
@@ -96,10 +96,10 @@ export async function runPostinstall(input: PostinstallInput = {}): Promise<void
     // install.  Users on niche platforms can still build rapidsnark
     // locally and pass --rapidsnark-bin.
     log(
-      `[qkb-cli postinstall] unsupported host (${err instanceof Error ? err.message : String(err)})`,
+      `[zkqes-cli postinstall] unsupported host (${err instanceof Error ? err.message : String(err)})`,
     );
     log(
-      '[qkb-cli postinstall] continuing without bundled prover; ' +
+      '[zkqes-cli postinstall] continuing without bundled prover; ' +
         'pass --rapidsnark-bin <path> at runtime',
     );
     return;
@@ -107,13 +107,13 @@ export async function runPostinstall(input: PostinstallInput = {}): Promise<void
 
   const entry = prebuilts[platform];
   if (!entry) {
-    log(`[qkb-cli postinstall] no prebuilt for ${platform}; skipping prover download`);
-    log('[qkb-cli postinstall] pass --rapidsnark-bin <path> at runtime instead');
+    log(`[zkqes-cli postinstall] no prebuilt for ${platform}; skipping prover download`);
+    log('[zkqes-cli postinstall] pass --rapidsnark-bin <path> at runtime instead');
     return;
   }
 
   const home = input.home ?? homedir();
-  const cacheDir = join(home, '.cache', 'qkb-bin');
+  const cacheDir = join(home, '.cache', 'zkqes-bin');
   const archivePath = join(
     cacheDir,
     `rapidsnark-${platform}-${RAPIDSNARK_VERSION}.zip`,
@@ -122,7 +122,7 @@ export async function runPostinstall(input: PostinstallInput = {}): Promise<void
 
   await mkdir(cacheDir, { recursive: true });
 
-  log(`[qkb-cli postinstall] downloading ${entry.url}`);
+  log(`[zkqes-cli postinstall] downloading ${entry.url}`);
   try {
     await downloadAndVerify({
       url: entry.url,
@@ -132,16 +132,16 @@ export async function runPostinstall(input: PostinstallInput = {}): Promise<void
     });
   } catch (err) {
     if (err instanceof DownloadError) {
-      log(`[qkb-cli postinstall] download failed: ${err.message}`);
-      log('[qkb-cli postinstall] pass --rapidsnark-bin <path> at runtime instead');
+      log(`[zkqes-cli postinstall] download failed: ${err.message}`);
+      log('[zkqes-cli postinstall] pass --rapidsnark-bin <path> at runtime instead');
       return;
     }
     throw err;
   }
 
-  log(`[qkb-cli postinstall] extracting ${archivePath}`);
+  log(`[zkqes-cli postinstall] extracting ${archivePath}`);
   await extractZip(archivePath, cacheDir);
-  log(`[qkb-cli postinstall] rapidsnark sidecar installed for ${platform}`);
+  log(`[zkqes-cli postinstall] rapidsnark sidecar installed for ${platform}`);
 }
 
 /**

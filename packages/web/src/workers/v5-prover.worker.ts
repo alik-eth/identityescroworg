@@ -7,7 +7,7 @@
  *   `new Worker(new URL('../workers/v5-prover.worker.ts', import.meta.url),
  *              { type: 'module' })`
  * and pair with `SnarkjsWorkerProver` (main-thread side) from
- * `@qkb/sdk/prover/snarkjsWorker`.
+ * `@zkqes/sdk/prover/snarkjsWorker`.
  *
  * Distinct from the V4 `prover.worker.ts` in this dir — that one is the
  * V4 split-proof Worker hand-rolled with its own message protocol; V5
@@ -23,6 +23,6 @@
  *   before the worker is even spawned (deviceGate.ts).
  */
 
-import { startSnarkjsWorker } from '@qkb/sdk/prover/snarkjsWorkerEntry';
+import { startSnarkjsWorker } from '@zkqes/sdk/prover/snarkjsWorkerEntry';
 
 startSnarkjsWorker();

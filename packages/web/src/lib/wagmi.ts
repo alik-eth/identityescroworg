@@ -6,7 +6,7 @@ import { base, sepolia } from 'wagmi/chains';
 const TESTING = import.meta.env.VITE_CHAIN === 'sepolia';
 
 export const wagmiConfig: Config = getDefaultConfig({
-  appName: 'Identity Escrow',
+  appName: 'zkqes',
   projectId: import.meta.env.VITE_WALLETCONNECT_PROJECT_ID ?? '',
   chains: TESTING ? [sepolia, base] : [base, sepolia],
   ssr: false,

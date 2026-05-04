@@ -23,7 +23,7 @@ import {
   type BindingV2,
 } from './bindingV2';
 import { MAX_BCANON } from './witness';
-import { QkbError } from './errors';
+import { ZkqesError } from './errors';
 
 export interface BuildUaBindingV2Input {
   readonly pk: Uint8Array; // SEC1 uncompressed 65 bytes
@@ -68,13 +68,14 @@ export function buildUaBindingV2(input: BuildUaBindingV2Input): UaBindingV2Bundl
     },
     display: {
       lang: 'uk',
+      // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
       template: 'qkb-default-ua/v1',
       text: ukDeclaration,
     },
   });
   const bcanon = canonicalizeBindingCoreV2(binding);
   if (bcanon.byteLength > MAX_BCANON) {
-    throw new QkbError('binding.jcs', {
+    throw new ZkqesError('binding.jcs', {
       reason: 'bcanon-exceeds-max',
       got: bcanon.byteLength,
       max: MAX_BCANON,

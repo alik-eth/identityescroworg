@@ -33,7 +33,7 @@
 // clear the top 2 bits in big-endian byte 0 so output ∈ [0, 2^254),
 // which strictly fits. Some 254-bit values still exceed p_bn254 ≈
 // 2^254; the spec accepts this ~2^-254 sampling bias as standard
-// HKDF→field practice (matches @qkb/circuits §6.4).
+// HKDF→field practice (matches @zkqes/circuits §6.4).
 //
 // Determinism contract: same wallet (or passphrase) + same
 // subjectSerialPacked must produce the same 32 bytes across calls.
@@ -47,8 +47,11 @@
 import { hkdf } from '@noble/hashes/hkdf';
 import { sha256 } from '@noble/hashes/sha2';
 
+// frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
 const HKDF_SALT = 'qkb-walletsecret-v1';
+// frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
 const SIGN_MESSAGE_PREFIX = 'qkb-personal-secret-v1';
+// frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
 const ARGON2_SALT_PREFIX = 'qkb-walletsecret-v1';
 
 /**

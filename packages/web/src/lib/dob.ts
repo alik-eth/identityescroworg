@@ -1,4 +1,4 @@
-// Thin re-export façade over @qkb/sdk's dob module. Keeps `./dob` a stable
+// Thin re-export façade over @zkqes/sdk's dob module. Keeps `./dob` a stable
 // import path for routes + helpers that fan out across the codebase.
 export {
   DOB_SOURCE_TAGS,
@@ -18,4 +18,4 @@ export {
   type DobExtractor,
   type DobSourceTag,
   type DobTrustLevel,
-} from '@qkb/sdk';
+} from '@zkqes/sdk';

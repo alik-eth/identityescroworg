@@ -50,7 +50,7 @@ export function CeremonyContribute() {
         'ceremony.contribute.step1Body',
         'About 2.0 GB. The download URL for your assigned round is sent at sign-up time.',
       ),
-      cmd: `curl -O https://prove.identityescrow.org/ceremony/${PREV_ZKEY}`,
+      cmd: `curl -O https://prove.zkqes.org/ceremony/${PREV_ZKEY}`,
       testIdSuffix: 'download',
     },
     {
@@ -77,7 +77,7 @@ export function CeremonyContribute() {
         'ceremony.contribute.step3Body',
         'Runs in seconds. Confirms your output zkey is structurally valid against the circuit r1cs and the Phase 1 powers-of-tau. If verify fails, do not upload.',
       ),
-      cmd: `snarkjs zkey verify qkb-v5.r1cs powersOfTau28_hez_final_22.ptau ${MINE_ZKEY}`,
+      cmd: `snarkjs zkey verify zkqes-v5.r1cs powersOfTau28_hez_final_22.ptau ${MINE_ZKEY}`,
       testIdSuffix: 'verify',
     },
     {
@@ -266,11 +266,11 @@ export function CeremonyContribute() {
             </p>
             <p className="text-mono text-sm">
               <a
-                href="mailto:ceremony@identityescrow.org?subject=V5%20ceremony%20contribution&body=Handle%3A%20%0AAffiliation%2Frole%3A%20%0APreferred%20slot%3A%20%0ANotes%3A%20"
+                href="mailto:ceremony@zkqes.org?subject=V5%20ceremony%20contribution&body=Handle%3A%20%0AAffiliation%2Frole%3A%20%0APreferred%20slot%3A%20%0ANotes%3A%20"
                 style={{ color: 'var(--sovereign)' }}
                 data-testid="ceremony-signup-mailto"
               >
-                ceremony@identityescrow.org
+                ceremony@zkqes.org
               </a>
             </p>
           </section>

@@ -55,7 +55,7 @@ export async function downloadAndVerify(
   input: DownloadInput,
 ): Promise<DownloadResult> {
   // Short-circuit if the destination already exists with the matching
-  // sha256.  Re-running `qkb serve` against an unchanged manifest
+  // sha256.  Re-running `zkqes serve` against an unchanged manifest
   // shouldn't re-download.
   if (await fileExists(input.destinationPath)) {
     const existingHash = await sha256OfFile(input.destinationPath);

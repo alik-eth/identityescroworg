@@ -1,4 +1,4 @@
-// `CliServer` — localhost HTTP API for `qkb serve`.
+// `CliServer` — localhost HTTP API for `zkqes serve`.
 //
 // Lifted from the validated prototype at
 // `packages/circuits/scripts/v5_2-prove-server.mjs` (252 LOC; measured
@@ -239,7 +239,7 @@ export class CliServer {
       const witnessInput = JSON.parse(body) as Record<string, unknown>;
       this.log(`prove request: ${Object.keys(witnessInput).length} witness fields`);
 
-      dir = await mkdtemp(join(tmpdir(), 'qkb-prove-'));
+      dir = await mkdtemp(join(tmpdir(), 'zkqes-prove-'));
       const wtnsPath = join(dir, 'witness.wtns');
       const proofPath = join(dir, 'proof.json');
       const publicPath = join(dir, 'public.json');
@@ -324,7 +324,7 @@ export class CliServer {
     if (this.cfg.log) {
       this.cfg.log(msg);
     } else {
-      process.stderr.write(`[qkb-serve] ${msg}\n`);
+      process.stderr.write(`[zkqes-serve] ${msg}\n`);
     }
   }
 }

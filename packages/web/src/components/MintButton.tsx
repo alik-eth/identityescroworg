@@ -4,10 +4,10 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { resolveLandingState, resolveSecondaryCtas } from '../lib/landingState';
 import {
   deploymentForChainId,
-  identityEscrowNftAbi,
-  qkbRegistryV4Abi,
-  qkbRegistryV5_1Abi,
-} from '@qkb/sdk';
+  zkqesCertificateAbi,
+  zkqesRegistryV4Abi,
+  zkqesRegistryV5_1Abi,
+} from '@zkqes/sdk';
 import { ACTIVE_CHAIN } from '../lib/wagmi';
 
 const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
@@ -27,7 +27,7 @@ export function MintButton() {
 
   const { data: nullifierV5 } = useReadContract({
     address: dep?.registryV5,
-    abi: qkbRegistryV5_1Abi,
+    abi: zkqesRegistryV5_1Abi,
     functionName: 'nullifierOf',
     args: address ? [address] : undefined,
     query: { enabled: !!address && v5Deployed },
@@ -35,7 +35,7 @@ export function MintButton() {
 
   const { data: nullifierV4 } = useReadContract({
     address: dep?.registry,
-    abi: qkbRegistryV4Abi,
+    abi: zkqesRegistryV4Abi,
     functionName: 'nullifierOf',
     args: address ? [address] : undefined,
     query: { enabled: !!address && !!dep && !v5Deployed },
@@ -45,8 +45,8 @@ export function MintButton() {
   const registered = !!nullifier && nullifier !== ZERO_NULLIFIER;
 
   const { data: tokenIdByNullifier } = useReadContract({
-    address: dep?.identityEscrowNft,
-    abi: identityEscrowNftAbi,
+    address: dep?.zkqesCertificate,
+    abi: zkqesCertificateAbi,
     functionName: 'tokenIdByNullifier',
     args: registered && nullifier ? [nullifier] : undefined,
     query: { enabled: registered && !!dep },

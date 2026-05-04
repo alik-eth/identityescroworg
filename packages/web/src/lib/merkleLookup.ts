@@ -31,7 +31,7 @@
  * locally so the SPA does not have to trust the flattener's pre-computation.
  */
 import { buildPoseidon } from 'circomlibjs';
-import { QkbError } from './errors';
+import { ZkqesError } from './errors';
 
 export interface TrustedCa {
   merkleIndex: number;
@@ -118,12 +118,12 @@ export async function lookupCa(
   const match = trustedCas.cas.find(
     (ca) => bytesToHex(b64ToBytes(ca.certDerB64)) === targetHex,
   );
-  if (!match) throw new QkbError('qes.unknownCA');
+  if (!match) throw new ZkqesError('qes.unknownCA');
   const poseidonHash = await canonicalizeCertHash(der);
   if (match.poseidonHash) {
     const claimed = parseHexBig(match.poseidonHash);
     if (claimed !== poseidonHash) {
-      throw new QkbError('qes.unknownCA', { reason: 'poseidon-mismatch' });
+      throw new ZkqesError('qes.unknownCA', { reason: 'poseidon-mismatch' });
     }
   }
   return {
@@ -146,11 +146,11 @@ export async function buildInclusionPath(
   layers: LayersFile,
 ): Promise<InclusionProof> {
   if (!Number.isInteger(index) || index < 0) {
-    throw new QkbError('qes.unknownCA', { reason: 'bad-index', index });
+    throw new ZkqesError('qes.unknownCA', { reason: 'bad-index', index });
   }
   const depth = layers.depth;
   if (layers.layers.length !== depth + 1) {
-    throw new QkbError('qes.unknownCA', {
+    throw new ZkqesError('qes.unknownCA', {
       reason: 'layers-shape',
       depth,
       got: layers.layers.length,

@@ -32,7 +32,7 @@ import {
   type ParsedCades,
 } from './cades';
 import { canonicalizeBinding, type Binding } from './binding';
-import { QkbError } from './errors';
+import { ZkqesError } from './errors';
 
 export interface TrustedCa {
   merkleIndex: number;
@@ -80,12 +80,12 @@ export async function verifyQes(input: VerifyInput): Promise<VerifyOk> {
   ensureCryptoEngine();
 
   if (!bytesEqual(parsed.messageDigest, sha256(bindingBytes))) {
-    throw new QkbError('qes.digestMismatch', { reason: 'messageDigest' });
+    throw new ZkqesError('qes.digestMismatch', { reason: 'messageDigest' });
   }
 
   const expectedPkHex = `0x${hex(expectedPk)}`;
   if (binding.pk.toLowerCase() !== expectedPkHex.toLowerCase()) {
-    throw new QkbError('qes.digestMismatch', { reason: 'pk-mismatch' });
+    throw new ZkqesError('qes.digestMismatch', { reason: 'pk-mismatch' });
   }
 
   const declHashHex = hex(sha256(new TextEncoder().encode(binding.declaration)));
@@ -95,7 +95,7 @@ export async function verifyQes(input: VerifyInput): Promise<VerifyOk> {
     ),
   );
   if (!allowed.has(declHashHex)) {
-    throw new QkbError('qes.digestMismatch', { reason: 'declaration' });
+    throw new ZkqesError('qes.digestMismatch', { reason: 'declaration' });
   }
 
   const leafCert = parseCert(parsed.leafCertDer);
@@ -112,7 +112,7 @@ export async function verifyQes(input: VerifyInput): Promise<VerifyOk> {
   } else {
     const resolved = resolveIntermediateFromLotl(parsed.leafIssuerDer, trustedCas, binding.timestamp);
     if (!resolved) {
-      throw new QkbError('qes.unknownCA', { reason: 'intermediate-not-in-lotl' });
+      throw new ZkqesError('qes.unknownCA', { reason: 'intermediate-not-in-lotl' });
     }
     intermediateDer = resolved.der;
     caMerkleIndex = resolved.merkleIndex;
@@ -123,7 +123,7 @@ export async function verifyQes(input: VerifyInput): Promise<VerifyOk> {
   const notBefore = leafCert.notBefore.value.getTime();
   const notAfter = leafCert.notAfter.value.getTime();
   if (ts < notBefore || ts > notAfter) {
-    throw new QkbError('qes.certExpired', {
+    throw new ZkqesError('qes.certExpired', {
       timestamp: binding.timestamp,
       notBefore: Math.floor(notBefore / 1000),
       notAfter: Math.floor(notAfter / 1000),
@@ -134,7 +134,7 @@ export async function verifyQes(input: VerifyInput): Promise<VerifyOk> {
 
   const intMatch = await verifyChain(leafCert, intCert);
   if (!intMatch) {
-    throw new QkbError('qes.sigInvalid', { reason: 'chain' });
+    throw new ZkqesError('qes.sigInvalid', { reason: 'chain' });
   }
 
   return {
@@ -170,7 +170,7 @@ function resolveIntermediateFromLotl(
     }
   }
   if (inactiveMatch) {
-    throw new QkbError('qes.unknownCA', { reason: 'ca-not-active-at-timestamp', timestamp });
+    throw new ZkqesError('qes.unknownCA', { reason: 'ca-not-active-at-timestamp', timestamp });
   }
   return null;
 }
@@ -194,7 +194,7 @@ async function verifySignerSignature(
         ['verify'],
       );
     } catch (cause) {
-      throw new QkbError('qes.wrongAlgorithm', { cause: String(cause) });
+      throw new ZkqesError('qes.wrongAlgorithm', { cause: String(cause) });
     }
     let ok = false;
     try {
@@ -205,9 +205,9 @@ async function verifySignerSignature(
         toAB(parsed.signedAttrsDer),
       );
     } catch (cause) {
-      throw new QkbError('qes.sigInvalid', { cause: String(cause) });
+      throw new ZkqesError('qes.sigInvalid', { cause: String(cause) });
     }
-    if (!ok) throw new QkbError('qes.sigInvalid', { reason: 'rsa-verify' });
+    if (!ok) throw new ZkqesError('qes.sigInvalid', { reason: 'rsa-verify' });
     return;
   }
 
@@ -222,7 +222,7 @@ async function verifySignerSignature(
         ['verify'],
       );
     } catch (cause) {
-      throw new QkbError('qes.wrongAlgorithm', { cause: String(cause) });
+      throw new ZkqesError('qes.wrongAlgorithm', { cause: String(cause) });
     }
     const rawSig = ecdsaDerToRaw(parsed.signatureValue);
     let ok = false;
@@ -234,13 +234,13 @@ async function verifySignerSignature(
         toAB(parsed.signedAttrsDer),
       );
     } catch (cause) {
-      throw new QkbError('qes.sigInvalid', { cause: String(cause) });
+      throw new ZkqesError('qes.sigInvalid', { cause: String(cause) });
     }
-    if (!ok) throw new QkbError('qes.sigInvalid', { reason: 'ecdsa-verify' });
+    if (!ok) throw new ZkqesError('qes.sigInvalid', { reason: 'ecdsa-verify' });
     return;
   }
 
-  throw new QkbError('qes.wrongAlgorithm', { algorithmTag: parsed.algorithmTag });
+  throw new ZkqesError('qes.wrongAlgorithm', { algorithmTag: parsed.algorithmTag });
 }
 
 async function verifyChain(leaf: Certificate, issuer: Certificate): Promise<boolean> {
@@ -275,7 +275,7 @@ async function verifyChain(leaf: Certificate, issuer: Certificate): Promise<bool
       toAB(tbs),
     );
   }
-  throw new QkbError('qes.wrongAlgorithm', { reason: 'chain', oid: issuerAlg });
+  throw new ZkqesError('qes.wrongAlgorithm', { reason: 'chain', oid: issuerAlg });
 }
 
 function lookupTrustedCa(intermediateDer: Uint8Array, file: TrustedCasFile, timestamp: number): number {
@@ -290,7 +290,7 @@ function lookupTrustedCa(intermediateDer: Uint8Array, file: TrustedCasFile, time
     }
     return ca.merkleIndex;
   }
-  throw new QkbError('qes.unknownCA', inactiveMatch
+  throw new ZkqesError('qes.unknownCA', inactiveMatch
     ? { reason: 'ca-not-active-at-timestamp', timestamp }
     : undefined);
 }
@@ -304,7 +304,7 @@ function isCaActiveAt(ca: TrustedCa, timestamp: number): boolean {
 function parseCert(der: Uint8Array): Certificate {
   const asn = asn1js.fromBER(toAB(der));
   if (asn.offset === -1) {
-    throw new QkbError('qes.sigInvalid', { reason: 'cert-parse' });
+    throw new ZkqesError('qes.sigInvalid', { reason: 'cert-parse' });
   }
   return new Certificate({ schema: asn.result });
 }
@@ -325,7 +325,7 @@ function getSubtle(): SubtleCrypto {
 function ecdsaDerToRaw(der: Uint8Array): Uint8Array {
   const asn = asn1js.fromBER(toAB(der));
   if (asn.offset === -1) {
-    throw new QkbError('qes.sigInvalid', { reason: 'ecdsa-decode' });
+    throw new ZkqesError('qes.sigInvalid', { reason: 'ecdsa-decode' });
   }
   const seq = asn.result as asn1js.Sequence;
   const [rNode, sNode] = seq.valueBlock.value as [asn1js.Integer, asn1js.Integer];
@@ -345,7 +345,7 @@ function stripLead(b: Uint8Array): Uint8Array {
 
 function padLeft(b: Uint8Array, n: number): Uint8Array {
   if (b.length === n) return b;
-  if (b.length > n) throw new QkbError('qes.sigInvalid', { reason: 'ecdsa-overflow' });
+  if (b.length > n) throw new ZkqesError('qes.sigInvalid', { reason: 'ecdsa-overflow' });
   const out = new Uint8Array(n);
   out.set(b, n - b.length);
   return out;

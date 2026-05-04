@@ -20,7 +20,7 @@
  * runs so the VM reclaims memory before the chain prove starts. See
  * `lib/prover.ts::proveSplit` for the orchestration.
  */
-import { QkbError } from './errors';
+import { ZkqesError } from './errors';
 
 export type ProverAlgorithm = 'ecdsa' | 'rsa';
 
@@ -49,13 +49,13 @@ export type ProverConfig = {
 export const PROVER_CONFIG: ProverConfig = {
   ecdsa: {
     leaf: {
-      wasmUrl: 'https://prove.identityescrow.org/ecdsa-leaf/QKBPresentationEcdsaLeaf.wasm',
-      zkeyUrl: 'https://prove.identityescrow.org/ecdsa-leaf/qkb-leaf.zkey',
+      wasmUrl: 'https://prove.zkqes.org/ecdsa-leaf/ZkqesPresentationEcdsaLeaf.wasm',
+      zkeyUrl: 'https://prove.zkqes.org/ecdsa-leaf/zkqes-leaf.zkey',
       zkeySha256: '0fdbc671e087ae2d7cad58e7c33191251622f5d2b687f7f91827a8b1641299fb',
     },
     chain: {
-      wasmUrl: 'https://prove.identityescrow.org/ecdsa-chain/QKBPresentationEcdsaChain.wasm',
-      zkeyUrl: 'https://prove.identityescrow.org/ecdsa-chain/qkb-chain.zkey',
+      wasmUrl: 'https://prove.zkqes.org/ecdsa-chain/ZkqesPresentationEcdsaChain.wasm',
+      zkeyUrl: 'https://prove.zkqes.org/ecdsa-chain/zkqes-chain.zkey',
       zkeySha256: '8d1aed8e30a76770a8480e203a86c362f4421b6d800147d0ff4f960472ca9933',
     },
   },
@@ -70,7 +70,7 @@ export const PROVER_CONFIG: ProverConfig = {
 export function getProverConfig(algorithm: ProverAlgorithm): AlgorithmArtifactUrls {
   const cfg = PROVER_CONFIG[algorithm];
   if (!cfg) {
-    throw new QkbError('prover.artifactMismatch', {
+    throw new ZkqesError('prover.artifactMismatch', {
       reason: 'prover-algo-unconfigured',
       algorithm,
     });

@@ -10,7 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { DocumentFooter } from '../../components/DocumentFooter';
 import { PaperGrain } from '../../components/PaperGrain';
 
-const DESKTOP_URL = 'https://identityescrow.org/ua/registerV5';
+const DESKTOP_URL = 'https://app.zkqes.org/ua/registerV5';
 
 export function UseDesktopScreen() {
   const { t } = useTranslation();
@@ -60,7 +60,7 @@ export function UseDesktopScreen() {
             </p>
             <img
               src={qrSrc}
-              alt={t('deviceGate.useDesktop.qrCaption', 'QR code to identityescrow.org on desktop')}
+              alt={t('deviceGate.useDesktop.qrCaption', 'QR code to app.zkqes.org on desktop')}
               width={200}
               height={200}
               className="border"

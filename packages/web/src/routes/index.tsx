@@ -175,7 +175,7 @@ function AppRegisterLanding() {
             >
               {t(
                 'landing.privacy.closing',
-                'This is identity escrow. Every-day pseudonymity for the holder; recoverable accountability for the state. The same trust structure as the qualified electronic signature itself — preserved on-chain.',
+                'zkqes. Every-day pseudonymity for the holder; recoverable accountability for the state. The same trust structure as the qualified electronic signature itself — preserved on-chain.',
               )}
             </p>
           </section>

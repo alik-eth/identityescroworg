@@ -1,4 +1,4 @@
-// `qkb version` — emits two lines: the CLI's own semver + the bundled
+// `zkqes version` — emits two lines: the CLI's own semver + the bundled
 // rapidsnark version it ships with.  Both are compile-time constants so
 // the binary's identity is immutable post-build.
 //
@@ -17,7 +17,7 @@ export function versionCommand(program: Command): void {
     .command('version')
     .description('Print the CLI version and bundled rapidsnark version.')
     .action(() => {
-      process.stdout.write(`qkb-cli@${PKG_VERSION}\n`);
+      process.stdout.write(`zkqes-cli@${PKG_VERSION}\n`);
       process.stdout.write(`rapidsnark ${RAPIDSNARK_VERSION}\n`);
     });
 }

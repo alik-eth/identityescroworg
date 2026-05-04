@@ -26,10 +26,11 @@ import { sha256 } from '@noble/hashes/sha256';
 import * as secp from '@noble/secp256k1';
 import enText from '../../../../fixtures/declarations/en.txt?raw';
 import ukText from '../../../../fixtures/declarations/uk.txt?raw';
-import { QkbError } from './errors';
+import { ZkqesError } from './errors';
 
 export type Locale = 'en' | 'uk';
 
+// frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
 export const BINDING_VERSION = 'QKB/1.0' as const;
 export const BINDING_SCHEME = 'secp256k1' as const;
 export const PK_UNCOMPRESSED_LENGTH = 65;
@@ -70,10 +71,10 @@ export interface BuildBindingInput {
 export function buildBinding(input: BuildBindingInput): Binding {
   validatePk(input.pk);
   if (input.nonce.length !== NONCE_LENGTH) {
-    throw new QkbError('binding.field', { field: 'nonce', got: input.nonce.length });
+    throw new ZkqesError('binding.field', { field: 'nonce', got: input.nonce.length });
   }
   if (!Number.isInteger(input.timestamp) || input.timestamp < 0) {
-    throw new QkbError('binding.field', { field: 'timestamp' });
+    throw new ZkqesError('binding.field', { field: 'timestamp' });
   }
   return {
     version: BINDING_VERSION,
@@ -90,7 +91,7 @@ export function buildBinding(input: BuildBindingInput): Binding {
 export function canonicalizeBinding(b: Binding): Uint8Array {
   const json = canonicalize(b);
   if (json === undefined) {
-    throw new QkbError('binding.jcs', { reason: 'canonicalize-undefined' });
+    throw new ZkqesError('binding.jcs', { reason: 'canonicalize-undefined' });
   }
   return new TextEncoder().encode(json);
 }
@@ -109,15 +110,15 @@ export function declarationDigestHex(text: string): string {
 
 function validatePk(pk: Uint8Array): void {
   if (pk.length !== PK_UNCOMPRESSED_LENGTH) {
-    throw new QkbError('binding.field', { field: 'pk', reason: 'length', got: pk.length });
+    throw new ZkqesError('binding.field', { field: 'pk', reason: 'length', got: pk.length });
   }
   if (pk[0] !== 0x04) {
-    throw new QkbError('binding.field', { field: 'pk', reason: 'prefix' });
+    throw new ZkqesError('binding.field', { field: 'pk', reason: 'prefix' });
   }
   try {
     secp.ProjectivePoint.fromHex(pk).assertValidity();
   } catch (cause) {
-    throw new QkbError('binding.field', {
+    throw new ZkqesError('binding.field', {
       field: 'pk',
       reason: 'not-on-curve',
       cause: String(cause),

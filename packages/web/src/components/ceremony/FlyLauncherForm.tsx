@@ -167,7 +167,7 @@ export function FlyLauncherForm() {
           <textarea
             value={signedPutUrl}
             onChange={(e) => setSignedPutUrl(e.target.value)}
-            placeholder="https://prove.identityescrow.org/upload/round-3.zkey?sig=…"
+            placeholder="https://prove.zkqes.org/upload/round-3.zkey?sig=…"
             data-testid="fly-launch-signed-url"
             rows={3}
             className="w-full p-2 text-mono text-xs"

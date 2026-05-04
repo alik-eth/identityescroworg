@@ -1,18 +1,18 @@
-// `qkb cache` + `qkb cache clear` — inspect / wipe the per-user cache
+// `zkqes cache` + `zkqes cache clear` — inspect / wipe the per-user cache
 // directory.
 //
 // UX shape:
-//   $ qkb cache
-//   cache root: /home/alice/.local/share/qkb-cli
-//     circuits/qkb-v5.2.zkey       2.01 GiB
-//     circuits/qkb-v5.2.wasm      21.06 MiB
-//     circuits/qkb-v5.2-vkey.json  6.61 KiB
-//     manifest/qkb-cli-manifest.json  812 B
+//   $ zkqes cache
+//   cache root: /home/alice/.local/share/zkqes-cli
+//     circuits/zkqes-v5.2.zkey       2.01 GiB
+//     circuits/zkqes-v5.2.wasm      21.06 MiB
+//     circuits/zkqes-v5.2-vkey.json  6.61 KiB
+//     manifest/zkqes-cli-manifest.json  812 B
 //
-//   $ qkb cache clear --circuit v5.2
-//   removed: /home/alice/.local/share/qkb-cli/circuits/qkb-v5.2.zkey
-//   removed: /home/alice/.local/share/qkb-cli/circuits/qkb-v5.2.wasm
-//   removed: /home/alice/.local/share/qkb-cli/circuits/qkb-v5.2-vkey.json
+//   $ zkqes cache clear --circuit v5.2
+//   removed: /home/alice/.local/share/zkqes-cli/circuits/zkqes-v5.2.zkey
+//   removed: /home/alice/.local/share/zkqes-cli/circuits/zkqes-v5.2.wasm
+//   removed: /home/alice/.local/share/zkqes-cli/circuits/zkqes-v5.2-vkey.json
 //
 // Operator-facing diagnostic; not security-sensitive.  Bytes shown
 // in IEC binary units (MiB, GiB) since the artifacts span that range.
@@ -33,7 +33,7 @@ interface CacheOptions {
 export function cacheCommand(program: Command): void {
   const cache = program
     .command('cache')
-    .description('Inspect or clear the qkb-cli cache directory.');
+    .description('Inspect or clear the zkqes-cli cache directory.');
 
   cache
     .command('list', { isDefault: true })
