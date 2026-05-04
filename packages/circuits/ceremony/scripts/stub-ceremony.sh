@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Run the full Groth16 round-trip on BOTH Phase-2 stub circuits (ECDSA + RSA).
 # This is a DEV-ONLY ceremony — stub circuits have the same 14-signal public
-# shape as the real QKBPresentation{Ecdsa,Rsa} but assert nothing beyond the
+# shape as the real ZkqesPresentation{Ecdsa,Rsa} but assert nothing beyond the
 # algorithmTag literal. Exists so that contracts + web can integrate against
 # compilable Verifier.sol pair today while the real multi-megaconstraint
 # setups run on a local 48+ GB host.
 #
-# Produces build/qkb-stub/<variant>/{qkb_stub.zkey, verification_key.json,
-# QKBGroth16VerifierStub<Variant>.sol, input.json, proof.json, public.json}.
+# Produces build/zkqes-stub/<variant>/{zkqes_stub.zkey, verification_key.json,
+# ZkqesGroth16VerifierStub<Variant>.sol, input.json, proof.json, public.json}.
 set -euo pipefail
 
 PKG_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -29,15 +29,15 @@ run_variant() {
   local variant_cap="$2"     # Ecdsa | Rsa
   local alg_tag="$3"         # "1" for ecdsa, "0" for rsa
 
-  local SRC="$PKG_DIR/circuits/QKBPresentation${variant_cap}Stub.circom"
-  local OUT="$PKG_DIR/build/qkb-stub/$variant"
-  local BASENAME="QKBPresentation${variant_cap}Stub"
+  local SRC="$PKG_DIR/circuits/ZkqesPresentation${variant_cap}Stub.circom"
+  local OUT="$PKG_DIR/build/zkqes-stub/$variant"
+  local BASENAME="ZkqesPresentation${variant_cap}Stub"
   local R1CS="$OUT/${BASENAME}.r1cs"
   local WASM="$OUT/${BASENAME}_js/${BASENAME}.wasm"
-  local ZKEY0="$OUT/qkb_stub_0000.zkey"
-  local ZKEY="$OUT/qkb_stub.zkey"
+  local ZKEY0="$OUT/zkqes_stub_0000.zkey"
+  local ZKEY="$OUT/zkqes_stub.zkey"
   local VKEY="$OUT/verification_key.json"
-  local VERIFIER="$OUT/QKBGroth16VerifierStub${variant_cap}.sol"
+  local VERIFIER="$OUT/ZkqesGroth16VerifierStub${variant_cap}.sol"
   local INPUT="$OUT/input.json"
   local WTNS="$OUT/witness.wtns"
   local PROOF="$OUT/proof.json"
@@ -57,12 +57,12 @@ run_variant() {
   local ENTROPY
   ENTROPY="$(head -c 64 /dev/urandom | base64 | tr -d '\n')"
   npx snarkjs zkey contribute "$ZKEY0" "$ZKEY" \
-    --name="qkb-stub-${variant}-dev-1" -v -e="$ENTROPY"
+    --name="zkqes-stub-${variant}-dev-1" -v -e="$ENTROPY"
 
   echo "=== [$variant] export vkey + verifier ==="
   npx snarkjs zkey export verificationkey "$ZKEY" "$VKEY"
   npx snarkjs zkey export solidityverifier "$ZKEY" "$VERIFIER"
-  sed -i "s/contract Groth16Verifier/contract QKBGroth16VerifierStub${variant_cap}/" "$VERIFIER"
+  sed -i "s/contract Groth16Verifier/contract ZkqesGroth16VerifierStub${variant_cap}/" "$VERIFIER"
 
   echo "=== [$variant] round-trip proof ==="
   # Dummy input with correct algorithmTag literal for this variant.

@@ -239,7 +239,7 @@ function buildSyntheticSignedAttrs(bindingDigest: Buffer): {
 async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
   const v2core = buildV2CoreWitnessFromFixture(FIXTURE_DIR);
   const fix = loadFixture(FIXTURE_DIR);
-  const bindingBuf = readFileSync(resolve(FIXTURE_DIR, 'binding.qkb2.json'));
+  const bindingBuf = readFileSync(resolve(FIXTURE_DIR, 'binding.zkqes2.json'));
 
   // SHA-256 of the binding (the "bindingHash" public signal pair).
   const bindingDigest = createHash('sha256').update(bindingBuf).digest();
@@ -337,7 +337,7 @@ async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
   // address(low-160).
   const bindingObj = JSON.parse(bindingBuf.toString('utf8'));
   if (!bindingObj.pk || typeof bindingObj.pk !== 'string') {
-    throw new Error('binding.qkb2.json: missing/non-string pk field');
+    throw new Error('binding.zkqes2.json: missing/non-string pk field');
   }
   const pkHex = (bindingObj.pk as string).startsWith('0x')
     ? (bindingObj.pk as string).slice(2)
@@ -461,16 +461,16 @@ async function buildV5SmokeWitness(): Promise<Record<string, unknown>> {
   };
 }
 
-describe('QKBPresentationV5 — §6.2-§6.9 (V5.2: parser + 4× SHA + 2× SpkiCommit + nullifier + ctxHash + tbs↔cert + bindingPk limb packing)', function () {
+describe('ZkqesPresentationV5 — §6.2-§6.9 (V5.2: parser + 4× SHA + 2× SpkiCommit + nullifier + ctxHash + tbs↔cert + bindingPk limb packing)', function () {
   this.timeout(1800000);
 
   let circuit: CompiledCircuit;
 
   before(async () => {
-    circuit = await compile('QKBPresentationV5.circom');
+    circuit = await compile('ZkqesPresentationV5.circom');
   });
 
-  it('compiles + accepts the QKB/2.0 fixture witness with all wired binds satisfied', async () => {
+  it('compiles + accepts the zkqes binding fixture (version "QKB/2.0" frozen) with all wired binds satisfied', async () => {
     const input = await buildV5SmokeWitness();
     const w = await circuit.calculateWitness(input, true);
     await circuit.checkConstraints(w);
@@ -911,7 +911,7 @@ describe('QKBPresentationV5 — §6.2-§6.9 (V5.2: parser + 4× SHA + 2× SpkiCo
   // even has a chance to read the hex-decoded byte. Both gates protect
   // against the same class of attacker (non-uncompressed SEC1 pk in the
   // binding); this test covers the parser-level lead-in defense in depth.
-  // The standalone SEC1 gate at QKBPresentationV5.circom:701
+  // The standalone SEC1 gate at ZkqesPresentationV5.circom:701
   // (`parser.pkBytes[0] === 4`) is verified by inspection — driving it
   // independently requires constructing a binding whose pk field starts
   // with `"0x` followed by hex other than `04`, which is out of scope for
@@ -937,7 +937,7 @@ describe('QKBPresentationV5 — §6.2-§6.9 (V5.2: parser + 4× SHA + 2× SpkiCo
   // test no longer applies — msgSender is no longer a circuit public
   // signal in V5.2. The equivalent V5.2 check (msg.sender ==
   // address(uint160(uint256(keccak256(reconstructedPk))))) is enforced
-  // by QKBRegistryV5_2.register(), exercised in contracts-eng's test
+  // by ZkqesRegistryV5_2.register(), exercised in contracts-eng's test
   // suite. The circuit-side soundness contract is now: bindingPk
   // limbs must equal parser.pkBytes[1..65] big-endian (covered by the
   // tamper test above).

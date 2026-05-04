@@ -1,5 +1,5 @@
 {
-  "schema": "qkb-v4-chain-proof-bundle/v1",
+  "schema": "zkqes-v4-chain-proof-bundle/v1",
   "trustedListRoot": "0x25ce7bfa7693e391a7e1d5df666caa5b622bf709cc6797289a74bfc272462b3e",
   "algorithmTag": 1,
   "leafSpkiCommit": "21571940304476356854922994092266075334973586284547564138969104758217451997906",

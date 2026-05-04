@@ -1,9 +1,9 @@
 #!/usr/bin/env -S node --experimental-strip-types
 // CLI wrapper around `buildWitnessV5` (V5.1 wallet-bound nullifier). Invokable via:
 //
-//   pnpm -F @qkb/circuits exec build-witness-v5 \
+//   pnpm -F @zkqes/circuits exec build-witness-v5 \
 //     --p7s admin.p7s \
-//     --binding binding.qkb2.json \
+//     --binding binding.zkqes2.json \
 //     --leaf-spki leaf-spki.bin \
 //     --int-spki intermediate-spki.bin \
 //     --wallet-secret <64-hex-chars> \

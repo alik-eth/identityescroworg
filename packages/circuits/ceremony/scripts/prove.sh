@@ -3,9 +3,9 @@
 set -euo pipefail
 
 PKG_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-OUT="$PKG_DIR/build/qkb-presentation"
-WASM="$OUT/QKBPresentationEcdsaLeaf_js/QKBPresentationEcdsaLeaf.wasm"
-ZKEY="$OUT/qkb.zkey"
+OUT="$PKG_DIR/build/zkqes-presentation"
+WASM="$OUT/ZkqesPresentationEcdsaLeaf_js/ZkqesPresentationEcdsaLeaf.wasm"
+ZKEY="$OUT/zkqes.zkey"
 VKEY="$OUT/verification_key.json"
 WTNS="$OUT/witness.wtns"
 INPUT="$OUT/input.json"
@@ -27,7 +27,7 @@ if [[ ! -f "$INPUT" ]]; then
 fi
 
 echo "[2/4] calculate witness"
-"${RUN[@]}" node "$OUT/QKBPresentationEcdsaLeaf_js/generate_witness.js" \
+"${RUN[@]}" node "$OUT/ZkqesPresentationEcdsaLeaf_js/generate_witness.js" \
   "$WASM" "$INPUT" "$WTNS"
 
 echo "[3/4] groth16 prove"

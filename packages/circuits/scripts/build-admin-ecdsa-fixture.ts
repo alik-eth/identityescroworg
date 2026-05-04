@@ -1,13 +1,13 @@
 // Real-Diia ECDSA admin fixture extractor.
 //
 // Pulls every witness-side artifact we can derive from the authentic
-// admin-binding.qkb.json + admin-binding.qkb.json.p7s pair (a genuine
+// admin-binding.zkqes.json + admin-binding.zkqes.json.p7s pair (a genuine
 // Diia-signed CAdES-BES detached QES) — excluding anything that needs
 // the Diia intermediate CA, which the repo does not yet carry (blocked
 // on flattener T10 LOTL pump or an offline fetch).
 //
 // Output (committed under fixtures/integration/admin-ecdsa/):
-//   binding.qkb.json               unchanged real admin binding
+//   binding.zkqes.json               unchanged real admin binding
 //   leaf.der                       real Diia-issued leaf (user cert)
 //   leaf.p7s                       copy of real admin p7s (for traceability)
 //   fixture.json                   witness-builder manifest covering:
@@ -148,7 +148,7 @@ function decodeEcdsaSigSequence(seqDer: Uint8Array): { r: Uint8Array; s: Uint8Ar
 }
 
 // Mirror of flattener canonicalizeCertHash. See
-// @qkb/lotl-flattener/src/ca/canonicalize.ts for the normative definition.
+// @zkqes/lotl-flattener/src/ca/canonicalize.ts for the normative definition.
 async function canonicalizeCertHash(data: Uint8Array): Promise<bigint> {
   const poseidon = await buildPoseidon();
   const F = poseidon.F;
@@ -218,8 +218,8 @@ async function main(): Promise<void> {
   mkdirSync(outDir, { recursive: true });
 
   const qesDir = resolve(pkgRoot, '..', '..', 'fixtures', 'qes');
-  const binding = readFileSync(resolve(qesDir, 'admin-binding.qkb.json'));
-  const p7s = readFileSync(resolve(qesDir, 'admin-binding.qkb.json.p7s'));
+  const binding = readFileSync(resolve(qesDir, 'admin-binding.zkqes.json'));
+  const p7s = readFileSync(resolve(qesDir, 'admin-binding.zkqes.json.p7s'));
 
   // 1. Parse the CMS SignedData.
   const ber = p7s.slice().buffer as ArrayBuffer;
@@ -316,10 +316,10 @@ async function main(): Promise<void> {
   synthCert.version = 2;
   synthCert.serialNumber = new Integer({ value: 1 });
   synthCert.issuer.typesAndValues.push(
-    cnAttr('QKB Stand-in Intermediate (NOT a real QTSP)'),
+    cnAttr('Zkqes Stand-in Intermediate (NOT a real QTSP)'),
   );
   synthCert.subject.typesAndValues.push(
-    cnAttr('QKB Stand-in Intermediate (NOT a real QTSP)'),
+    cnAttr('Zkqes Stand-in Intermediate (NOT a real QTSP)'),
   );
   synthCert.notBefore.value = new Date('2025-01-01T00:00:00Z');
   synthCert.notAfter.value = new Date('2030-01-01T00:00:00Z');
@@ -359,22 +359,22 @@ async function main(): Promise<void> {
 
   // 6. Emit.
   copyFileSync(
-    resolve(qesDir, 'admin-binding.qkb.json'),
-    resolve(outDir, 'binding.qkb.json'),
+    resolve(qesDir, 'admin-binding.zkqes.json'),
+    resolve(outDir, 'binding.zkqes.json'),
   );
   copyFileSync(
-    resolve(qesDir, 'admin-binding.qkb.json.p7s'),
+    resolve(qesDir, 'admin-binding.zkqes.json.p7s'),
     resolve(outDir, 'leaf.p7s'),
   );
   writeFileSync(resolve(outDir, 'leaf.der'), leafDer);
 
   const fixture = {
     version: '1.0',
-    source: 'real Diia QES (admin-binding.qkb.json + .p7s)',
+    source: 'real Diia QES (admin-binding.zkqes.json + .p7s)',
     derPaths: {
       leaf: 'leaf.der',
       cms: 'leaf.p7s',
-      binding: 'binding.qkb.json',
+      binding: 'binding.zkqes.json',
     },
     leaf: {
       derLength: leafDer.length,

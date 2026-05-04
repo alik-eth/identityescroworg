@@ -82,7 +82,7 @@ describe(`BindingParseV2Core legacy (MAX_BCANON=${V2CORE_MAX_BCANON}, MAX_CTX=${
     circuit = await compile('binding/BindingParseV2CoreLegacyTest.circom');
   });
 
-  it('parses the deterministic QKB/2.0 fixture and produces well-formed outputs', async () => {
+  it('parses the deterministic zkqes binding fixture (version "QKB/2.0" frozen) and produces well-formed outputs', async () => {
     const input = buildV2CoreWitnessFromFixture(FIXTURE_DIR);
     const w = await circuit.calculateWitness(input, true);
     await circuit.checkConstraints(w);
@@ -127,10 +127,11 @@ describe(`BindingParseV2Core legacy (MAX_BCANON=${V2CORE_MAX_BCANON}, MAX_CTX=${
     }
 
     // 5. policyIdBytes[0..14) decodes to "qkb-default-ua".
+    //    frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
     const policyId = Buffer.from(
       o.policyIdBytes.slice(0, 14).map((b) => Number(b)),
     ).toString('utf8');
-    expect(policyId).to.equal('qkb-default-ua');
+    expect(policyId).to.equal('qkb-default-ua'); // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
   });
 
   it('rejects a tampered policyVersion ASCII digit (2→9) at the witnessed offset', async () => {

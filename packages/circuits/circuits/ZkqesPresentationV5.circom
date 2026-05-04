@@ -19,7 +19,7 @@ include "circomlib/circuits/multiplexer.circom";
 // the contract layer; circuit just emits the binding's claimed pk as 4 ×
 // 128-bit limbs (bindingPkXHi/Lo, bindingPkYHi/Lo) for the contract to keccak.
 
-/// @title  QKBPresentationV5 — V5.2 single-circuit ZK presentation proof.
+/// @title  ZkqesPresentationV5 — V5.2 single-circuit ZK presentation proof.
 /// @notice Public-signal layout per V5.2 keccak-on-chain amendment
 ///         (`docs/superpowers/specs/2026-05-01-keccak-on-chain-amendment.md`,
 ///         pending user-review at v0.4) layered on V5.1 wallet-bound nullifier
@@ -62,7 +62,7 @@ include "circomlib/circuits/multiplexer.circom";
 /// chains (Solana, Cosmos, Aptos, Sui) need a chain-specific auth-shim
 /// before V5.2 deploys there.
 ///
-/// Layout MUST match arch-contracts QKBRegistryV5_2.PublicSignalsV52 struct
+/// Layout MUST match arch-contracts ZkqesRegistryV5_2.PublicSignalsV52 struct
 /// (frozen by V5.2 spec §"Public-signal layout V5.1 (19) → V5.2 (22)"). All
 /// 22 are declared as `signal input` so snarkjs's
 /// `[outputs..., public_inputs...]` emission order places them in the
@@ -82,8 +82,8 @@ include "circomlib/circuits/multiplexer.circom";
 ///   nullifier            = Poseidon₂(walletSecret, ctxFieldHash)
 ///
 /// `walletSecret` is a private 254-bit input. Off-circuit derivation per spec:
-///   EOA path: HKDF-SHA256(personal_sign(walletPriv, "qkb-personal-secret-v1" || subjectSerial))
-///   SCW path: Argon2id(passphrase, salt="qkb-walletsecret-v1" || walletAddr)
+///   EOA path: HKDF-SHA256(personal_sign(walletPriv, "qkb-personal-secret-v1" || subjectSerial))  // frozen protocol byte strings; see specs/2026-05-03-zkqes-rename-design.md §3
+///   SCW path: Argon2id(passphrase, salt="qkb-walletsecret-v1" || walletAddr)  // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
 /// then truncated/reduced mod the BN254 scalar field. Circuit treats it as
 /// an opaque field element with a 254-bit range check (Num2Bits) for safety.
 ///
@@ -97,7 +97,7 @@ include "circomlib/circuits/multiplexer.circom";
 /// rotationOldCommitment no-op still implemented via
 /// `ForceEqualIfEnabled(enabled = 1 - rotationMode, ...)`. rotationMode itself
 /// is boolean-range-checked (`rm * (rm - 1) === 0`).
-template QKBPresentationV5() {
+template ZkqesPresentationV5() {
     // MAX bounds per V5 spec v5 §0.5. Two empirical bumps from the original
     // estimates (commit b8e0f74 / 139c475 in this worktree):
     //   MAX_SA     256 → 1536  (real Diia CAdES-X-L signedAttrs measured 1388 B)
@@ -164,6 +164,7 @@ template QKBPresentationV5() {
 
     // FINGERPRINT_DOMAIN — fixed compile-time constant for identity-fingerprint domain
     // separation. Field-element encoding of the ASCII string "qkb-id-fingerprint-v1"
+    // (frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3)
     // (21 bytes, big-endian-packed). Verified: 0x71='q', 0x6b='k', 0x62='b', 0x2d='-',
     // 0x69='i', 0x64='d', 0x2d='-', 0x66='f', 0x69='i', 0x6e='n', 0x67='g', 0x65='e',
     // 0x72='r', 0x70='p', 0x72='r', 0x69='i', 0x6e='n', 0x74='t', 0x2d='-', 0x76='v',
@@ -258,9 +259,11 @@ template QKBPresentationV5() {
 
     // V5.1 wallet-bound nullifier secret. Off-circuit derivation:
     //   EOA: walletSecret = HKDF-SHA256(personal_sign(walletPriv, "qkb-personal-secret-v1"
+    //                                   // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
     //                                              || subjectSerialPacked.bytes))
     //                       reduced/truncated to fit the BN254 scalar field.
     //   SCW: walletSecret = Argon2id(passphrase, salt="qkb-walletsecret-v1" || walletAddr)
+    //                       // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
     //                       same field reduction.
     // Circuit treats it as an opaque field element + applies a 254-bit range check
     // (Num2Bits below) so an adversary witness cannot supply a value ≥ p that
@@ -937,4 +940,4 @@ component main { public [
     bindingPkXLo,
     bindingPkYHi,
     bindingPkYLo
-] } = QKBPresentationV5();
+] } = ZkqesPresentationV5();

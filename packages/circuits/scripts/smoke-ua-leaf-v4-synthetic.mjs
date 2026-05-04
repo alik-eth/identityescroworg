@@ -2,12 +2,13 @@
 //
 // Goal: round-trip the UA-leaf ceremonied zkey + vkey with a witness that
 // satisfies every V4 leaf constraint end-to-end. No Diia, no QTSP, no real
-// .p7s — an ephemeral P-256 signer + a hand-crafted QKB/2.0 binding. If
+// .p7s — an ephemeral P-256 signer + a hand-crafted binding (version "QKB/2.0"
+// — frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3). If
 // snarkjs.groth16.verify prints OK, the ceremony trio (wasm, zkey, vkey)
 // is internally consistent.
 //
 // Constraints the synthetic witness satisfies:
-//   * BindingParseV2Core: QKB/2.0 binding JSON with all required fields,
+//   * BindingParseV2Core: binding JSON (version "QKB/2.0" frozen) with all required fields,
 //     JCS-sorted, exact-literal assertions + statementSchema + policy.bindingSchema.
 //   * sha256(bindingCore) == messageDigest inside signedAttrs at mdOffsetInSA.
 //   * ECDSA-P256 over sha256(signedAttrs) verified by leaf SPKI (X,Y limbs).
@@ -19,8 +20,8 @@
 //     dobSupported=0, dobYmd=0, sourceTag=1 (hardcoded), dobCommit=Poseidon(0,1).
 //
 // Output (committed under packages/circuits/fixtures/integration/ua-v4/):
-//   - leaf-synthetic-qkb2.proof.json
-//   - leaf-synthetic-qkb2.public.json
+//   - leaf-synthetic-zkqes2.proof.json
+//   - leaf-synthetic-zkqes2.public.json
 //   - README.md
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
@@ -39,7 +40,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = resolve(__dirname, '..');
 const WASM = join(
   PKG_ROOT,
-  'build/ua-leaf/QKBPresentationEcdsaLeafV4_UA_js/QKBPresentationEcdsaLeafV4_UA.wasm',
+  'build/ua-leaf/ZkqesPresentationEcdsaLeafV4_UA_js/ZkqesPresentationEcdsaLeafV4_UA.wasm',
 );
 const ZKEY = join(PKG_ROOT, 'build/ua-leaf/ua_leaf_final.zkey');
 const VKEY = join(PKG_ROOT, 'build/ua-leaf/vkey.json');
@@ -185,7 +186,7 @@ function generateSecp256k1Keypair() {
 //   bytes[48..79]  leafY (32 bytes)
 //   bytes[80..91]  subject.serialNumber RDN TLV:
 //                    06 03 55 04 05         (OID 2.5.4.5)
-//                    13 0C "QKB-SMOKE-01"   (PrintableString, 12 bytes)
+//                    13 0C "ZKQES-SMOKE-01"   (PrintableString, 12 bytes)
 //   bytes[92..119] zero tail
 //   leafDerLen = 120
 // ---------------------------------------------------------------------------
@@ -200,10 +201,10 @@ function buildLeafDerContainer(X, Y) {
   der[82] = 0x55;
   der[83] = 0x04;
   der[84] = 0x05;
-  // 13 0C <12 bytes> — PrintableString "QKB-SMOKE-01" at offset 85
+  // 13 0C <12 bytes> — PrintableString "ZKQES-SMOKE-01" at offset 85
   der[85] = 0x13;
   der[86] = 0x0c;
-  Buffer.from('QKB-SMOKE-01', 'ascii').copy(der, 87);
+  Buffer.from('ZKQES-SMOKE-01', 'ascii').copy(der, 87);
   return {
     der,
     derLen: len,
@@ -215,8 +216,9 @@ function buildLeafDerContainer(X, Y) {
 }
 
 // ---------------------------------------------------------------------------
-// 4. Build the QKB/2.0 binding JSON (JCS key-sort order, no whitespace,
-//    lowercase hex).
+// 4. Build the zkqes binding JSON (version "QKB/2.0" frozen — protocol byte
+//    string; see specs/2026-05-03-zkqes-rename-design.md §3) with JCS key-sort
+//    order, no whitespace, lowercase hex.
 // ---------------------------------------------------------------------------
 function buildBindingCore({ secpX, secpY, nonce32, policyLeafHashHex }) {
   const pkHex = '04' + secpX.toString('hex') + secpY.toString('hex');
@@ -228,7 +230,7 @@ function buildBindingCore({ secpX, secpY, nonce32, policyLeafHashHex }) {
   const assertions =
     '{"acceptsAttribution":true,"bindsContext":true,"keyControl":true,"revocationRequired":true}';
   const policy =
-    `{"bindingSchema":"qkb-binding-core/v1",` +
+    `{"bindingSchema":"qkb-binding-core/v1",` + // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
     `"leafHash":"0x${policyLeafHashHex}",` +
     `"policyId":"qkb-smoke/v1",` +
     `"policyVersion":1}`;
@@ -239,9 +241,9 @@ function buildBindingCore({ secpX, secpY, nonce32, policyLeafHashHex }) {
     `"pk":"0x${pkHex}",` +
     `"policy":${policy},` +
     `"scheme":"secp256k1",` +
-    `"statementSchema":"qkb-binding-core/v1",` +
+    `"statementSchema":"qkb-binding-core/v1",` + // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
     `"timestamp":${timestamp},` +
-    `"version":"QKB/2.0"}`;
+    `"version":"QKB/2.0"}`; // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
   return { jsonBytes: Buffer.from(json, 'utf8'), timestamp };
 }
 
@@ -505,7 +507,7 @@ async function main() {
   console.log('policyRoot:', tree.root.toString());
 
   // Nullifier.
-  const serialBytes = Buffer.from('QKB-SMOKE-01', 'ascii');
+  const serialBytes = Buffer.from('ZKQES-SMOKE-01', 'ascii');
   const serialLimbs = subjectSerialBytesToLimbs(serialBytes);
   const secret = await poseidon([...serialLimbs, BigInt(serialBytes.length)]);
   const nullifier = await poseidon([secret, ctxHash]);
@@ -602,7 +604,7 @@ async function main() {
   // synthetic key generation each time.
   if (process.env.EXPORT_INPUT_ONLY === '1') {
     mkdirSync(OUT_DIR, { recursive: true });
-    const inputPath = join(OUT_DIR, 'leaf-synthetic-qkb2.input.json');
+    const inputPath = join(OUT_DIR, 'leaf-synthetic-zkqes2.input.json');
     writeFileSync(inputPath, JSON.stringify(input, null, 2));
     console.log('wrote', inputPath);
     process.exit(0);
@@ -627,11 +629,11 @@ async function main() {
   // 9.5 Write KAT fixtures.
   mkdirSync(OUT_DIR, { recursive: true });
   writeFileSync(
-    join(OUT_DIR, 'leaf-synthetic-qkb2.proof.json'),
+    join(OUT_DIR, 'leaf-synthetic-zkqes2.proof.json'),
     JSON.stringify(proof, null, 2),
   );
   writeFileSync(
-    join(OUT_DIR, 'leaf-synthetic-qkb2.public.json'),
+    join(OUT_DIR, 'leaf-synthetic-zkqes2.public.json'),
     JSON.stringify(publicSignals, null, 2),
   );
   console.log('wrote', OUT_DIR);

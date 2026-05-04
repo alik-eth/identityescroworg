@@ -1,6 +1,6 @@
 // Synthetic RSA-QES fixture builder.
 //
-// Produces the artifacts the QKBPresentationRsa main circuit needs for an
+// Produces the artifacts the ZkqesPresentationRsa main circuit needs for an
 // end-to-end integration test, WITHOUT requiring a real EU QTSP. The
 // construction mirrors a real detached CAdES-BES signature:
 //
@@ -12,7 +12,7 @@
 //                     signed by Leaf with RSA-PKCS1v1.5 / SHA-256.
 //
 // Outputs (committed under fixtures/integration/synth-rsa/):
-//   binding.qkb.json            the JCS bytes being signed (admin binding)
+//   binding.zkqes.json            the JCS bytes being signed (admin binding)
 //   intermediate.der            intermediate CA DER
 //   leaf.der                    leaf cert DER
 //   leaf.p7s                    detached CMS SignedData (.p7s shape)
@@ -388,7 +388,7 @@ async function main(): Promise<void> {
   // 1. Load admin binding (path is relative to the circuits package root
   //    so the script is portable across main checkout / worktree).
   const pkgRoot = resolve(__dirname, '..');
-  const bindingPath = resolve(pkgRoot, '..', '..', 'fixtures', 'qes', 'admin-binding.qkb.json');
+  const bindingPath = resolve(pkgRoot, '..', '..', 'fixtures', 'qes', 'admin-binding.zkqes.json');
   const binding = readFileSync(bindingPath);
 
   // 2. Generate intermediate CA (self-signed) + leaf.
@@ -396,16 +396,16 @@ async function main(): Promise<void> {
   const leafKp = await generateRsaKeyPair();
 
   const interCert = await buildCert({
-    subjectCN: 'QKB Synth-RSA Intermediate CA',
-    issuerCN: 'QKB Synth-RSA Intermediate CA',
+    subjectCN: 'Zkqes Synth-RSA Intermediate CA',
+    issuerCN: 'Zkqes Synth-RSA Intermediate CA',
     subjectKey: interKp,
     issuerPrivateKey: interKp.privateKey,
     isCA: true,
     serial: 1,
   });
   const leafCert = await buildCert({
-    subjectCN: 'QKB Synth-RSA Leaf',
-    issuerCN: 'QKB Synth-RSA Intermediate CA',
+    subjectCN: 'Zkqes Synth-RSA Leaf',
+    issuerCN: 'Zkqes Synth-RSA Intermediate CA',
     subjectKey: leafKp,
     issuerPrivateKey: interKp.privateKey,
     isCA: false,
@@ -416,7 +416,7 @@ async function main(): Promise<void> {
   const leafDer = derOf(leafCert);
   writeFileSync(resolve(outDir, 'intermediate.der'), interDer);
   writeFileSync(resolve(outDir, 'leaf.der'), leafDer);
-  writeFileSync(resolve(outDir, 'binding.qkb.json'), binding);
+  writeFileSync(resolve(outDir, 'binding.zkqes.json'), binding);
 
   // 3. Detached CMS over binding bytes.
   const { cmsDer, signedAttrsDer, messageDigest } = await buildDetachedCms({
@@ -492,7 +492,7 @@ async function main(): Promise<void> {
       intermediate: 'intermediate.der',
       leaf: 'leaf.der',
       cms: 'leaf.p7s',
-      binding: 'binding.qkb.json',
+      binding: 'binding.zkqes.json',
     },
     intermediate: {
       derLength: interDer.length,

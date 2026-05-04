@@ -1,7 +1,7 @@
 pragma circom 2.1.9;
 
-// QKBPresentationEcdsaChainStub — DEV-ONLY placeholder with the 5-signal
-// public layout of QKBPresentationEcdsaChain post-split-proof pivot.
+// ZkqesPresentationEcdsaChainStub — DEV-ONLY placeholder with the 5-signal
+// public layout of ZkqesPresentationEcdsaChain post-split-proof pivot.
 // Wired so that downstream contract + web consumers can integrate against
 // a real (but trivial) Groth16 verifier today, while the ~3.2M-constraint
 // real Chain ceremony runs later on a Fly VM. At deploy time only the
@@ -19,7 +19,7 @@ pragma circom 2.1.9;
 //
 // DO NOT DEPLOY TO PRODUCTION.
 
-template QKBPresentationEcdsaChainStub() {
+template ZkqesPresentationEcdsaChainStub() {
     signal input rTL;
     signal input algorithmTag;
     signal input leafSpkiCommit;
@@ -37,4 +37,4 @@ template QKBPresentationEcdsaChainStub() {
 }
 
 component main {public [rTL, algorithmTag, leafSpkiCommit]}
-    = QKBPresentationEcdsaChainStub();
+    = ZkqesPresentationEcdsaChainStub();

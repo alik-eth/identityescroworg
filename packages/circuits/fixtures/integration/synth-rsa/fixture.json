@@ -4,7 +4,7 @@
     "intermediate": "intermediate.der",
     "leaf": "leaf.der",
     "cms": "leaf.p7s",
-    "binding": "binding.qkb.json"
+    "binding": "binding.zkqes.json"
   },
   "intermediate": {
     "derLength": 737,

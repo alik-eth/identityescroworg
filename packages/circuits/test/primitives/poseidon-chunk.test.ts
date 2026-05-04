@@ -5,7 +5,7 @@ import { compile, type CompiledCircuit } from '../helpers/compile';
 
 const CERT_PATH = resolve(__dirname, '..', '..', 'fixtures', 'test-ca.der');
 // Pinned cross-check vector supplied by team-lead, computed off-circuit by
-// `canonicalizeCertHash` in @qkb/lotl-flattener (commit b1ffbd9).
+// `canonicalizeCertHash` in @zkqes/lotl-flattener (commit b1ffbd9).
 const EXPECTED =
   3343320682401079542006381927947751400566902976482490538395564021405243591237n;
 

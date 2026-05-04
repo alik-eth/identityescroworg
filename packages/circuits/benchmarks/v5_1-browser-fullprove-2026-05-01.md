@@ -59,7 +59,7 @@ For the Fly deploy today (conservative):
    ~6 MB heap).
 2. fullProve gate copy: drop the "32 GB workstation" phrasing; replace
    with a JavaScript-engine-memory-limit explanation routing users to
-   `@qkb/cli`.
+   `@zkqes/cli`.
 3. Backlog: (a) Firefox-channel `fullProve` follow-up to determine if
    the prove step completes; (b) chunked-load shim (~1-2 days) to
    restore Chrome support and future-proof against larger zkeys.
@@ -78,8 +78,8 @@ All from the V5.1 stub ceremony at `packages/circuits/ceremony/v5_1/`
 
 | File | Size | sha256 (first 16) |
 |---|---|---|
-| `qkb-v5_1-stub.zkey` (gitignored) | 2,122.8 MB | `61449d3b182a01e8…` |
-| `QKBPresentationV5.wasm` (witness compiler) | 21.7 MB | n/a |
+| `zkqes-v5_1-stub.zkey` (gitignored) | 2,122.8 MB | `61449d3b182a01e8…` |
+| `ZkqesPresentationV5.wasm` (witness compiler) | 21.7 MB | n/a |
 | `verification_key.json` | 5.8 KB | `72872a9b56eec2c5…` |
 | `witness-input-sample.json` | 81 KB | `c3d21c7c6f487fcd…` |
 | `proof-sample.json` | 0.8 KB | `6403b89204f0268b…` |
@@ -302,7 +302,7 @@ Firefox as a channel) would close that gap.
    allocatable; the issue is solely contiguous-allocation. Requires snarkjs
    surgery (fork the bundle).
 
-3. **Ship the `@qkb/cli` offline prove path as primary; browser stays
+3. **Ship the `@zkqes/cli` offline prove path as primary; browser stays
    verify-only.** Already the V4 stance per `wasm-prover-benchmark.RESULTS.md`.
    Lowest effort. Recommended.
 
@@ -347,7 +347,7 @@ the cost of needing the @playwright/test runtime).
    - Keep the existing single-route `/ua/use-desktop` gate. Update the
      copy to say "Browser-side proving for this ceremony hits a
      JavaScript-engine memory limit on Chrome/Edge/Safari. Please use
-     the offline `@qkb/cli` from any desktop OS for proof generation;
+     the offline `@zkqes/cli` from any desktop OS for proof generation;
      verification works in any browser." — drops the "32 GB workstation"
      phrasing.
    - Verify-only flows ship unconditionally (they work everywhere in
@@ -357,7 +357,7 @@ the cost of needing the @playwright/test runtime).
    confirms it):**
    - Add a Firefox-specific opt-in route, copy: "Firefox 64-bit users
      can attempt browser-side proving (beta — may take 5–10 min and use
-     up to 4 GB RAM; falls back to `@qkb/cli` on failure)." Gate
+     up to 4 GB RAM; falls back to `@zkqes/cli` on failure)." Gate
      specifically on `navigator.userAgent` matching Firefox 64-bit.
    - This option REQUIRES the Firefox follow-up run before deploy. Don't
      ship Firefox-specific copy without empirical confirmation that

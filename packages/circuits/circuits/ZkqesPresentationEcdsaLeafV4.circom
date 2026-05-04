@@ -1,6 +1,6 @@
 pragma circom 2.1.9;
 
-// QKBPresentationEcdsaLeafV4 — unified successor leaf circuit for `QKB/2.0`.
+// ZkqesPresentationEcdsaLeafV4 — unified successor leaf circuit for zkqes bindings (version "QKB/2.0" frozen).
 //
 // Public signals (16 total):
 //   [0..3]  pkX[4]
@@ -22,7 +22,7 @@ pragma circom 2.1.9;
 // well-defined `dobCommit`. Registry reads `dobSupported` at age-proof time.
 //
 // This file is the generic template. Per-country compile is done via
-// QKBPresentationEcdsaLeafV4_<CC>.circom wrappers that `include` the
+// ZkqesPresentationEcdsaLeafV4_<CC>.circom wrappers that `include` the
 // appropriate DOB extractor before including this template (see
 // docs/superpowers/specs/2026-04-24-per-country-registries-design.md §Circuit
 // family).
@@ -65,7 +65,7 @@ template Bytes32ToLimbs643() {
     }
 }
 
-template QKBPresentationEcdsaLeafV4() {
+template ZkqesPresentationEcdsaLeafV4() {
     var MAX_BCANON = 1024;
     var MAX_SA = 1536;
     var MAX_CERT = 1536;
@@ -346,4 +346,4 @@ template QKBPresentationEcdsaLeafV4() {
 }
 
 component main {public [pkX, pkY, ctxHash, policyLeafHash, policyRoot, timestamp, nullifier, leafSpkiCommit, dobCommit, dobSupported]}
-    = QKBPresentationEcdsaLeafV4();
+    = ZkqesPresentationEcdsaLeafV4();

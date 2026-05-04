@@ -1,12 +1,12 @@
 pragma circom 2.1.9;
 
-// QKBPresentationEcdsaLeaf — leaf-side ECDSA proof.
+// ZkqesPresentationEcdsaLeaf — leaf-side ECDSA proof.
 //
-// Wires R_QKB constraints 1, 2, 5, 6 per spec §5.3 — the "binding proof"
+// Wires R_zkqes constraints 1, 2, 5, 6 per spec §5.3 — the "binding proof"
 // attesting that the user actually performed the QES over the binding
 // statement committed to `pk`/context/declaration/timestamp. Chain-side
 // constraints 3, 4 (intermediate signs leaf; intermediate in trusted list)
-// are proved by a separate circuit QKBPresentationEcdsaChain and verified
+// are proved by a separate circuit ZkqesPresentationEcdsaChain and verified
 // on-chain alongside this proof, per the §5.4 split-proof fallback (both
 // verifies in one circuit exceed the 22 GB compile budget on dev HW).
 //
@@ -70,7 +70,7 @@ template Bits256ToField() {
     packed <== acc;
 }
 
-template QKBPresentationEcdsaLeaf() {
+template ZkqesPresentationEcdsaLeaf() {
     var MAX_BCANON = 1024;
     var MAX_SA = 1536;
     var MAX_CERT = 1536;
@@ -324,4 +324,4 @@ template QKBPresentationEcdsaLeaf() {
 }
 
 component main {public [pkX, pkY, ctxHash, declHash, timestamp, nullifier, leafSpkiCommit]}
-    = QKBPresentationEcdsaLeaf();
+    = ZkqesPresentationEcdsaLeaf();

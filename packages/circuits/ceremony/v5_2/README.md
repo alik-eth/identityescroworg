@@ -1,7 +1,7 @@
 # V5.2 stub ceremony artifacts
 
 Single-contributor Groth16 setup against the V5.2 main circuit
-(`circuits/QKBPresentationV5.circom` post-A7.1 keccak-on-chain amendment)
+(`circuits/ZkqesPresentationV5.circom` post-A7.1 keccak-on-chain amendment)
 + pot22.
 
 **DEV-ONLY** — exists so contracts-eng + web-eng can integrate against a
@@ -51,16 +51,16 @@ for the full delta.
 
 ## NOT committed (gitignored)
 
-- `qkb-v5_2-stub.zkey` (~2.0 GB) — the actual V5.2 proving key.
+- `zkqes-v5_2-stub.zkey` (~2.0 GB) — the actual V5.2 proving key.
   Available via R2 once lead pumps the artifact (see `urls.json`
   placeholder up one directory).
-- `build/qkb-presentation/powersOfTau28_hez_final_22.ptau` (~4.6 GB) —
+- `build/zkqes-presentation/powersOfTau28_hez_final_22.ptau` (~4.6 GB) —
   Hermez final pot22 input. Re-fetched on demand from
   `https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_22.ptau`,
   pinned to sha256 `68a21bef870d5d4a9de39c8f35ebcf04e18ef97e14b2cd3f4c3e39876821d362`.
   **First-trust-on-use** as of 2026-05-03 — Phase B ceremony will need
   cross-validation against an independent Hermez manifest source.
-- `build/v5_2-stub/QKBPresentationV5.r1cs` (~870 MB) — circom R1CS
+- `build/v5_2-stub/ZkqesPresentationV5.r1cs` (~870 MB) — circom R1CS
   output for the V5.2 amended circuit; reproducible via `circom --r1cs`.
 
 ## Reproducing the ceremony
@@ -95,13 +95,13 @@ Re-running is idempotent for cached artifacts. The script:
 1. Re-uses `pot22.ptau` if present and sha256 matches the pinned hash
    (unconditional verification on every run).
 2. Re-uses `R1CS` + `wasm` from `build/v5_2-stub/` if both present.
-3. Re-uses `qkb-v5_2-stub_0000.zkey` (initial Groth16 setup) if present.
-4. Re-uses the contributed `qkb-v5_2-stub.zkey` if present, so the
+3. Re-uses `zkqes-v5_2-stub_0000.zkey` (initial Groth16 setup) if present.
+4. Re-uses the contributed `zkqes-v5_2-stub.zkey` if present, so the
    committed `verification_key.json` / `Groth16VerifierV5_2Stub.sol` /
    sample-proof bundle stays bytewise-stable on repeat invocations.
 
 To force a fresh contribution (e.g., believed-leaked entropy), delete
-`ceremony/v5_2/qkb-v5_2-stub.zkey` first; the cascade pre-wipe in the
+`ceremony/v5_2/zkqes-v5_2-stub.zkey` first; the cascade pre-wipe in the
 script will then regenerate every downstream artifact and the integrity
 manifest from scratch. Each cascade layer wipes `zkey.sha256` BEFORE
 running the risky operation so that a mid-run failure cannot leave a

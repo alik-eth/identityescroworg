@@ -6,7 +6,7 @@
 // content offset within signedAttrs, the leaf cert DER, and (when present)
 // the intermediate cert DER + the two ECDSA-P256 signatures.
 //
-// pkijs is already a dev-dep of @qkb/circuits (used by the synthetic-
+// pkijs is already a dev-dep of @zkqes/circuits (used by the synthetic-
 // fixture builders). We use its high-level CMS / Certificate models for
 // structural parsing, then drop down to byte-level for the offset hunt
 // SignerInfo doesn't expose directly.

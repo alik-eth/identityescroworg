@@ -207,7 +207,7 @@ async function main(): Promise<void> {
   //    (T-E) to produce a nullifier without needing a full QES signature.
   const binding = {
     note:
-      'Minimal binding for nullifier-KAT generation. Not a real QKB binding — no QES signature, no declaration, no pk.',
+      'Minimal binding for nullifier-KAT generation. Not a real zkqes binding — no QES signature, no declaration, no pk.',
     ctxHash:
       '0x4242424242424242424242424242424242424242424242424242424242424242',
     locale: 'en',

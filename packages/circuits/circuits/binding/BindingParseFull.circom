@@ -2,7 +2,7 @@ pragma circom 2.1.9;
 
 // BindingParseFull — full 8-field locate-and-extract for the binding
 // statement Bcanon. Builds on BindingParse (Task 7) by adding the
-// remaining fields needed by the QKBPresentation main circuit.
+// remaining fields needed by the ZkqesPresentation main circuit.
 //
 // Per orchestration §4.1, Bcanon is JCS-sorted JSON (alphabetical):
 //   {"context":"0x…","declaration":"…","escrow_commitment":null,

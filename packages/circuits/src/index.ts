@@ -1,8 +1,8 @@
-// @qkb/circuits — public package exports.
+// @zkqes/circuits — public package exports.
 //
 // Stable API surface for downstream consumers (web-eng's witness wire-in,
-// contracts-eng's calldata builder, the @qkb/cli wrapper). Anything
-// imported from a sub-path (e.g. `@qkb/circuits/src/types`) is internal
+// contracts-eng's calldata builder, the zkqes CLI wrapper). Anything
+// imported from a sub-path (e.g. `@zkqes/circuits/src/types`) is internal
 // and may shift between commits — pin to the surface this file re-exports.
 
 export {

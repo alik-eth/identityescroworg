@@ -12,7 +12,7 @@ pragma circom 2.1.9;
 //     length in bits encoded big-endian over the final 8 bytes.
 //   - `paddedLen` is the byte length of the padded input (a multiple of 64).
 //   - The witness builder (off-circuit) is responsible for performing this
-//     padding — `lib/witness.ts` in @qkb/web does so before submitting to the
+//     padding — `lib/witness.ts` in @zkqes/web does so before submitting to the
 //     prover. This wrapper only verifies the digest is consistent with the
 //     supplied padded prefix.
 //
@@ -23,7 +23,7 @@ pragma circom 2.1.9;
 //     internal `paddedInLength === inBlockIndex * 512` check, but we mirror
 //     the bound here at byte granularity for a clearer failure mode.)
 //
-// The QKB main circuit instantiates this with MAX_BYTES = 2048 (covering
+// The zkqes main circuit instantiates this with MAX_BYTES = 2048 (covering
 // signedAttrs ≤ 256 B and Bcanon ≤ 1024 B; cert TBS uses a larger
 // instantiation directly).
 

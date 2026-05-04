@@ -1,7 +1,7 @@
 pragma circom 2.1.9;
 
-// QKBPresentationEcdsaLeafStub — DEV-ONLY placeholder with the 13-signal
-// public layout of QKBPresentationEcdsaLeaf post-split-proof pivot. Wired
+// ZkqesPresentationEcdsaLeafStub — DEV-ONLY placeholder with the 13-signal
+// public layout of ZkqesPresentationEcdsaLeaf post-split-proof pivot. Wired
 // so that downstream contract + web consumers can integrate against a
 // real (but trivial) Groth16 verifier today, while the expensive
 // ~7.68M-constraint real ceremony runs later on a Fly VM. At deploy time
@@ -18,7 +18,7 @@ pragma circom 2.1.9;
 // binding (needed because snarkjs refuses ceremonies on zero-constraint
 // systems). DO NOT DEPLOY TO PRODUCTION.
 
-template QKBPresentationEcdsaLeafStub() {
+template ZkqesPresentationEcdsaLeafStub() {
     signal input pkX[4];
     signal input pkY[4];
     signal input ctxHash;
@@ -37,4 +37,4 @@ template QKBPresentationEcdsaLeafStub() {
 }
 
 component main {public [pkX, pkY, ctxHash, declHash, timestamp, nullifier, leafSpkiCommit]}
-    = QKBPresentationEcdsaLeafStub();
+    = ZkqesPresentationEcdsaLeafStub();

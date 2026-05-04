@@ -29,10 +29,10 @@
  *
  * Usage:
  *   node scripts/v5_2-prove-server.mjs \
- *     --zkey ceremony/v5_2/qkb-v5_2-stub.zkey \
- *     --wasm build/v5_2-stub/QKBPresentationV5_js/QKBPresentationV5.wasm \
+ *     --zkey ceremony/v5_2/zkqes-v5_2-stub.zkey \
+ *     --wasm build/v5_2-stub/ZkqesPresentationV5_js/ZkqesPresentationV5.wasm \
  *     --vkey ceremony/v5_2/verification_key.json \
- *     --rapidsnark-bin /home/alikvovk/.cache/qkb-bin/rapidsnark-linux-x86_64-v0.0.8/bin/prover
+ *     --rapidsnark-bin /home/alikvovk/.cache/zkqes-bin/rapidsnark-linux-x86_64-v0.0.8/bin/prover
  *
  *   # Then in another terminal:
  *   curl -X POST -H 'Content-Type: application/json' \

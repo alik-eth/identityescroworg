@@ -5,19 +5,19 @@ import { buildChainWitness, buildLeafWitness } from './witness-builder';
 
 const FIXTURE_DIR = resolve(__dirname, '..', '..', 'fixtures', 'integration', 'admin-ecdsa');
 
-describe('QKBPresentationEcdsaChain — end-to-end (real Diia leaf + synth intermediate)', function () {
+describe('ZkqesPresentationEcdsaChain — end-to-end (real Diia leaf + synth intermediate)', function () {
   // Chain-side proof: constraints 3 (intermediate signs leaf TBS) + 4
   // (intermediate ∈ Merkle rTL). Smaller than the leaf (~3.2 M constraints
   // target per spec §14.3) — no Bcanon/BindingParseFull, only one EcdsaP256
   // verify + one Sha256Var + Merkle depth-16. Complements
-  // qkb-ecdsa.test.ts and asserts the on-chain equality glue holds (leaf's
+  // zkqes-ecdsa.test.ts and asserts the on-chain equality glue holds (leaf's
   // leafSpkiCommit == chain's leafSpkiCommit).
   this.timeout(60 * 60 * 1000);
 
   let circuit: CompiledCircuit;
 
   before(async () => {
-    circuit = await compile('QKBPresentationEcdsaChain.circom');
+    circuit = await compile('ZkqesPresentationEcdsaChain.circom');
   });
 
   it('calculateWitness passes on the real Diia admin binding', async () => {
@@ -35,7 +35,7 @@ describe('QKBPresentationEcdsaChain — end-to-end (real Diia leaf + synth inter
     // same leafDer bytes, so the leafSpkiCommit values they feed into their
     // respective witnesses MUST be identical. If this ever drifts, the
     // on-chain `require(leafInputs.leafSpkiCommit == chainInputs.leafSpkiCommit)`
-    // in QKBVerifier.verify will reject every split-proof submission.
+    // in ZkqesVerifier.verify will reject every split-proof submission.
     const { buildSharedInputs } = await import('./witness-builder');
     const sharedA = await buildSharedInputs(FIXTURE_DIR);
     const sharedB = await buildSharedInputs(FIXTURE_DIR);

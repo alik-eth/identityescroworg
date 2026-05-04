@@ -6,18 +6,21 @@
 //   EOA path: walletSecret = HKDF-SHA256(
 //                              ikm:  personal_sign(walletPriv,
 //                                                  "qkb-personal-secret-v1" ‖ subjectSerial),
+//                                        // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
 //                              salt: "qkb-walletsecret-v1",
+//                                    // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
 //                              info: subjectSerial,
 //                              L:    32 bytes)
 //
 //   SCW path: walletSecret = Argon2id(passphrase, salt="qkb-walletsecret-v1" ‖ walletAddress,
+//                                     // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
 //                                     m=64MiB, t=3, p=1, output=32 bytes)
 //
 // Then reduce/truncate mod the BN254 scalar field (~254-bit cap; mask top 2 bits)
 // before packing into the circuit's `walletSecret` field-element input.
 //
 // **This module ships the reduction helper + a TEST-ONLY EOA-derivation helper.**
-// Production EOA derivation lives in web-eng's SDK (`@qkb/sdk`); this is for
+// Production EOA derivation lives in web-eng's SDK (`@zkqes/sdk`); this is for
 // circuit unit tests + CLI fixture generation.
 //
 // Browser-isomorphic: `@noble/hashes` v2 only — no node:crypto, no ethers. Web-eng
@@ -28,9 +31,10 @@ import { Buffer } from 'node:buffer';
 
 // FINGERPRINT_DOMAIN — fixed compile-time constant for identity-fingerprint
 // domain separation. Big-endian-pack of ASCII "qkb-id-fingerprint-v1" (21 bytes,
+// frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
 // 168 bits, well below the BN254 scalar field ~254 bits).
 //
-// MUST byte-equal the constant in QKBPresentationV5.circom:
+// MUST byte-equal the constant in ZkqesPresentationV5.circom:
 //   var FINGERPRINT_DOMAIN = 0x716b622d69642d66696e6765727072696e742d7631;
 export const FINGERPRINT_DOMAIN: bigint =
   0x716b622d69642d66696e6765727072696e742d7631n;
@@ -92,10 +96,12 @@ export function packFieldToBytes32(field: bigint): Buffer {
 // NOTE: A test-only `deriveWalletSecretTest` helper was considered (per
 // the A6.1 plan Task 2 Step 3) but removed in v0.4.1 (codex review pass 2)
 // as dead code — no test calls it; tests pass a static `Buffer.alloc(32, 0x42)`
-// directly. Production EOA derivation lives in web-eng's @qkb/sdk:
+// directly. Production EOA derivation lives in web-eng's @zkqes/sdk:
 //   walletSecret = HKDF-SHA256(
 //     ikm:  personal_sign(walletPriv, "qkb-personal-secret-v1" ‖ subjectSerial),
+//           // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
 //     salt: "qkb-walletsecret-v1",
+//           // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
 //     info: subjectSerial,
 //     L:    32 bytes)
 // then `reduceTo254()` on the result. Web-eng owns this code path; circuit

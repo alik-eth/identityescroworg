@@ -3,9 +3,9 @@
   "variant": "ecdsa-split",
   "uploadedAt": "2026-04-19T11:43:28Z",
   "leaf": {
-    "circuit": "QKBPresentationEcdsaLeaf",
-    "wasmUrl": "https://prove.identityescrow.org/ecdsa-leaf/QKBPresentationEcdsaLeaf.wasm",
-    "zkeyUrl": "https://prove.identityescrow.org/ecdsa-leaf/qkb-leaf.zkey",
+    "circuit": "ZkqesPresentationEcdsaLeaf",
+    "wasmUrl": "https://prove.identityescrow.org/ecdsa-leaf/ZkqesPresentationEcdsaLeaf.wasm",
+    "zkeyUrl": "https://prove.identityescrow.org/ecdsa-leaf/zkqes-leaf.zkey",
     "vkeyUrl": "https://prove.identityescrow.org/ecdsa-leaf/verification_key.json",
     "wasmSha256": "10e5b18915248c545f40a4ad8152aa14b43d5526095783417f9c68a523084197",
     "zkeySha256": "0fdbc671e087ae2d7cad58e7c33191251622f5d2b687f7f91827a8b1641299fb",
@@ -17,9 +17,9 @@
     "powersOfTau": 24
   },
   "chain": {
-    "circuit": "QKBPresentationEcdsaChain",
-    "wasmUrl": "https://prove.identityescrow.org/ecdsa-chain/QKBPresentationEcdsaChain.wasm",
-    "zkeyUrl": "https://prove.identityescrow.org/ecdsa-chain/qkb-chain.zkey",
+    "circuit": "ZkqesPresentationEcdsaChain",
+    "wasmUrl": "https://prove.identityescrow.org/ecdsa-chain/ZkqesPresentationEcdsaChain.wasm",
+    "zkeyUrl": "https://prove.identityescrow.org/ecdsa-chain/zkqes-chain.zkey",
     "vkeyUrl": "https://prove.identityescrow.org/ecdsa-chain/verification_key.json",
     "wasmSha256": "6e3976792705939ad705d503099adc368738928c9f87776ef6954b663f512af6",
     "zkeySha256": "8d1aed8e30a76770a8480e203a86c362f4421b6d800147d0ff4f960472ca9933",

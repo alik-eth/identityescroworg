@@ -75,7 +75,7 @@ function decodeDerEcdsaSig(der: Buffer): { r: bigint; s: bigint } {
 const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
 const { x: pubX, y: pubY } = jwkPublicXY(publicKey);
 
-const message = Buffer.from('QKB Phase 1 ECDSA P-256 test vector', 'utf8');
+const message = Buffer.from('zkqes Phase 1 ECDSA P-256 test vector', 'utf8');
 const msghashBuf = createHash('sha256').update(message).digest();
 const msghash = bufBeToBigInt(msghashBuf);
 
