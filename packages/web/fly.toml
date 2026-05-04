@@ -1,8 +1,8 @@
-# Fly.io config for the QKB Identity Escrow static SPA.
-# Production domain: identityescrow.org (attached out-of-band via `flyctl certs add`
-# once Cloudflare DNS records are pointed at this app's dedicated IPs).
+# Fly.io config for the zkqes static SPA.
+# Production domain: app.zkqes.org (attached out-of-band via `flyctl certs add`
+# once DNS records are pointed at this app's dedicated IPs).
 
-app = "identityescrow"
+app = "zkqes-app"
 primary_region = "ams"
 
 [build]

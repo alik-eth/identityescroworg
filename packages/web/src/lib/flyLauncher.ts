@@ -16,13 +16,13 @@
  * this widget to status-feed availability.
  */
 export const FLY_FIXED_URLS = {
-  R1CS: 'https://prove.identityescrow.org/ceremony/main.r1cs',
-  PTAU: 'https://prove.identityescrow.org/ceremony/pot/pot22.ptau',
+  R1CS: 'https://prove.zkqes.org/ceremony/main.r1cs',
+  PTAU: 'https://prove.zkqes.org/ceremony/pot/pot22.ptau',
   /** Returns the previous-round URL given the current round N. */
   prevRound: (round: number): string =>
-    `https://prove.identityescrow.org/ceremony/rounds/round-${round - 1}.zkey`,
+    `https://prove.zkqes.org/ceremony/rounds/round-${round - 1}.zkey`,
   /** GHCR image tag the cookbook deploys. */
-  IMAGE: 'ghcr.io/identityescroworg/qkb-ceremony:v1',
+  IMAGE: 'ghcr.io/zkqes/zkqes-ceremony:v1',
 } as const;
 
 export const NAME_MAX_LEN = 40;
@@ -88,7 +88,7 @@ export interface FlyLaunchInputs {
  * Render the full multi-line `flyctl` invocation from the form
  * inputs. The shape is verbatim from the A2.7b dispatch:
  *
- *   APP="qkb-ceremony-{slug}"
+ *   APP="zkqes-ceremony-{slug}"
  *   flyctl apps create "$APP" --org personal
  *   flyctl secrets set \
  *     ROUND="{round}" \
@@ -114,7 +114,7 @@ export function buildFlyLaunchCommand(inputs: FlyLaunchInputs): string {
   const slug = slugify(inputs.name);
   const round = inputs.round;
   const lines = [
-    `APP="qkb-ceremony-${slug}"`,
+    `APP="zkqes-ceremony-${slug}"`,
     `flyctl apps create "$APP" --org personal`,
     `flyctl secrets set \\`,
     `  ROUND="${round}" \\`,

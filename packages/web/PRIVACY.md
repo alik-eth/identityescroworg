@@ -1,4 +1,4 @@
-# PRIVACY.md — `@qkb/web`
+# PRIVACY.md — `@zkqes/web`
 
 Binding invariants for every route, hook, and component in this package.
 Violating any item is a hard-stop review failure. The lead enforces these
@@ -10,8 +10,8 @@ Phase 2 introduces escrow setup + recovery flows whose operation requires
 the browser to handle material that carries legal-identity weight:
 
 - Recipient hybrid secret keys (x25519 + ML-KEM-768).
-- Phase 1 binding artifacts (`binding.qkb.json`) and their detached
-  CAdES-BES signatures (`binding.qkb.json.p7s`).
+- Phase 1 binding artifacts (`binding.zkqes.json`) and their detached
+  CAdES-BES signatures (`binding.zkqes.json.p7s`).
 - Assembled recovery material `R` (the JCS bundle shared in escrow).
 - Evidence `E` under the A-path (chain events) and C-path (Holder
   countersignature).
