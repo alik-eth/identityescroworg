@@ -4,11 +4,11 @@ layout: home
 hero:
   name: 'zk-QES'
   text: 'A zero-knowledge protocol over qualified electronic signatures.'
-  tagline: 'QKB — the V1 implementation — is in trusted-setup ceremony. Documentation for developers, integrators, researchers.'
+  tagline: 'zkqes — the V1 implementation — is in trusted-setup ceremony. Documentation for developers, integrators, researchers.'
   actions:
     - theme: brand
       text: 'Install the CLI'
-      link: '/install/qkb-cli'
+      link: '/install/zkqes-cli'
     - theme: alt
       text: 'Read the V5 architecture'
       link: '/specs/v5-architecture'
@@ -27,12 +27,12 @@ features:
     details: 'SDK API, contract addresses, ABI tables, selector reference, release notes. The pinned interfaces every integrator depends on.'
     link: '/reference/integrations'
   - title: 'Brand'
-    details: 'How to write about the project. QKB is the protocol noun; zk-QES is the descriptor; Identity Escrow is the umbrella research line.'
+    details: 'How to write about the project. zkqes is the single project noun. Two-second descriptor: "a zero-knowledge proof of a qualified electronic signature."'
     link: '/brand'
   - title: 'Contributing'
     details: 'Orchestration plans, per-worker plans, the dispatch convention, the worktree layout. How the V5 amendments get built.'
     link: '/contributing/'
   - title: 'Install'
-    details: 'V1 ships via npm. Local snarkjs-backed prover or `qkb serve` localhost helper for native rapidsnark speed. Windows + WSL supported.'
+    details: 'V1 ships via npm. Local snarkjs-backed prover or `zkqes serve` localhost helper for native rapidsnark speed. Windows + WSL supported.'
     link: '/install/qkb-cli'
 ---

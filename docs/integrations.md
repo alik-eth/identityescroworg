@@ -1,17 +1,19 @@
-# Integrating with QKB Verification
+# Integrating with zkqes Verification
+
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
 
 This guide explains how to gate your contract or webapp on whether a
-caller has registered as a verified Ukrainian via the QKB protocol.
+caller has registered as a verified Ukrainian via the zkqes protocol.
 
 ## On-chain (Solidity)
 
-See `@qkb/contracts-sdk` package. The minimal pattern:
+See `@zkqes/contracts-sdk` package. The minimal pattern:
 
 ```solidity
-import { Verified, IQKBRegistry } from "@qkb/contracts-sdk/Verified.sol";
+import { Verified, IZkqesRegistry } from "@zkqes/contracts-sdk/Verified.sol";
 
 contract MyDApp is Verified {
-    constructor(IQKBRegistry r) Verified(r) {}
+    constructor(IZkqesRegistry r) Verified(r) {}
     function privileged() external onlyVerifiedUkrainian { /* ... */ }
 }
 ```
@@ -21,18 +23,18 @@ constructor.
 
 ## Off-chain (TypeScript, viem)
 
-See `@qkb/sdk` package:
+See `@zkqes/sdk` package:
 
 ```ts
-import { isVerified } from '@qkb/sdk';
+import { isVerified } from '@zkqes/sdk';
 import { createPublicClient, http } from 'viem';
 import { base } from 'viem/chains';
-import { QKB_DEPLOYMENTS } from '@qkb/sdk/deployments';
+import { ZKQES_DEPLOYMENTS } from '@zkqes/sdk/deployments';
 
 const client = createPublicClient({ chain: base, transport: http() });
 const ok = await isVerified(
   client,
-  QKB_DEPLOYMENTS.base.registry,
+  ZKQES_DEPLOYMENTS.base.registry,
   '0xUserAddress'
 );
 ```
@@ -45,7 +47,7 @@ proof. The registry is the authoritative source for verification —
 gating the certificate NFT, your DAO, your airdrop, etc., should all
 read this same contract.
 
-The `IdentityEscrowNFT` contract is one example consumer; your contract
+The `ZkqesCertificate` contract is one example consumer; your contract
 follows the same pattern.
 
 ## Caveats
@@ -55,11 +57,11 @@ follows the same pattern.
   nullifier is already consumed.
 - The `tokenIdByNullifier` mapping in the NFT contract gates one mint
   per identity, even across wallet transfers.
-- Mint window in `IdentityEscrowNFT` is one-shot at deploy. Your own
+- Mint window in `ZkqesCertificate` is one-shot at deploy. Your own
   contract is free to set its own time semantics.
 
 ## Audit + bug bounty
 
-The QKB protocol contracts are open source and unaudited as of this
+The zkqes protocol contracts are open source and unaudited as of this
 release. See `SECURITY.md` for vulnerability disclosure. Independent
 audit before mainnet usage is the consumer's responsibility.

@@ -1,5 +1,7 @@
 # Contributing
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 How V5 amendments get built. The pattern repeats across every phase: spec → orchestration plan → per-worker plans → dispatch.
 
 ## Worktree layout
@@ -32,7 +34,7 @@ The plans tree is comprehensive but not curated; consult these as patterns when 
 - V5.1 wallet-bound nullifier amendment
 - V5.2 keccak-on-chain amendment
 - V5.3 OID-anchor amendment (in flight at time of writing)
-- V5.4 QKB CLI-server (qkb serve)
+- V5.4 zkqes CLI-server (zkqes serve)
 
 Each amendment ships in 3-7 days end-to-end across spec → plan → dispatch → ceremony. The cadence is preserved by codex VERDICT in every commit footer + per-task verification gates.
 
@@ -51,6 +53,6 @@ every commit. No exceptions.
 
 ## Where to start
 
-If you want to ship a single contained change: pick a [pending task](https://github.com/alik-eth/identityescroworg/issues) marked `good first contribution` and follow the per-worker dispatch pattern.
+If you want to ship a single contained change: pick a [pending task](https://github.com/alik-eth/zkqes/issues) marked `good first contribution` and follow the per-worker dispatch pattern.
 
 If you want to ship an amendment: read [V5 architecture](/specs/v5-architecture) end-to-end, then propose a spec via PR. Lead reviews, founder approves, dispatch follows.
