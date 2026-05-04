@@ -1,10 +1,10 @@
 {
   "version": "1.0",
-  "source": "real Diia QES (admin-binding.qkb.json + .p7s)",
+  "source": "real Diia QES (admin-binding.zkqes.json + .p7s)",
   "derPaths": {
     "leaf": "leaf.der",
     "cms": "leaf.p7s",
-    "binding": "binding.qkb.json"
+    "binding": "binding.zkqes.json"
   },
   "leaf": {
     "derLength": 1292,
