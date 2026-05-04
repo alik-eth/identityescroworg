@@ -1,5 +1,7 @@
 # QKB Phase 1 — Design
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 Date: 2026-04-17
 Status: Approved for planning
 Related spec: Qualified Key Binding with Qualified Identity Escrow, v0.1 (NLNet NGI Zero Commons Fund draft)

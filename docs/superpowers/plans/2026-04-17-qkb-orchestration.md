@@ -1,5 +1,7 @@
 # QKB Phase 1 — Orchestration
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 Date: 2026-04-17
 Owner: team-lead (this session)
 Workers: four long-lived teammates, one per subsystem

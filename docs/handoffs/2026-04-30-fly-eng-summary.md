@@ -1,5 +1,7 @@
 # fly-eng handoff — 2026-04-30
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 Worker role: **fly-eng** — owns the Fly.io contributor cookbook for the
 zk-QES V5 Phase 2 Groth16 trusted-setup ceremony. All assigned scope
 (A2.5, A2.6, A2.7a) is complete and idle. This document is the

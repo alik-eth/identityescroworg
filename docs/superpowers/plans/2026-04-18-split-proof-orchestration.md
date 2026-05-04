@@ -1,5 +1,7 @@
 # Split-Proof Pivot — Orchestration Plan
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 **Goal:** Revert Phase 2 from unified ECDSA presentation to Phase-1's §5.4 split-proof architecture (leaf + chain), extended with the scoped credential nullifier in the leaf. Target: Sepolia V3 deploy + redeployed SPA demo passing live register flow end-to-end with context-scoped QES identifier deduplication.
 
 **Spec:** `docs/superpowers/specs/2026-04-18-split-proof-pivot.md`

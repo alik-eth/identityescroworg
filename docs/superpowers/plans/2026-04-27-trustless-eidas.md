@@ -1,5 +1,7 @@
 # Trustless eIDAS Trust Root Updates Implementation Plan
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **STATUS — DEFERRED 2026-04-27.** Plan parked before any task started. Two reasons surfaced during Task 1 fixture-pin work:
 >
 > 1. **Trust improvement is marginal at current scale.** Today's admin is Safe 2-of-3 + 7-day timelock. The trustless path improves trust from "2 keys + 7-day window without detection" to "regulator's signing key only" — real but not urgent at zero production users.

@@ -1,5 +1,7 @@
 # circuits-eng handoff summary — 2026-04-30
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **Outgoing**: circuits-eng instance shipping V5 architecture + V5.1 wallet-bound nullifier (A6.1 Tasks 1-3).
 > **Incoming**: fresh circuits-eng (context-fatigue respawn). First deliverable: A6.1 Task 4 (stub ceremony).
 > **Worktree**: `/data/Develop/qkb-wt-v5/arch-circuits/` on branch `feat/v5arch-circuits`.

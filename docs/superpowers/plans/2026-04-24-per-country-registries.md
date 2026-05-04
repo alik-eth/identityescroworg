@@ -1,5 +1,7 @@
 # Per-Country QKB/2 Registries — UA First
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship QKB/2 (V4) with per-country registries — UA live on Sepolia and reachable through `identityescrow.org/ua/` — using the shared-ceremony + country-scoped-leaf architecture from `docs/superpowers/specs/2026-04-24-per-country-registries-design.md`.

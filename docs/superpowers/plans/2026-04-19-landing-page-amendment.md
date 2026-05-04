@@ -1,5 +1,7 @@
 # Landing Page — Truth + Positioning Amendment
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > Amends `docs/superpowers/plans/2026-04-18-landing-page.md`. Date: 2026-04-19. Status: authoritative — supersedes §Task 1 in full, adds §Task 1a (comparison table), §Task 1b (credibility strip), §Task 1c (demo screencast in hero). All other tasks in the original plan (routes, components, redirects, tests) stand unchanged except where they reference the renamed i18n keys.
 
 ## Why

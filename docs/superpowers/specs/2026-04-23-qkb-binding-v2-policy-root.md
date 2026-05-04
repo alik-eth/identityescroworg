@@ -1,5 +1,7 @@
 # QKB Binding V2 + Policy Root
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > Date: 2026-04-23. Status: draft target. This does not change the currently deployed QKB/1.0 wire format or leaf circuit; it defines the intended successor so future work does not keep re-ceremonizing for declaration prose.
 
 ## Motivation
