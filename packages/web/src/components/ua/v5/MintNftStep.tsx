@@ -5,7 +5,7 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
 } from 'wagmi';
-import { deploymentForChainId, identityEscrowNftAbi, qkbRegistryV5_1Abi } from '@qkb/sdk';
+import { deploymentForChainId, zkqesCertificateAbi, zkqesRegistryV5_1Abi } from '@zkqes/sdk';
 import { CertificatePreview } from '../../CertificatePreview';
 
 const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
@@ -30,7 +30,7 @@ export function MintNftStep() {
 
   const { data: nullifier } = useReadContract({
     address: dep?.registryV5,
-    abi: qkbRegistryV5_1Abi,
+    abi: zkqesRegistryV5_1Abi,
     functionName: 'nullifierOf',
     args: address ? [address] : undefined,
     query: { enabled: !!address && !!v5Deployed },
@@ -39,8 +39,8 @@ export function MintNftStep() {
   const registered = !!nullifier && nullifier !== ZERO_NULLIFIER;
 
   const { data: tokenIdByNullifier } = useReadContract({
-    address: dep?.identityEscrowNft,
-    abi: identityEscrowNftAbi,
+    address: dep?.zkqesCertificate,
+    abi: zkqesCertificateAbi,
     functionName: 'tokenIdByNullifier',
     args: nullifier ? [nullifier as `0x${string}`] : undefined,
     query: { enabled: !!nullifier && !!dep },
@@ -55,8 +55,8 @@ export function MintNftStep() {
   const onMint = () => {
     if (!dep) return;
     writeContract({
-      address: dep.identityEscrowNft,
-      abi: identityEscrowNftAbi,
+      address: dep.zkqesCertificate,
+      abi: zkqesCertificateAbi,
       functionName: 'mint',
     });
   };
@@ -120,7 +120,7 @@ export function MintNftStep() {
                 chainId === 8453
                   ? 'opensea.io/assets/base/'
                   : 'testnets.opensea.io/assets/sepolia/'
-              }${dep?.identityEscrowNft}/${previewTokenId}`}
+              }${dep?.zkqesCertificate}/${previewTokenId}`}
               target="_blank"
               rel="noreferrer"
               className="px-6 py-3 underline"

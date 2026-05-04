@@ -73,7 +73,7 @@ describe('parseRoundFromUrl', () => {
   it('extracts the round from a /rounds/round-N.zkey path', () => {
     expect(
       parseRoundFromUrl(
-        'https://prove.identityescrow.org/ceremony/rounds/round-3.zkey?sig=abc',
+        'https://prove.zkqes.org/ceremony/rounds/round-3.zkey?sig=abc',
       ),
     ).toBe(3);
     expect(
@@ -98,25 +98,25 @@ describe('buildFlyLaunchCommand', () => {
   const baseInputs = {
     name: 'alice',
     round: 3,
-    signedPutUrl: 'https://prove.identityescrow.org/upload?sig=abc&exp=1234',
+    signedPutUrl: 'https://prove.zkqes.org/upload?sig=abc&exp=1234',
     entropyHex: 'cafebabe'.repeat(8),
   };
 
   it('renders the full canonical six-step sequence verbatim', () => {
     const cmd = buildFlyLaunchCommand(baseInputs);
     // The exact lead-specified sequence — line by line, no extras.
-    expect(cmd).toContain('APP="qkb-ceremony-alice"');
+    expect(cmd).toContain('APP="zkqes-ceremony-alice"');
     expect(cmd).toContain('flyctl apps create "$APP" --org personal');
     expect(cmd).toContain('flyctl secrets set \\');
     expect(cmd).toContain('  ROUND="3" \\');
     expect(cmd).toContain(
-      '  PREV_ROUND_URL="https://prove.identityescrow.org/ceremony/rounds/round-2.zkey" \\',
+      '  PREV_ROUND_URL="https://prove.zkqes.org/ceremony/rounds/round-2.zkey" \\',
     );
     expect(cmd).toContain(
-      '  R1CS_URL="https://prove.identityescrow.org/ceremony/main.r1cs" \\',
+      '  R1CS_URL="https://prove.zkqes.org/ceremony/main.r1cs" \\',
     );
     expect(cmd).toContain(
-      '  PTAU_URL="https://prove.identityescrow.org/ceremony/pot/pot22.ptau" \\',
+      '  PTAU_URL="https://prove.zkqes.org/ceremony/pot/pot22.ptau" \\',
     );
     expect(cmd).toContain(
       `  SIGNED_PUT_URL='${baseInputs.signedPutUrl}' \\`,
@@ -127,7 +127,7 @@ describe('buildFlyLaunchCommand', () => {
     );
     expect(cmd).toContain('  -a "$APP"');
     expect(cmd).toContain(
-      '  --image ghcr.io/identityescroworg/qkb-ceremony:v1 \\',
+      '  --image ghcr.io/zkqes/zkqes-ceremony:v1 \\',
     );
     expect(cmd).toContain('  --vm-size performance-cpu-4x \\');
     expect(cmd).toContain('  --vm-memory 32768 \\');
@@ -144,14 +144,14 @@ describe('buildFlyLaunchCommand', () => {
       ...baseInputs,
       name: "Alice O'Neill",
     });
-    expect(cmd).toContain('APP="qkb-ceremony-alice-o-neill"');
+    expect(cmd).toContain('APP="zkqes-ceremony-alice-o-neill"');
     expect(cmd).toContain(`CONTRIBUTOR_NAME='Alice O'Neill'`);
   });
 
   it('derives PREV_ROUND_URL from the input round (round-1 zkey)', () => {
     const cmd = buildFlyLaunchCommand({ ...baseInputs, round: 7 });
     expect(cmd).toContain(
-      'PREV_ROUND_URL="https://prove.identityescrow.org/ceremony/rounds/round-6.zkey"',
+      'PREV_ROUND_URL="https://prove.zkqes.org/ceremony/rounds/round-6.zkey"',
     );
     expect(cmd).toContain('ROUND="7"');
   });

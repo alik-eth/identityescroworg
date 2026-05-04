@@ -1,6 +1,6 @@
-// V5.4 T7 — Playwright happy-path E2E against the pumped @qkb/cli tarball.
+// V5.4 T7 — Playwright happy-path E2E against the pumped @zkqes/cli tarball.
 //
-// Plan ref: docs/superpowers/plans/2026-05-03-qkb-cli-server-web-eng.md T7.
+// Plan ref: docs/superpowers/plans/2026-05-03-zkqes-cli-server-web-eng.md T7.
 //
 // **Opt-in via env var.** This spec gates on `T7_DEV_MANIFEST` pointing
 // at a signed dev manifest (matches the `E2E_REAL_PROVER` carve-out
@@ -49,7 +49,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
-import { verifyGroth16 } from '@qkb/sdk/prover/verify';
+import { verifyGroth16 } from '@zkqes/sdk/prover/verify';
 
 const MANIFEST_PATH = process.env.T7_DEV_MANIFEST;
 
@@ -57,7 +57,7 @@ test.skip(
   !MANIFEST_PATH,
   'T7 requires T7_DEV_MANIFEST pointing at a signed dev manifest. ' +
     'Local: export T7_DEV_MANIFEST=/tmp/dev-manifest.json. ' +
-    'See docs/superpowers/plans/2026-05-03-qkb-cli-server-web-eng.md T7.',
+    'See docs/superpowers/plans/2026-05-03-zkqes-cli-server-web-eng.md T7.',
 );
 
 const SDK_FIXTURES = resolve(
@@ -116,13 +116,13 @@ test.describe('V5.4 T7 — CLI-served happy path', () => {
     const wasm = fileUrlToPath(manifest.circuits['v5.2'].wasmUrl);
     const vkey = fileUrlToPath(manifest.circuits['v5.2'].vkeyUrl);
 
-    // Spawn `qkb serve` directly via the installed bin entry. Using
+    // Spawn `zkqes serve` directly via the installed bin entry. Using
     // node + the dist entrypoint avoids pnpm-exec wrapper chatter that
     // can confuse Playwright's stdout capture.
     cliProc = spawn(
       'node',
       [
-        'node_modules/@qkb/cli/dist/src/index.js',
+        'node_modules/@zkqes/cli/dist/src/index.js',
         'serve',
         '--zkey', zkey,
         '--wasm', wasm,
@@ -143,7 +143,7 @@ test.describe('V5.4 T7 — CLI-served happy path', () => {
 
     // Surface CLI stderr to test logs for triage when the spec fails.
     cliProc.stderr?.on('data', (chunk: Buffer) => {
-      process.stderr.write(`[qkb-cli] ${chunk.toString()}`);
+      process.stderr.write(`[zkqes-cli] ${chunk.toString()}`);
     });
 
     // 30 s ceiling — generous for first-run zkey load + sidecar warm-up
@@ -184,7 +184,7 @@ test.describe('V5.4 T7 — CLI-served happy path', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        // Origin pin — match the --allowed-origin we passed to qkb serve.
+        // Origin pin — match the --allowed-origin we passed to zkqes serve.
         Origin: 'http://127.0.0.1:4173',
       },
       body: JSON.stringify(witness),

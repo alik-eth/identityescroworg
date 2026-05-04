@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { QKB_DEPLOYMENTS } from '@qkb/sdk';
+import { ZKQES_DEPLOYMENTS } from '@zkqes/sdk';
 import { DocumentFooter } from '../components/DocumentFooter';
 
 export function IntegrationsScreen() {
@@ -9,9 +9,9 @@ export function IntegrationsScreen() {
         <div />
         <div className="min-w-0 max-w-3xl">
           <Link to="/" className="text-mono text-xs">← back</Link>
-          <h1 className="text-4xl md:text-5xl my-6">Integrate QKB verification</h1>
+          <h1 className="text-4xl md:text-5xl my-6">Integrate zkqes verification</h1>
           <p className="mb-6 text-lg">
-            Gate your contract or webapp on QKB-verified Ukrainian status.
+            Gate your contract or webapp on zkqes-verified Ukrainian status.
           </p>
           <hr className="rule" />
           <h2 className="text-2xl mb-3">Solidity</h2>
@@ -19,13 +19,13 @@ export function IntegrationsScreen() {
             className="text-mono text-sm p-4 mb-6 overflow-x-auto"
             style={{ background: 'var(--ink)', color: 'var(--bone)' }}
           >
-{`forge install qkb-eth/contracts-sdk
+{`forge install alik-eth/zkqes
 
 // in your contract:
-import { Verified, IQKBRegistry } from "@qkb/contracts-sdk/Verified.sol";
+import { Verified, IZkqesRegistry } from "@zkqes/contracts-sdk/Verified.sol";
 
 contract MyDApp is Verified {
-    constructor(IQKBRegistry r) Verified(r) {}
+    constructor(IZkqesRegistry r) Verified(r) {}
     function privileged() external onlyVerifiedUkrainian { /* ... */ }
 }`}
           </pre>
@@ -34,12 +34,12 @@ contract MyDApp is Verified {
             className="text-mono text-sm p-4 mb-6 overflow-x-auto"
             style={{ background: 'var(--ink)', color: 'var(--bone)' }}
           >
-{`import { isVerified, QKB_DEPLOYMENTS } from '@qkb/sdk';
+{`import { isVerified, ZKQES_DEPLOYMENTS } from '@zkqes/sdk';
 import { createPublicClient, http } from 'viem';
 import { base } from 'viem/chains';
 
 const client = createPublicClient({ chain: base, transport: http() });
-const ok = await isVerified(client, QKB_DEPLOYMENTS.base.registry, addr);`}
+const ok = await isVerified(client, ZKQES_DEPLOYMENTS.base.registry, addr);`}
           </pre>
           <h2 className="text-2xl mb-3">Deployed registries</h2>
           <div className="overflow-x-auto">
@@ -51,7 +51,7 @@ const ok = await isVerified(client, QKB_DEPLOYMENTS.base.registry, addr);`}
                 </tr>
               </thead>
               <tbody>
-                {Object.entries(QKB_DEPLOYMENTS).map(([k, v]) => (
+                {Object.entries(ZKQES_DEPLOYMENTS).map(([k, v]) => (
                   <tr key={k}>
                     <td className="pr-6 py-1">{k}</td>
                     <td className="py-1 break-all">{v.registry}</td>

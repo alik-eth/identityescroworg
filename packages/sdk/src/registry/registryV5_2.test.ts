@@ -3,7 +3,7 @@
 // §"Public-signal layout V5.1 → V5.2" (22-field FROZEN order) drift.
 import { describe, expect, it } from 'vitest';
 import { decodeFunctionData } from 'viem';
-import { qkbRegistryV5_2Abi } from '../abi/QKBRegistryV5_2.js';
+import { zkqesRegistryV5_2Abi } from '../abi/ZkqesRegistryV5_2.js';
 import {
   PUBLIC_SIGNALS_V5_2_LENGTH,
   assertRegisterArgsV5_2Shape,
@@ -173,7 +173,7 @@ describe('encodeV5_2RegisterCalldata + decodeFunctionData round-trip', () => {
 
   it('decodes back to functionName=register with proof at arg[0] and sig at arg[1]', () => {
     const calldata = encodeV5_2RegisterCalldata(makeArgs());
-    const decoded = decodeFunctionData({ abi: qkbRegistryV5_2Abi, data: calldata });
+    const decoded = decodeFunctionData({ abi: zkqesRegistryV5_2Abi, data: calldata });
     expect(decoded.functionName).toBe('register');
     const args = decoded.args as readonly unknown[];
     // arg[0] = proof
@@ -191,7 +191,7 @@ describe('encodeV5_2RegisterCalldata + decodeFunctionData round-trip', () => {
 
   it('preserves the signedAttrs raw-bytes contract (NOT a hash) at calldata position 4', () => {
     const calldata = encodeV5_2RegisterCalldata(makeArgs());
-    const decoded = decodeFunctionData({ abi: qkbRegistryV5_2Abi, data: calldata });
+    const decoded = decodeFunctionData({ abi: zkqesRegistryV5_2Abi, data: calldata });
     const args = decoded.args as readonly unknown[];
     expect(args[2]).toBe(`0x${'aa'.repeat(91)}`);   // leafSpki
     expect(args[3]).toBe(`0x${'bb'.repeat(91)}`);   // intSpki
@@ -208,7 +208,7 @@ describe('encodeV5_2RegisterCalldata + decodeFunctionData round-trip', () => {
       sig: { ...makePublicSignalsV5_2(), msgSender: 999n } as unknown as PublicSignalsV5_2,
     };
     const calldata = encodeV5_2RegisterCalldata(argsWithStrayMsgSender);
-    const decoded = decodeFunctionData({ abi: qkbRegistryV5_2Abi, data: calldata });
+    const decoded = decodeFunctionData({ abi: zkqesRegistryV5_2Abi, data: calldata });
     const sig = (decoded.args as readonly unknown[])[1] as Record<string, unknown>;
     expect(sig.msgSender).toBeUndefined();
   });
@@ -230,7 +230,7 @@ describe('encodeV5_2RotateWalletCalldata round-trip', () => {
 
   it('decodes back to functionName=rotateWallet with the 3-arg shape', () => {
     const calldata = encodeV5_2RotateWalletCalldata(makeRotateArgs());
-    const decoded = decodeFunctionData({ abi: qkbRegistryV5_2Abi, data: calldata });
+    const decoded = decodeFunctionData({ abi: zkqesRegistryV5_2Abi, data: calldata });
     expect(decoded.functionName).toBe('rotateWallet');
     const args = decoded.args as readonly unknown[];
     expect(args.length).toBe(3);

@@ -7,7 +7,7 @@ import {
 
 describe('V5_PROVER_ARTIFACTS', () => {
   it('exposes the V5 single-circuit envelope (qkb/2.0, ~3M constraints)', () => {
-    expect(V5_PROVER_ARTIFACTS.schemaVersion).toBe('qkb/2.0');
+    expect(V5_PROVER_ARTIFACTS.schemaVersion).toBe('zkqes/2.0');
     expect(V5_PROVER_ARTIFACTS.expectedConstraintCount).toBe(3_000_000);
     expect(V5_PROVER_ARTIFACTS.expectedZkeyBytes).toBe(1_500_000_000);
   });

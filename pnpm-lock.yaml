@@ -203,31 +203,6 @@ importers:
         specifier: ^2.0.0
         version: 2.1.9(@types/node@20.19.39)(jsdom@24.1.3)(lightningcss@1.32.0)
 
-  packages/qkb-cli:
-    dependencies:
-      commander:
-        specifier: ^12.0.0
-        version: 12.1.0
-      snarkjs:
-        specifier: ^0.7.4
-        version: 0.7.6
-      zod:
-        specifier: ^3.22.0
-        version: 3.25.76
-    devDependencies:
-      '@types/node':
-        specifier: ^20.12.0
-        version: 20.19.39
-      tsx:
-        specifier: ^4.7.0
-        version: 4.21.0
-      typescript:
-        specifier: ^5.5.0
-        version: 5.9.3
-      vitest:
-        specifier: ^2.0.0
-        version: 2.1.9(@types/node@20.19.39)(jsdom@24.1.3)(lightningcss@1.32.0)
-
   packages/sdk:
     dependencies:
       '@noble/hashes':
@@ -282,15 +257,6 @@ importers:
       '@noble/secp256k1':
         specifier: ^2.1.0
         version: 2.3.0
-      '@qkb/qie-agent':
-        specifier: workspace:*
-        version: link:../qie-agent
-      '@qkb/qie-core':
-        specifier: workspace:*
-        version: link:../qie-core
-      '@qkb/sdk':
-        specifier: workspace:*
-        version: link:../sdk
       '@rainbow-me/rainbowkit':
         specifier: ^2
         version: 2.2.10(@tanstack/react-query@5.99.0(react@18.3.1))(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)(viem@2.48.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6))(wagmi@2.19.5(@tanstack/query-core@5.99.0)(@tanstack/react-query@5.99.0(react@18.3.1))(@types/react@18.3.28)(bufferutil@4.1.0)(react@18.3.1)(typescript@5.9.3)(utf-8-validate@5.0.10)(viem@2.48.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6))(zod@4.3.6))
@@ -306,6 +272,9 @@ importers:
       '@types/zxcvbn':
         specifier: ^4.4.5
         version: 4.4.5
+      '@zkqes/sdk':
+        specifier: workspace:*
+        version: link:../sdk
       asn1js:
         specifier: ^3.0.7
         version: 3.0.7
@@ -355,9 +324,6 @@ importers:
       '@playwright/test':
         specifier: ^1.45.0
         version: 1.59.1
-      '@qkb/cli':
-        specifier: file:./test/fixtures/qkb-cli-0.5.2-pre.tgz
-        version: file:packages/web/test/fixtures/qkb-cli-0.5.2-pre.tgz
       '@testing-library/jest-dom':
         specifier: ^6.4.6
         version: 6.9.1
@@ -376,6 +342,9 @@ importers:
       '@vitejs/plugin-react':
         specifier: ^4.3.1
         version: 4.7.0(vite@5.4.21(@types/node@20.19.39)(lightningcss@1.32.0))
+      '@zkqes/cli':
+        specifier: file:./test/fixtures/zkqes-cli-0.5.2-pre.tgz
+        version: '@qkb/cli@file:packages/web/test/fixtures/zkqes-cli-0.5.2-pre.tgz'
       ajv:
         specifier: ^8.18.0
         version: 8.18.0
@@ -397,6 +366,31 @@ importers:
       vite-plugin-node-polyfills:
         specifier: ^0.26.0
         version: 0.26.0(rollup@4.60.1)(vite@5.4.21(@types/node@20.19.39)(lightningcss@1.32.0))
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.9(@types/node@20.19.39)(jsdom@24.1.3)(lightningcss@1.32.0)
+
+  packages/zkqes-cli:
+    dependencies:
+      commander:
+        specifier: ^12.0.0
+        version: 12.1.0
+      snarkjs:
+        specifier: ^0.7.4
+        version: 0.7.6
+      zod:
+        specifier: ^3.22.0
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^20.12.0
+        version: 20.19.39
+      tsx:
+        specifier: ^4.7.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
       vitest:
         specifier: ^2.0.0
         version: 2.1.9(@types/node@20.19.39)(jsdom@24.1.3)(lightningcss@1.32.0)
@@ -1318,8 +1312,8 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  '@qkb/cli@file:packages/web/test/fixtures/qkb-cli-0.5.2-pre.tgz':
-    resolution: {integrity: sha512-Y4eqHnDSQ2WtUxzPQaFKDar5UlVzvw+sX0s/FO68mlTBrhgD9djusstNtzVv+Y+xyl5BydCXhdZWSrYx45p+Lg==, tarball: file:packages/web/test/fixtures/qkb-cli-0.5.2-pre.tgz}
+  '@qkb/cli@file:packages/web/test/fixtures/zkqes-cli-0.5.2-pre.tgz':
+    resolution: {integrity: sha512-Y4eqHnDSQ2WtUxzPQaFKDar5UlVzvw+sX0s/FO68mlTBrhgD9djusstNtzVv+Y+xyl5BydCXhdZWSrYx45p+Lg==, tarball: file:packages/web/test/fixtures/zkqes-cli-0.5.2-pre.tgz}
     version: 0.5.2-pre
     hasBin: true
 
@@ -6642,7 +6636,7 @@ snapshots:
     dependencies:
       playwright: 1.59.1
 
-  '@qkb/cli@file:packages/web/test/fixtures/qkb-cli-0.5.2-pre.tgz':
+  '@qkb/cli@file:packages/web/test/fixtures/zkqes-cli-0.5.2-pre.tgz':
     dependencies:
       commander: 12.1.0
       snarkjs: 0.7.6

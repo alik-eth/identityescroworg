@@ -10,13 +10,13 @@
 //
 //   2. Dev (running un-pkg'd via tsx / ts-node / node src/index.ts):
 //      Fall back to the lead-issued cache directory at
-//      `~/.cache/qkb-bin/rapidsnark-<platform>-<arch>-v0.0.8/bin/prover`.
+//      `~/.cache/zkqes-bin/rapidsnark-<platform>-<arch>-v0.0.8/bin/prover`.
 //      This is what the dispatch context provided; the postinstall
-//      script populates it on first `npm install -g @qkb/cli`.
+//      script populates it on first `npm install -g @zkqes/cli`.
 //
 // Both modes return an absolute path.  Caller is responsible for
 // stat-ing it and producing a clear error if missing — that's
-// where the user gets actionable advice (run `qkb cache` etc.).
+// where the user gets actionable advice (run `zkqes cache` etc.).
 
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -101,12 +101,12 @@ export function resolveSidecarPath(input: SidecarPathInput = {}): string {
     );
   }
 
-  // Dev path: ~/.cache/qkb-bin/...  Mirrors the lead-staged location.
+  // Dev path: ~/.cache/zkqes-bin/...  Mirrors the lead-staged location.
   const home = input.home ?? homedir();
   return join(
     home,
     '.cache',
-    'qkb-bin',
+    'zkqes-bin',
     `rapidsnark-${platform}-${RAPIDSNARK_VERSION}`,
     'bin',
     exeName,
@@ -123,7 +123,7 @@ export function resolveSidecarPathOrThrow(input: SidecarPathInput = {}): string 
   if (!existsSync(path)) {
     throw new Error(
       `rapidsnark sidecar not found at ${path}.\n` +
-        'Run `qkb cache` to inspect cache, or re-install the CLI to retrigger postinstall.',
+        'Run `zkqes cache` to inspect cache, or re-install the CLI to retrigger postinstall.',
     );
   }
   return path;

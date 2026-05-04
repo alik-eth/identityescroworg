@@ -1,4 +1,4 @@
-// QKBRegistryV5.2 client-side types + calldata encoder.
+// ZkqesRegistryV5.2 client-side types + calldata encoder.
 //
 // V5.1 → V5.2 deltas (spec ref: 2026-05-01-keccak-on-chain-amendment.md):
 //   - PublicSignals shrinks by 1 (drop `msgSender`) and grows by 4 (add
@@ -14,13 +14,13 @@
 // `Groth16VerifierV5_2.sol` and the V5.2 `verification_key.json` (when
 // pumped from circuits-eng) MUST pin to this exact order.
 //
-// The `qkbRegistryV5_2Abi` consumed by the encoder lives at
-// `packages/sdk/src/abi/QKBRegistryV5_2.ts` (auto-generated from
-// `forge inspect QKBRegistryV5_2 abi --json` against contracts-eng's
+// The `zkqesRegistryV5_2Abi` consumed by the encoder lives at
+// `packages/sdk/src/abi/ZkqesRegistryV5_2.ts` (auto-generated from
+// `forge inspect ZkqesRegistryV5_2 abi --json` against contracts-eng's
 // `feat/v5_2arch-contracts`).
 import { encodeFunctionData } from 'viem';
-import { qkbRegistryV5_2Abi } from '../abi/QKBRegistryV5_2.js';
-import { QkbError } from '../errors/index.js';
+import { zkqesRegistryV5_2Abi } from '../abi/ZkqesRegistryV5_2.js';
+import { ZkqesError } from '../errors/index.js';
 
 // ===========================================================================
 // PublicSignalsV5_2 — 22-element struct. Order is FROZEN per spec
@@ -106,7 +106,7 @@ export function publicSignalsV5_2FromArray(
   arr: readonly (string | bigint)[],
 ): PublicSignalsV5_2 {
   if (arr.length !== PUBLIC_SIGNALS_V5_2_LENGTH) {
-    throw new QkbError('witness.fieldTooLong', {
+    throw new ZkqesError('witness.fieldTooLong', {
       reason: 'public-signals-v5_2-length',
       got: arr.length,
       want: PUBLIC_SIGNALS_V5_2_LENGTH,
@@ -151,7 +151,7 @@ export interface Groth16ProofV5_2 {
 }
 
 // ===========================================================================
-// RegisterArgsV5_2 — calldata shape for QKBRegistryV5_2.register()
+// RegisterArgsV5_2 — calldata shape for ZkqesRegistryV5_2.register()
 //
 // Same supporting-bytes payload as V5.1 (leafSpki, intSpki, signedAttrs,
 // leafSig, intSig, trust + policy Merkle paths). Only the `sig` field's
@@ -205,7 +205,7 @@ export function assertRegisterArgsV5_2Shape(args: RegisterArgsV5_2): void {
   assertSpki(args.leafSpki, 'leafSpki');
   assertSpki(args.intSpki, 'intSpki');
   if (!HEX_RE.test(args.signedAttrs)) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'signedAttrs-hex' });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'signedAttrs-hex' });
   }
   assertBytes32Pair(args.leafSig, 'leafSig');
   assertBytes32Pair(args.intSig, 'intSig');
@@ -217,17 +217,17 @@ export function assertRegisterArgsV5_2Shape(args: RegisterArgsV5_2): void {
 
 function assertProofV5_2Shape(p: Groth16ProofV5_2): void {
   if (p.a.length !== 2 || p.c.length !== 2) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'proof-v5_2-ac' });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'proof-v5_2-ac' });
   }
   if (p.b.length !== 2 || p.b[0]!.length !== 2 || p.b[1]!.length !== 2) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'proof-v5_2-b' });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'proof-v5_2-b' });
   }
 }
 
 function assertPublicSignalsV5_2Shape(s: PublicSignalsV5_2): void {
   // timestamp ≤ 2^64 — sanity cap from contract docs.
   if (s.timestamp < 0n || s.timestamp >= 1n << 64n) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'timestamp-range' });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'timestamp-range' });
   }
   // bindingPk* limbs — Bits2Num(128). Range-check matches circuit.
   for (const [name, val] of [
@@ -237,7 +237,7 @@ function assertPublicSignalsV5_2Shape(s: PublicSignalsV5_2): void {
     ['bindingPkYLo', s.bindingPkYLo],
   ] as const) {
     if (val < 0n || val >= U128_MAX) {
-      throw new QkbError('witness.fieldTooLong', {
+      throw new ZkqesError('witness.fieldTooLong', {
         reason: 'bindingPk-limb-range',
         field: name,
       });
@@ -249,49 +249,49 @@ function assertPublicSignalsV5_2Shape(s: PublicSignalsV5_2): void {
 
 function assertSpki(hex: string, field: string): void {
   if (!HEX_RE.test(hex) || hex.length !== SPKI_HEX_LEN) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'spki-shape', field });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'spki-shape', field });
   }
 }
 
 function assertBytes32Pair(pair: readonly string[], field: string): void {
   if (pair.length !== 2 || !HEX32_RE.test(pair[0]!) || !HEX32_RE.test(pair[1]!)) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'bytes32-pair', field });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'bytes32-pair', field });
   }
 }
 
 function assertBytes32Path(path: readonly string[], field: string): void {
   if (path.length !== 16) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'merkle-path-depth', field });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'merkle-path-depth', field });
   }
   for (let i = 0; i < 16; i++) {
     if (!HEX32_RE.test(path[i]!)) {
-      throw new QkbError('witness.fieldTooLong', { reason: 'merkle-path-entry', field, i });
+      throw new ZkqesError('witness.fieldTooLong', { reason: 'merkle-path-entry', field, i });
     }
   }
 }
 
 function assertU256(v: bigint, field: string): void {
   if (v < 0n || v >= 1n << 256n) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'uint256-range', field });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'uint256-range', field });
   }
 }
 
 // ===========================================================================
-// Calldata encoders — populated once contracts-eng pumps qkbRegistryV5_2Abi.
+// Calldata encoders — populated once contracts-eng pumps zkqesRegistryV5_2Abi.
 // ===========================================================================
 
 /**
  * Encode a `register()` call against the V5.2 ABI. Shape-validate via
  * `assertRegisterArgsV5_2Shape` before calling.
  *
- * The explicit generic `<typeof qkbRegistryV5_2Abi, 'register'>` pins
+ * The explicit generic `<typeof zkqesRegistryV5_2Abi, 'register'>` pins
  * viem's TFunctionName so it doesn't union the `register` 11-arg shape
  * with `rotateWallet`'s 3-arg shape — same pattern as V5.1's encoder
  * (V5.1 commit `73ba255`).
  */
 export function encodeV5_2RegisterCalldata(args: RegisterArgsV5_2): `0x${string}` {
-  return encodeFunctionData<typeof qkbRegistryV5_2Abi, 'register'>({
-    abi: qkbRegistryV5_2Abi,
+  return encodeFunctionData<typeof zkqesRegistryV5_2Abi, 'register'>({
+    abi: zkqesRegistryV5_2Abi,
     functionName: 'register',
     args: [
       {
@@ -351,8 +351,8 @@ export interface RotateWalletArgsV5_2 {
 }
 
 export function encodeV5_2RotateWalletCalldata(args: RotateWalletArgsV5_2): `0x${string}` {
-  return encodeFunctionData<typeof qkbRegistryV5_2Abi, 'rotateWallet'>({
-    abi: qkbRegistryV5_2Abi,
+  return encodeFunctionData<typeof zkqesRegistryV5_2Abi, 'rotateWallet'>({
+    abi: zkqesRegistryV5_2Abi,
     functionName: 'rotateWallet',
     args: [
       {

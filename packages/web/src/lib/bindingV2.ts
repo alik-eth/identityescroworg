@@ -1,4 +1,4 @@
-// Thin re-export façade over @qkb/sdk's binding module. Web has long
+// Thin re-export façade over @zkqes/sdk's binding module. Web has long
 // imported QKB/2.0 schema helpers from `./bindingV2`; routing those imports
 // through the SDK keeps the consumer surface stable while collapsing the
 // duplicate implementation into one source of truth.
@@ -30,4 +30,4 @@ export {
   type BuildBindingV2Input,
   type BuildPolicyLeafV1Input,
   type PolicyLeafV1,
-} from '@qkb/sdk';
+} from '@zkqes/sdk';

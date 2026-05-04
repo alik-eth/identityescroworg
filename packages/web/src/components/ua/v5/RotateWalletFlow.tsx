@@ -4,7 +4,7 @@
  * V5.2 (keccak-on-chain amendment) deltas vs V5.1:
  *   - public-signal layout drops msgSender and grows by four bindingPk*
  *     16-byte BE limbs (slots 18-21) — see `buildWitnessV5_2`.
- *   - rotateWallet() in `qkbRegistryV5_2Abi` accepts the new 22-field sig
+ *   - rotateWallet() in `zkqesRegistryV5_2Abi` accepts the new 22-field sig
  *     tuple; selector shifts to `0x9849ff37` (vs V5.1 `0x07d19c50`).
  *   - The auth-hash flow is byte-identical (no chain change to the EIP-191
  *     wrapper). walletSecret derivation (HKDF for EOA / Argon2id for SCW
@@ -56,7 +56,7 @@ import {
 } from 'wagmi';
 import {
   deploymentForChainId,
-  qkbRegistryV5_2Abi,
+  zkqesRegistryV5_2Abi,
   parseP7s,
   findSubjectSerial,
   computeIdentityFingerprint,
@@ -69,8 +69,8 @@ import {
   type PublicSignalsV5_2,
   type CircuitArtifactUrls,
   type Groth16Proof,
-} from '@qkb/sdk';
-import { SnarkjsWorkerProver } from '@qkb/sdk/prover/snarkjsWorker';
+} from '@zkqes/sdk';
+import { SnarkjsWorkerProver } from '@zkqes/sdk/prover/snarkjsWorker';
 import {
   isV5ArtifactsConfigured,
   V5_PROVER_ARTIFACTS,
@@ -128,6 +128,7 @@ function computeRotationAuthHash(
     encodePacked(
       ['string', 'uint256', 'address', 'uint256', 'address'],
       [
+        // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
         'qkb-rotate-auth-v1',
         BigInt(chainId),
         registryAddress,
@@ -206,7 +207,7 @@ export function RotateWalletFlow() {
   const fingerprintHex = fingerprint !== null ? bigIntToBytes32Hex(fingerprint) : ZERO_BYTES32;
   const { data: rotationOldCommitmentHex } = useReadContract({
     address: dep?.registryV5,
-    abi: qkbRegistryV5_2Abi,
+    abi: zkqesRegistryV5_2Abi,
     functionName: 'identityCommitments',
     args: [fingerprintHex],
     query: {
@@ -534,7 +535,7 @@ export function RotateWalletFlow() {
     setErrorMsg(null);
     writeContract({
       address: dep.registryV5,
-      abi: qkbRegistryV5_2Abi,
+      abi: zkqesRegistryV5_2Abi,
       functionName: 'rotateWallet',
       args: [proof, publicSignals, oldWalletAuthSig],
     });

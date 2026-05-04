@@ -2,7 +2,7 @@ import { Link, useNavigate } from '@tanstack/react-router';
 import { useState, useCallback } from 'react';
 import { useAccount, useChainId, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { useTranslation } from 'react-i18next';
-import { deploymentForChainId, qkbRegistryV4Abi } from '@qkb/sdk';
+import { deploymentForChainId, zkqesRegistryV4Abi } from '@zkqes/sdk';
 import { validateProof, type ProofPayload } from '../../lib/proofValidator';
 import { StepIndicator } from '../../components/StepIndicator';
 import { DocumentFooter } from '../../components/DocumentFooter';
@@ -42,7 +42,7 @@ export function SubmitScreen() {
     const lp = payload.leafProof;
     writeContract({
       address: dep.registry,
-      abi: qkbRegistryV4Abi,
+      abi: zkqesRegistryV4Abi,
       functionName: 'register',
       args: [
         {

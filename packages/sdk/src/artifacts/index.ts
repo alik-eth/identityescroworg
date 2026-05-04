@@ -11,7 +11,7 @@
  *   2. We download the wasm + zkey from the URLs in urls.json.
  *   3. We hash the downloaded bytes with SHA-256 and compare against the
  *      `wasmSha256` / `zkeySha256` recorded in urls.json. Mismatch ⇒
- *      QkbError('prover.artifactMismatch'). This catches CDN poisoning and
+ *      ZkqesError('prover.artifactMismatch'). This catches CDN poisoning and
  *      partial downloads.
  *   4. Verified bytes are stored in CacheStorage keyed by sha256 (not URL),
  *      so a future urls.json update with a new sha invalidates automatically
@@ -22,7 +22,7 @@
  */
 import type { AlgorithmTag } from '../cert/cades.js';
 import { ALGORITHM_TAG_RSA, ALGORITHM_TAG_ECDSA } from '../cert/cades.js';
-import { QkbError } from '../errors/index.js';
+import { ZkqesError } from '../errors/index.js';
 
 export type CircuitVariant = 'rsa' | 'ecdsa';
 
@@ -62,12 +62,12 @@ export interface LoadOptions {
   signal?: AbortSignal;
 }
 
-const CACHE_NAME = 'qkb-circuit-artifacts-v1';
+const CACHE_NAME = 'zkqes-circuit-artifacts-v1';
 
 export function variantForAlgorithmTag(tag: AlgorithmTag): CircuitVariant {
   if (tag === ALGORITHM_TAG_RSA) return 'rsa';
   if (tag === ALGORITHM_TAG_ECDSA) return 'ecdsa';
-  throw new QkbError('prover.artifactMismatch', { reason: 'unknown-algorithm-tag', tag });
+  throw new ZkqesError('prover.artifactMismatch', { reason: 'unknown-algorithm-tag', tag });
 }
 
 /**
@@ -103,13 +103,13 @@ export function pickVariantUrls(
   wanted: CircuitVariant,
 ): UrlsJson {
   if (!isRecord(raw)) {
-    throw new QkbError('prover.artifactMismatch', { reason: 'urls-not-object' });
+    throw new ZkqesError('prover.artifactMismatch', { reason: 'urls-not-object' });
   }
   // Dual-variant shape: top-level has `rsa` + `ecdsa` keys.
   if ('rsa' in raw && 'ecdsa' in raw) {
     const entry = raw[wanted];
     if (!isRecord(entry)) {
-      throw new QkbError('prover.artifactMismatch', {
+      throw new ZkqesError('prover.artifactMismatch', {
         reason: 'urls-variant-missing',
         wanted,
       });
@@ -124,14 +124,14 @@ export function pickVariantUrls(
 
 export function validateUrlsJson(raw: unknown, expectedVariant?: CircuitVariant): UrlsJson {
   if (!isRecord(raw)) {
-    throw new QkbError('prover.artifactMismatch', { reason: 'urls-not-object' });
+    throw new ZkqesError('prover.artifactMismatch', { reason: 'urls-not-object' });
   }
   const variant = raw.variant;
   if (variant !== 'rsa' && variant !== 'ecdsa') {
-    throw new QkbError('prover.artifactMismatch', { reason: 'urls-bad-variant', variant });
+    throw new ZkqesError('prover.artifactMismatch', { reason: 'urls-bad-variant', variant });
   }
   if (expectedVariant && variant !== expectedVariant) {
-    throw new QkbError('prover.artifactMismatch', {
+    throw new ZkqesError('prover.artifactMismatch', {
       reason: 'urls-variant-mismatch',
       want: expectedVariant,
       got: variant,
@@ -186,7 +186,7 @@ async function fetchAndVerify(
   const bytes = new Uint8Array(ab);
   const ok = await verifySha(bytes, want);
   if (!ok) {
-    throw new QkbError('prover.artifactMismatch', {
+    throw new ZkqesError('prover.artifactMismatch', {
       url: desc.url,
       want,
       got: await sha256Hex(bytes),
@@ -213,7 +213,7 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
 const defaultFetcher: Fetcher = async (url) => {
   const res = await fetch(url);
   if (!res.ok) {
-    throw new QkbError('prover.artifactMismatch', {
+    throw new ZkqesError('prover.artifactMismatch', {
       reason: 'fetch-status',
       url,
       status: res.status,
@@ -262,17 +262,17 @@ function keyUrl(sha: string): string {
 
 function validateUrl(value: unknown, field: string): void {
   if (typeof value !== 'string' || value.length === 0) {
-    throw new QkbError('prover.artifactMismatch', { reason: 'urls-bad-url', field });
+    throw new ZkqesError('prover.artifactMismatch', { reason: 'urls-bad-url', field });
   }
 }
 
 function validateSha(value: unknown, field: string): void {
   if (typeof value !== 'string') {
-    throw new QkbError('prover.artifactMismatch', { reason: 'urls-bad-sha', field });
+    throw new ZkqesError('prover.artifactMismatch', { reason: 'urls-bad-sha', field });
   }
   const stripped = value.startsWith('0x') || value.startsWith('0X') ? value.slice(2) : value;
   if (!/^[0-9a-fA-F]{64}$/.test(stripped)) {
-    throw new QkbError('prover.artifactMismatch', { reason: 'urls-bad-sha', field });
+    throw new ZkqesError('prover.artifactMismatch', { reason: 'urls-bad-sha', field });
   }
 }
 
@@ -281,7 +281,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 function throwIfAborted(signal?: AbortSignal): void {
-  if (signal?.aborted) throw new QkbError('prover.cancelled');
+  if (signal?.aborted) throw new ZkqesError('prover.cancelled');
 }
 
 function toAB(b: Uint8Array): ArrayBuffer {

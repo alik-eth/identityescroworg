@@ -1,4 +1,4 @@
-// Thin re-export façade over @qkb/sdk's policy module.
+// Thin re-export façade over @zkqes/sdk's policy module.
 export {
   buildPolicyInclusionProof,
   buildPolicyTreeFromLeaves,
@@ -6,4 +6,4 @@ export {
   zeroHashes,
   type PolicyBuiltTree,
   type PolicyInclusionProof,
-} from '@qkb/sdk';
+} from '@zkqes/sdk';

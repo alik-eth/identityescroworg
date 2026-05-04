@@ -1,9 +1,9 @@
 // Embedded manifest-signing public key — compile-time constant.
 //
 // Production builds embed lead's production Ed25519 public key (which
-// signs `https://app.zkqes.org/qkb-cli-manifest.json`).  Dev
+// signs `https://app.zkqes.org/zkqes-cli-manifest.json`).  Dev
 // builds embed the lead-issued dev key at
-// `/tmp/qkb-cli-dev-keys/manifest.pub.pem` so workers can exercise
+// `/tmp/zkqes-cli-dev-keys/manifest.pub.pem` so workers can exercise
 // the signature path against the dev manifest at
 // `/tmp/dev-manifest.json` without touching the production trust
 // chain.
@@ -29,6 +29,6 @@ MCowBQYDK2VwAyEANlYbk3UEpF63gT1VY5z45e49RtMIvaQY9NDccOhRWvI=
 
 /**
  * Marker that this build is using the dev key.  CLI surfaces a stderr
- * warning on every `qkb serve` boot when this flag is true.
+ * warning on every `zkqes serve` boot when this flag is true.
  */
 export const IS_DEV_SIGNING_KEY = true;

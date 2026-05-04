@@ -1,4 +1,4 @@
-// `qkb serve` — boots the CliServer with explicit fixture paths.
+// `zkqes serve` — boots the CliServer with explicit fixture paths.
 //
 // T2 surface: --zkey / --wasm / --vkey / --rapidsnark-bin / --port /
 //             --host / --allowed-origin
@@ -36,7 +36,7 @@ export function serveCommand(program: Command): void {
     .requiredOption('--vkey <path>', 'V5.2 verification key (.json)')
     .option(
       '--rapidsnark-bin <path>',
-      'iden3 rapidsnark prover binary (sidecar). Default: bundled (pkg) or ~/.cache/qkb-bin/... (dev).',
+      'iden3 rapidsnark prover binary (sidecar). Default: bundled (pkg) or ~/.cache/zkqes-bin/... (dev).',
     )
     .option('--port <n>', 'TCP port to bind', '9080')
     .option(
@@ -59,7 +59,7 @@ export function serveCommand(program: Command): void {
       // without any auth.  Block early with a clear message.
       if (!isLoopback(opts.host)) {
         process.stderr.write(
-          `qkb serve: refusing to bind non-loopback host "${opts.host}". ` +
+          `zkqes serve: refusing to bind non-loopback host "${opts.host}". ` +
             'Use 127.0.0.1 or ::1.\n',
         );
         process.exit(2);
@@ -83,7 +83,7 @@ export function serveCommand(program: Command): void {
         port: Number(opts.port),
         host: opts.host,
         allowedOrigin: opts.allowedOrigin,
-        version: `qkb-cli@${PKG_VERSION}`,
+        version: `zkqes-cli@${PKG_VERSION}`,
         circuit: 'v5.2',
       });
 
@@ -93,7 +93,7 @@ export function serveCommand(program: Command): void {
       // log, exit 0.  Without explicit handlers, Ctrl-C would exit
       // 130 with a half-closed socket.
       const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
-        process.stderr.write(`\n[qkb-serve] ${signal} received, shutting down\n`);
+        process.stderr.write(`\n[zkqes-serve] ${signal} received, shutting down\n`);
         await server.stop().catch(() => {});
         process.exit(0);
       };

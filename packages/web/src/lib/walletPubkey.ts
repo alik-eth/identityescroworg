@@ -65,7 +65,7 @@ export async function recoverPubkeyFromWallet(): Promise<WalletPubkeyResult> {
   // plenty — the message is shown for transparency, not uniqueness).
   const issuedAt = new Date().toISOString().slice(0, 16) + 'Z';
   const message =
-    `Recover my QKB public key for identityescrow.org\n` +
+    `Recover my zkqes public key for zkqes.org\n` +
     `Address: ${address}\n` +
     `Issued: ${issuedAt}`;
 

@@ -1,6 +1,6 @@
-# `@qkb/cli` package — invariants for future agents
+# `@zkqes/cli` package — invariants for future agents
 
-This package hosts `qkb serve` — the localhost-bound native rapidsnark
+This package hosts `zkqes serve` — the localhost-bound native rapidsnark
 prover that the V5.2 register flow at
 `app.zkqes.org/v5/registerV5` offloads its prove step to.
 
@@ -9,11 +9,11 @@ Groth16 proof in ~13 s using native rapidsnark, behind an
 origin-pinned HTTP API. Browser stays canonical for everything else
 (wallet, witness gen, on-chain submission).
 
-## V5.23 — `qkb serve` is on-demand, NEVER a daemon
+## V5.23 — `zkqes serve` is on-demand, NEVER a daemon
 
 V5.4 V1's defining invariant per founder direction (2026-05-03):
 
-- `qkb serve` runs in the foreground, blocks until SIGINT/SIGTERM.
+- `zkqes serve` runs in the foreground, blocks until SIGINT/SIGTERM.
 - No PID file. No LaunchAgent (macOS). No systemd user unit (Linux).
   No Windows Service.
 - The installer (`postinstall.ts`) only downloads the rapidsnark
@@ -55,11 +55,11 @@ implementation.
 
 ## V5.25 — Manifest signature verification is REQUIRED in production
 
-The auto-update manifest at `https://app.zkqes.org/qkb-cli-manifest.json`
+The auto-update manifest at `https://app.zkqes.org/zkqes-cli-manifest.json`
 is signed by an Ed25519 key whose public half is embedded in the CLI
 binary at compile time (`src/manifest/signing-key.ts`). The
 verification path lives in `src/manifest/fetch.ts` and runs by
-default on every `qkb serve` boot that reads from a `--manifest-url`.
+default on every `zkqes serve` boot that reads from a `--manifest-url`.
 
 `--no-verify` bypasses signature verification. Use ONLY for dev. Per
 plan T9 step 1, production CLI builds reject unsigned manifests with
@@ -68,10 +68,10 @@ production-build switch (or hard-gated behind a `QKB_DEV_BUILD=1`
 env var; lead's call at release time).
 
 **`signing-key.ts` currently embeds the lead-issued dev key** from
-`/tmp/qkb-cli-dev-keys/manifest.pub.pem` (commit `f67595a`). Production
+`/tmp/zkqes-cli-dev-keys/manifest.pub.pem` (commit `f67595a`). Production
 swap happens at build-time before V1 ship; the constant
 `IS_DEV_SIGNING_KEY = true` flags this build state and the CLI emits
-a stderr warning on every `qkb serve` boot when true.
+a stderr warning on every `zkqes serve` boot when true.
 
 ## V5.26 — Cache is per-user, never per-system
 
@@ -79,13 +79,13 @@ Cache root resolution lives in `src/circuit/cache-paths.ts`:
 
 | OS | Cache root |
 |---|---|
-| macOS | `~/Library/Application Support/qkb-cli/` |
-| Windows | `%APPDATA%\qkb-cli\` |
-| Linux | `$XDG_DATA_HOME/qkb-cli/` (default `~/.local/share/qkb-cli/`) |
+| macOS | `~/Library/Application Support/zkqes-cli/` |
+| Windows | `%APPDATA%\zkqes-cli\` |
+| Linux | `$XDG_DATA_HOME/zkqes-cli/` (default `~/.local/share/zkqes-cli/`) |
 
-No `/var/cache/qkb-cli/`, no `/usr/local/share/qkb-cli/`, no shared
+No `/var/cache/zkqes-cli/`, no `/usr/local/share/zkqes-cli/`, no shared
 state across users. Each user's cache is independent; if Alice and
-Bob both use `qkb serve`, each has their own ~2 GB zkey cache.
+Bob both use `zkqes serve`, each has their own ~2 GB zkey cache.
 
 Reasons:
 1. Witness JSON contains `walletSecret` (32-byte keying material).
@@ -106,15 +106,15 @@ The CLI invokes the iden3/rapidsnark `prover` binary as a sidecar
 (spawned via `child_process.spawn`). Resolution order
 (`src/rapidsnark/sidecar-path.ts`):
 
-1. **`--rapidsnark-bin <path>`** if explicitly passed at `qkb serve`
+1. **`--rapidsnark-bin <path>`** if explicitly passed at `zkqes serve`
    command line — wins. Used by tests, alternate builds, manual
    overrides.
 2. **Bundled position** when `process.pkg` is set (V1.1 SEA builds):
    `<exe-dir>/rapidsnark-<platform>-v0.0.8/bin/prover`. NOT used in
    V1 (V1 ships via npm only; SEA single-file binaries land in
    V1.1).
-3. **Dev cache** at `~/.cache/qkb-bin/rapidsnark-<platform>-v0.0.8/bin/prover`.
-   Populated by `postinstall.ts` on first `npm install -g @qkb/cli`.
+3. **Dev cache** at `~/.cache/zkqes-bin/rapidsnark-<platform>-v0.0.8/bin/prover`.
+   Populated by `postinstall.ts` on first `npm install -g @zkqes/cli`.
 
 The `<platform>` keys match iden3 release filename casing exactly:
 - `linux-x86_64`
@@ -144,7 +144,7 @@ change.
 ```ts
 {
   ok: true,
-  version: 'qkb-cli@<semver>',
+  version: 'zkqes-cli@<semver>',
   circuit: 'v5.2',                // hard-coded for V1
   zkeyLoaded: boolean,
   busy: boolean,
@@ -165,8 +165,8 @@ their side and breaks the browser auto-detection.
 
 ## V5.29 — bun-runtime support is BLOCKED upstream (V1.1 candidate)
 
-`bun build --compile` produces a working binary for `qkb version` /
-`status` / `cache` but `qkb serve` panics during `/prove`:
+`bun build --compile` produces a working binary for `zkqes version` /
+`status` / `cache` but `zkqes serve` panics during `/prove`:
 
 ```
 TypeError: Argument 1 ('event') to EventTarget.dispatchEvent must
@@ -226,7 +226,7 @@ origin keeps the security narrative tight).  Dev builds expose
 production CLI builds will eventually hard-code the production
 origin with no flag.
 
-Bumped `@qkb/cli` package version `0.5.2-pre` → `0.5.4.1-pre` to
+Bumped `@zkqes/cli` package version `0.5.2-pre` → `0.5.4.1-pre` to
 signal the post-tag fix.
 
 ## File map
@@ -274,12 +274,12 @@ test/
 
 ## Test budget
 
-`pnpm -F @qkb/cli test` runs 57 tests in ~30 s. Two integration
+`pnpm -F @zkqes/cli test` runs 57 tests in ~30 s. Two integration
 test files require:
 
-- V5.2 fixtures present (`packages/circuits/ceremony/v5_2/qkb-v5_2-stub.zkey`
-  + `build/v5_2-stub/QKBPresentationV5_js/QKBPresentationV5.wasm`)
-- iden3 rapidsnark sidecar at `~/.cache/qkb-bin/rapidsnark-linux-x86_64-v0.0.8/bin/prover`
+- V5.2 fixtures present (`packages/circuits/ceremony/v5_2/zkqes-v5_2-stub.zkey`
+  + `build/v5_2-stub/ZkqesPresentationV5_js/ZkqesPresentationV5.wasm`)
+- iden3 rapidsnark sidecar at `~/.cache/zkqes-bin/rapidsnark-linux-x86_64-v0.0.8/bin/prover`
 
 Both gate via `existsSync` checks; CI without these auto-skips the
 heavy `describe` blocks. ~50 GB cgroup is needed for the heavy prove
@@ -288,11 +288,11 @@ tests (snarkjs + rapidsnark working set).
 ## Build
 
 ```
-pnpm -F @qkb/cli build       # tsc → dist/src/**/*.js
-pnpm -F @qkb/cli typecheck   # tsc --noEmit
-pnpm -F @qkb/cli test        # vitest run
-pnpm -F @qkb/cli pack        # prepack (tsc) + pnpm pack → qkb-cli-*.tgz
+pnpm -F @zkqes/cli build       # tsc → dist/src/**/*.js
+pnpm -F @zkqes/cli typecheck   # tsc --noEmit
+pnpm -F @zkqes/cli test        # vitest run
+pnpm -F @zkqes/cli pack        # prepack (tsc) + pnpm pack → zkqes-cli-*.tgz
 ```
 
 The pack output is the V1 distribution artifact. End users get it
-via `npm install -g @qkb/cli`.
+via `npm install -g @zkqes/cli`.

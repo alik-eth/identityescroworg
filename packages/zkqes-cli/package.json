@@ -1,11 +1,11 @@
 {
-  "name": "@qkb/cli",
+  "name": "@zkqes/cli",
   "version": "0.5.4.1-pre",
   "private": true,
   "type": "module",
-  "description": "QKB CLI server: localhost-bound native rapidsnark prover bridging the V5.2 browser register flow to the on-disk zkey at 13.86 s / 3.70 GiB peak.",
+  "description": "zkqes CLI server: localhost-bound native rapidsnark prover bridging the V5.2 browser register flow to the on-disk zkey at 13.86 s / 3.70 GiB peak.",
   "bin": {
-    "qkb": "./dist/src/index.js"
+    "zkqes": "./dist/src/index.js"
   },
   "scripts": {
     "build": "tsc",

@@ -1,16 +1,16 @@
 // Cache-path resolution per orchestration plan §1.4.
 //
 // Each OS has a conventional per-user data directory:
-//   macOS   →  ~/Library/Application Support/qkb-cli/
-//   Windows →  %APPDATA%\qkb-cli\
-//   Linux   →  ~/.local/share/qkb-cli/   (respects $XDG_DATA_HOME if set)
+//   macOS   →  ~/Library/Application Support/zkqes-cli/
+//   Windows →  %APPDATA%\zkqes-cli\
+//   Linux   →  ~/.local/share/zkqes-cli/   (respects $XDG_DATA_HOME if set)
 //
 // Subdirectory layout under the cache root (frozen):
-//   circuits/qkb-<version>.zkey         — cached proving key (~2 GB)
-//   circuits/qkb-<version>.zkey.tmp     — partial download (atomic-mv on completion)
-//   circuits/qkb-<version>.wasm         — witness-calc WASM
-//   circuits/qkb-<version>-vkey.json    — verification key
-//   manifest/qkb-cli-manifest.json      — last fetched manifest
+//   circuits/zkqes-<version>.zkey         — cached proving key (~2 GB)
+//   circuits/zkqes-<version>.zkey.tmp     — partial download (atomic-mv on completion)
+//   circuits/zkqes-<version>.wasm         — witness-calc WASM
+//   circuits/zkqes-<version>-vkey.json    — verification key
+//   manifest/zkqes-cli-manifest.json      — last fetched manifest
 //
 // The functions here take platform + homedir + env as parameters so
 // tests can inject synthetic environments without monkey-patching
@@ -37,19 +37,19 @@ export function resolveCacheRoot(input: CacheRootInput = {}): string {
   const env = input.env ?? process.env;
 
   if (platform === 'darwin') {
-    return join(home, 'Library', 'Application Support', 'qkb-cli');
+    return join(home, 'Library', 'Application Support', 'zkqes-cli');
   }
   if (platform === 'win32') {
     // %APPDATA% is the conventional per-user roaming app-data dir on
     // Windows.  Fall back to home/AppData/Roaming if APPDATA is unset
     // (rare; only happens in misconfigured shells).
     const appdata = env['APPDATA'] ?? join(home, 'AppData', 'Roaming');
-    return join(appdata, 'qkb-cli');
+    return join(appdata, 'zkqes-cli');
   }
   // Linux + everything else: XDG.
   const xdg = env['XDG_DATA_HOME'];
   const xdgRoot = xdg && xdg.length > 0 ? xdg : join(home, '.local', 'share');
-  return join(xdgRoot, 'qkb-cli');
+  return join(xdgRoot, 'zkqes-cli');
 }
 
 export interface CircuitCachePaths {
@@ -73,11 +73,11 @@ export function circuitCachePaths(
   return {
     cacheRoot,
     circuitsDir,
-    zkey: join(circuitsDir, `qkb-${circuitVersion}.zkey`),
-    zkeyTmp: join(circuitsDir, `qkb-${circuitVersion}.zkey.tmp`),
-    wasm: join(circuitsDir, `qkb-${circuitVersion}.wasm`),
-    vkey: join(circuitsDir, `qkb-${circuitVersion}-vkey.json`),
+    zkey: join(circuitsDir, `zkqes-${circuitVersion}.zkey`),
+    zkeyTmp: join(circuitsDir, `zkqes-${circuitVersion}.zkey.tmp`),
+    wasm: join(circuitsDir, `zkqes-${circuitVersion}.wasm`),
+    vkey: join(circuitsDir, `zkqes-${circuitVersion}-vkey.json`),
     manifestDir,
-    manifest: join(manifestDir, 'qkb-cli-manifest.json'),
+    manifest: join(manifestDir, 'zkqes-cli-manifest.json'),
   };
 }

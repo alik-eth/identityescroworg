@@ -34,8 +34,8 @@ civicTheme.radii.menuButton = '0px';
 civicTheme.radii.actionButton = '0px';
 
 const appInfo = {
-  appName: 'Identity Escrow',
-  learnMoreUrl: 'https://identityescrow.org',
+  appName: 'zkqes',
+  learnMoreUrl: 'https://zkqes.org',
   disclaimer: ({ Text }: { Text: React.FC<{ children: ReactNode }> }) => (
     <Text>The signature originates with your wallet.</Text>
   ),

@@ -5,7 +5,7 @@
  * module boundary between certificate/profile decoders and the rest of the
  * witness / policy pipeline.
  */
-import { QkbError } from '../errors/index.js';
+import { ZkqesError } from '../errors/index.js';
 
 export type DobEvidence =
   | 'subject'
@@ -237,7 +237,7 @@ function findByOid(
 function extractDobDigits(raw: string): string {
   const match = raw.match(/^(\d{8})(?:[^\d].*)?$/);
   if (!match) {
-    throw new QkbError('binding.field', { field: 'dob', reason: 'bad-format', raw });
+    throw new ZkqesError('binding.field', { field: 'dob', reason: 'bad-format', raw });
   }
   return match[1]!;
 }
@@ -252,7 +252,7 @@ function daysInMonth(year: number, month: number): number {
   return 31;
 }
 
-/** Throws QkbError('binding.field') if (y,m,d) is not a real Gregorian date.
+/** Throws ZkqesError('binding.field') if (y,m,d) is not a real Gregorian date.
  *  Rejects impossible days like 19990231 that a simple 1..31 check accepts. */
 export function assertGregorianDate(
   year: number,
@@ -262,13 +262,13 @@ export function assertGregorianDate(
   field: string,
 ): void {
   if (!Number.isInteger(year) || year < 1900 || year > 2999) {
-    throw new QkbError('binding.field', { field: `${field}.year`, reason: 'range', raw });
+    throw new ZkqesError('binding.field', { field: `${field}.year`, reason: 'range', raw });
   }
   if (!Number.isInteger(month) || month < 1 || month > 12) {
-    throw new QkbError('binding.field', { field: `${field}.month`, reason: 'range', raw });
+    throw new ZkqesError('binding.field', { field: `${field}.month`, reason: 'range', raw });
   }
   if (!Number.isInteger(day) || day < 1 || day > daysInMonth(year, month)) {
-    throw new QkbError('binding.field', { field: `${field}.day`, reason: 'calendar', raw });
+    throw new ZkqesError('binding.field', { field: `${field}.day`, reason: 'calendar', raw });
   }
 }
 

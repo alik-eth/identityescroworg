@@ -12,6 +12,7 @@ import type { AlgorithmTag } from './cades';
 import type { Groth16Proof } from './prover';
 import { BundleError } from './errors';
 
+// frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
 export const BUNDLE_VERSION = 'QKB/1.0' as const;
 
 export interface BundleBinding {

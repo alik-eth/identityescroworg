@@ -1,5 +1,5 @@
 import { useChainId } from 'wagmi';
-import { deploymentForChainId } from '@qkb/sdk';
+import { deploymentForChainId } from '@zkqes/sdk';
 
 export function DocumentFooter() {
   const chainId = useChainId();

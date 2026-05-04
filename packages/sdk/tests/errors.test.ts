@@ -2,14 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   ALL_ERROR_CODES,
   BundleError,
-  QkbError,
+  ZkqesError,
   localizeError,
   type ErrorCode,
 } from '../src/errors/index.js';
 
-describe('QkbError', () => {
+describe('ZkqesError', () => {
   it('carries code, messageKey, and optional details', () => {
-    const err = new QkbError('binding.size', { reason: 'too big', actual: 4096 });
+    const err = new ZkqesError('binding.size', { reason: 'too big', actual: 4096 });
     expect(err.code).toBe('binding.size');
     expect(err.messageKey).toBe('errors.binding.size');
     expect(err.details).toEqual({ reason: 'too big', actual: 4096 });
@@ -17,7 +17,7 @@ describe('QkbError', () => {
   });
 
   it('falls back to code-only message when no reason', () => {
-    const err = new QkbError('cades.parse');
+    const err = new ZkqesError('cades.parse');
     expect(err.message).toBe('cades.parse');
   });
 });
@@ -27,7 +27,7 @@ describe('BundleError', () => {
     const err = new BundleError('bundle.malformed', { offset: 42 });
     expect(err.name).toBe('BundleError');
     expect(err.code).toBe('bundle.malformed');
-    expect(err).toBeInstanceOf(QkbError);
+    expect(err).toBeInstanceOf(ZkqesError);
   });
 });
 
@@ -41,17 +41,17 @@ describe('ALL_ERROR_CODES', () => {
 describe('localizeError', () => {
   it('returns the localized string when the i18n key resolves', () => {
     const i18n = { t: (k: string) => (k === 'errors.binding.size' ? 'Too large' : k) };
-    const err = new QkbError('binding.size');
+    const err = new ZkqesError('binding.size');
     expect(localizeError(err, i18n)).toBe('Too large');
   });
 
   it('returns the raw code when i18n echoes the key back unchanged', () => {
     const i18n = { t: (k: string) => k };
-    const err = new QkbError('binding.size');
+    const err = new ZkqesError('binding.size');
     expect(localizeError(err, i18n)).toBe('binding.size');
   });
 
-  it('returns the message for non-QkbError Error instances', () => {
+  it('returns the message for non-ZkqesError Error instances', () => {
     expect(localizeError(new Error('boom'), { t: (k) => k })).toBe('boom');
   });
 

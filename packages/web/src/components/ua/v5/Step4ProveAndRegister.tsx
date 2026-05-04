@@ -12,11 +12,11 @@ import {
 } from 'wagmi';
 import {
   deploymentForChainId,
-  qkbRegistryV5_2Abi,
+  zkqesRegistryV5_2Abi,
   parseP7s,
   findSubjectSerial,
   CliProveError,
-} from '@qkb/sdk';
+} from '@zkqes/sdk';
 import {
   isV5ArtifactsConfigured,
 } from '../../../lib/circuitArtifacts';
@@ -203,7 +203,7 @@ export function Step4ProveAndRegister({ p7s, bindingBytes, onBack }: Step4Props)
     // (slots 18-21) and gates against the caller's address.
     writeContract({
       address: dep!.registryV5,
-      abi: qkbRegistryV5_2Abi,
+      abi: zkqesRegistryV5_2Abi,
       functionName: 'register',
       args: [
         registerArgs.proof,

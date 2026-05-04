@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// `qkb` CLI entrypoint — thin dispatcher.  Each subcommand owns its own
+// `zkqes` CLI entrypoint — thin dispatcher.  Each subcommand owns its own
 // file under `commands/`; this file only wires them into the commander
 // program tree.
 //
@@ -16,9 +16,9 @@ import { PKG_VERSION, versionCommand } from './commands/version.js';
 
 const program = new Command();
 program
-  .name('qkb')
+  .name('zkqes')
   .description(
-    'QKB CLI server — localhost-bound native rapidsnark prover for the V5.2 register flow.',
+    'zkqes CLI server — localhost-bound native rapidsnark prover for the V5.2 register flow.',
   )
   .version(PKG_VERSION);
 
@@ -28,6 +28,6 @@ statusCommand(program);
 cacheCommand(program);
 
 program.parseAsync(process.argv).catch((err) => {
-  process.stderr.write(`qkb: ${err instanceof Error ? err.message : String(err)}\n`);
+  process.stderr.write(`zkqes: ${err instanceof Error ? err.message : String(err)}\n`);
   process.exit(1);
 });

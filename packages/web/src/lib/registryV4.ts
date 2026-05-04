@@ -1,4 +1,4 @@
-// Thin re-export façade over @qkb/sdk's registry module.
+// Thin re-export façade over @zkqes/sdk's registry module.
 export {
   REGISTRY_V4_ERROR_SELECTORS,
   agePublicSignalsV4,
@@ -31,9 +31,9 @@ export {
   type LeafPublicSignalsV4AgeCapable,
   type RegisterArgsV4,
   type RegisterArgsV4Age,
-} from '@qkb/sdk';
+} from '@zkqes/sdk';
 // `leafPublicSignalsV4` is re-exported under the registry-domain name to
 // preserve existing call sites; the SDK exports the same function as
 // `buildLeafPublicSignalsV4Solidity` to disambiguate from the witness-side
 // projection of the same name.
-export { buildLeafPublicSignalsV4Solidity as leafPublicSignalsV4 } from '@qkb/sdk';
+export { buildLeafPublicSignalsV4Solidity as leafPublicSignalsV4 } from '@zkqes/sdk';

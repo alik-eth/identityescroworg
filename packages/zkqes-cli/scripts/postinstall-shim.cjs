@@ -1,5 +1,5 @@
 // Postinstall shim — runs on every `npm install` that includes
-// @qkb/cli, including workspace dev installs.
+// @zkqes/cli, including workspace dev installs.
 //
 // Two responsibilities:
 //   1. Gate on `dist/src/rapidsnark/postinstall.js` existence — in
@@ -37,7 +37,7 @@ if (!fs.existsSync(target)) {
 // are swallowed: postinstall failures must NOT fail the npm install
 // (users on niche platforms still need a working CLI; runtime will
 // surface a clear "rapidsnark not found" error if they try
-// `qkb serve` without --rapidsnark-bin).
+// `zkqes serve` without --rapidsnark-bin).
 import(pathToFileURL(target).href)
   .then((mod) => {
     if (typeof mod.runPostinstall === 'function') {
@@ -46,7 +46,7 @@ import(pathToFileURL(target).href)
   })
   .catch((err) => {
     process.stderr.write(
-      `[qkb-cli postinstall] non-fatal: ${err && err.message ? err.message : String(err)}\n`,
+      `[zkqes-cli postinstall] non-fatal: ${err && err.message ? err.message : String(err)}\n`,
     );
     process.exit(0);
   });

@@ -7,11 +7,9 @@
 //     register flow on this surface — that lives at app.zkqes.org.
 //
 // Brand discipline (BRAND.md §Names):
-//   - Lead with the descriptor: "zk-QES — a zero-knowledge protocol
-//     over qualified electronic signatures."
-//   - Use `QKB` as the protocol noun (the V1 thing).
-//   - `Identity Escrow` is the project umbrella; surfaces only at
-//     the bottom of the page as framing, not as the V1 face.
+//   - Lead with the descriptor: "zkqes — a zero-knowledge proof of a
+//     qualified electronic signature."
+//   - Use `zkqes` as the protocol noun.
 //
 // Civic-monumental aesthetic per existing `IndexScreen` + ceremony
 // pages: PaperGrain, doc-grid, hr.rule, EB Garamond display + Inter
@@ -222,16 +220,14 @@ export function LandingHero() {
             }}
           />
 
-          {/* Project umbrella framing — surfaced last, per BRAND.md
-              §"How to write about the project": Identity Escrow is
-              the umbrella, not V1's feature. */}
+          {/* Project umbrella framing — surfaced last per BRAND.md */}
           <section aria-labelledby="umbrella-heading" className="space-y-4">
             <h2
               id="umbrella-heading"
               className="text-2xl sm:text-3xl"
               style={{ color: 'var(--ink)' }}
             >
-              {t('zkqes.umbrellaHeading', 'About Identity Escrow')}
+              {t('zkqes.umbrellaHeading', 'About zkqes')}
             </h2>
             <p
               className="text-base max-w-prose"
@@ -239,7 +235,7 @@ export function LandingHero() {
             >
               {t(
                 'zkqes.umbrellaBody',
-                'Identity Escrow is the research line. Any state-issued credential exhibits a property: the issuing authority retains the ability to identify a holder under lawful process. QKB is the first protocol that surfaces this property on-chain — every-day pseudonymity for the holder, recoverable accountability for the state, the same trust structure as the qualified electronic signature itself.',
+                'zkqes is a zero-knowledge proof of a qualified electronic signature. Any state-issued credential exhibits a property: the issuing authority retains the ability to identify a holder under lawful process. zkqes surfaces this property on-chain — every-day pseudonymity for the holder, recoverable accountability for the state, the same trust structure as the qualified electronic signature itself.',
               )}
             </p>
             <p className="text-sm">

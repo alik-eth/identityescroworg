@@ -1,7 +1,7 @@
 /**
  * CAdES-BES detached parser for `binding.qkb.json.p7s`.
  *
- * Strict by design — anything unexpected raises QkbError('cades.parse').
+ * Strict by design — anything unexpected raises ZkqesError('cades.parse').
  * Hard requirements (orchestration §4.3 / §2.0 / spec §4.3):
  *   - ContentInfo.contentType == id-signedData (1.2.840.113549.1.7.2).
  *   - eContent absent (detached signature).
@@ -33,7 +33,7 @@ import {
   SignerInfo,
   id_ContentType_SignedData,
 } from 'pkijs';
-import { QkbError } from '../errors/index.js';
+import { ZkqesError } from '../errors/index.js';
 
 const OID_MESSAGE_DIGEST = '1.2.840.113549.1.9.4';
 const OID_SHA256 = '2.16.840.1.101.3.4.2.1';
@@ -83,11 +83,11 @@ export function parseCades(p7s: Uint8Array): ParsedCades {
     }
     contentInfo = new ContentInfo({ schema: asn.result });
   } catch (cause) {
-    throw new QkbError('cades.parse', { reason: 'asn1', cause: String(cause) });
+    throw new ZkqesError('cades.parse', { reason: 'asn1', cause: String(cause) });
   }
 
   if (contentInfo.contentType !== id_ContentType_SignedData) {
-    throw new QkbError('cades.parse', {
+    throw new ZkqesError('cades.parse', {
       reason: 'not-signed-data',
       contentType: contentInfo.contentType,
     });
@@ -97,7 +97,7 @@ export function parseCades(p7s: Uint8Array): ParsedCades {
   try {
     signed = new SignedData({ schema: contentInfo.content });
   } catch (cause) {
-    throw new QkbError('cades.parse', { reason: 'signed-data-schema', cause: String(cause) });
+    throw new ZkqesError('cades.parse', { reason: 'signed-data-schema', cause: String(cause) });
   }
 
   // CAdES-BES supports both *detached* (eContent omitted) and *attached*
@@ -113,7 +113,7 @@ export function parseCades(p7s: Uint8Array): ParsedCades {
   }
 
   if (signed.signerInfos.length !== 1) {
-    throw new QkbError('cades.parse', {
+    throw new ZkqesError('cades.parse', {
       reason: 'signer-count',
       got: signed.signerInfos.length,
     });
@@ -121,12 +121,12 @@ export function parseCades(p7s: Uint8Array): ParsedCades {
   const signer = signed.signerInfos[0] as SignerInfo;
 
   if (!signer.signedAttrs) {
-    throw new QkbError('cades.parse', { reason: 'missing-signed-attrs' });
+    throw new ZkqesError('cades.parse', { reason: 'missing-signed-attrs' });
   }
 
   const digestAlgorithmOid = signer.digestAlgorithm.algorithmId;
   if (digestAlgorithmOid !== OID_SHA256) {
-    throw new QkbError('cades.parse', {
+    throw new ZkqesError('cades.parse', {
       reason: 'digest-alg',
       oid: digestAlgorithmOid,
     });
@@ -138,7 +138,7 @@ export function parseCades(p7s: Uint8Array): ParsedCades {
     signatureAlgorithmOid !== OID_RSA_SHA256 &&
     signatureAlgorithmOid !== OID_ECDSA_SHA256
   ) {
-    throw new QkbError('cades.parse', {
+    throw new ZkqesError('cades.parse', {
       reason: 'signature-alg',
       oid: signatureAlgorithmOid,
     });
@@ -146,16 +146,16 @@ export function parseCades(p7s: Uint8Array): ParsedCades {
 
   const mdAttr = signer.signedAttrs.attributes.find((a) => a.type === OID_MESSAGE_DIGEST);
   if (!mdAttr) {
-    throw new QkbError('cades.parse', { reason: 'missing-message-digest' });
+    throw new ZkqesError('cades.parse', { reason: 'missing-message-digest' });
   }
   const mdValues = mdAttr.values;
   if (mdValues.length !== 1) {
-    throw new QkbError('cades.parse', { reason: 'message-digest-multi' });
+    throw new ZkqesError('cades.parse', { reason: 'message-digest-multi' });
   }
   const mdAsn = mdValues[0] as asn1js.OctetString;
   const messageDigest = new Uint8Array(mdAsn.valueBlock.valueHexView);
   if (messageDigest.length !== 32) {
-    throw new QkbError('cades.parse', {
+    throw new ZkqesError('cades.parse', {
       reason: 'message-digest-length',
       got: messageDigest.length,
     });
@@ -168,13 +168,13 @@ export function parseCades(p7s: Uint8Array): ParsedCades {
     (c): c is Certificate => c instanceof Certificate,
   );
   if (certs.length < 1) {
-    throw new QkbError('cades.parse', { reason: 'cert-count', got: certs.length });
+    throw new ZkqesError('cades.parse', { reason: 'cert-count', got: certs.length });
   }
 
   const sid = signer.sid;
   const leaf = findLeafBySid(certs, sid);
   if (!leaf) {
-    throw new QkbError('cades.parse', { reason: 'leaf-not-found' });
+    throw new ZkqesError('cades.parse', { reason: 'leaf-not-found' });
   }
   // Intermediate is OPTIONAL at parse time. Many real-world QES profiles
   // (Diia among them) ship a leaf-only CMS and expect the relying party to
@@ -210,7 +210,7 @@ function classifyLeaf(
   const spkiAlg = leaf.subjectPublicKeyInfo.algorithm.algorithmId;
   if (spkiAlg === OID_RSA) {
     if (sigAlgOid !== OID_RSA && sigAlgOid !== OID_RSA_SHA256) {
-      throw new QkbError('cades.parse', {
+      throw new ZkqesError('cades.parse', {
         reason: 'leaf-alg-mismatch',
         spki: spkiAlg,
         sig: sigAlgOid,
@@ -220,7 +220,7 @@ function classifyLeaf(
   }
   if (spkiAlg === OID_EC_PUBLIC_KEY) {
     if (sigAlgOid !== OID_ECDSA_SHA256) {
-      throw new QkbError('cades.parse', {
+      throw new ZkqesError('cades.parse', {
         reason: 'leaf-alg-mismatch',
         spki: spkiAlg,
         sig: sigAlgOid,
@@ -232,11 +232,11 @@ function classifyLeaf(
         ? curveParam.valueBlock.toString()
         : undefined;
     if (curveOid !== OID_P256) {
-      throw new QkbError('cades.parse', { reason: 'ecdsa-curve', curve: curveOid });
+      throw new ZkqesError('cades.parse', { reason: 'ecdsa-curve', curve: curveOid });
     }
     return { leafAlg: 'ecdsa-with-SHA256', algorithmTag: ALGORITHM_TAG_ECDSA };
   }
-  throw new QkbError('cades.parse', { reason: 'leaf-spki-alg', oid: spkiAlg });
+  throw new ZkqesError('cades.parse', { reason: 'leaf-spki-alg', oid: spkiAlg });
 }
 
 /**
@@ -245,7 +245,7 @@ function classifyLeaf(
  * not a full CMS — e.g., the QIE recovery path that reconstructs a
  * binding from `R` and needs to route to the right prover variant.
  *
- * Throws QkbError('cades.parse') with a typed reason when the SPKI
+ * Throws ZkqesError('cades.parse') with a typed reason when the SPKI
  * algorithm is neither rsaEncryption nor an EC key on P-256.
  */
 export function detectAlgorithmTag(leafCertDer: Uint8Array): AlgorithmTag {
@@ -255,7 +255,7 @@ export function detectAlgorithmTag(leafCertDer: Uint8Array): AlgorithmTag {
     if (asn.offset === -1) throw new Error('asn1');
     cert = new Certificate({ schema: asn.result });
   } catch (cause) {
-    throw new QkbError('cades.parse', { reason: 'cert-asn1', cause: String(cause) });
+    throw new ZkqesError('cades.parse', { reason: 'cert-asn1', cause: String(cause) });
   }
   const spkiAlg = cert.subjectPublicKeyInfo.algorithm.algorithmId;
   if (spkiAlg === OID_RSA) return ALGORITHM_TAG_RSA;
@@ -266,16 +266,16 @@ export function detectAlgorithmTag(leafCertDer: Uint8Array): AlgorithmTag {
         ? curveParam.valueBlock.toString()
         : undefined;
     if (curveOid !== OID_P256) {
-      throw new QkbError('cades.parse', { reason: 'ecdsa-curve', curve: curveOid });
+      throw new ZkqesError('cades.parse', { reason: 'ecdsa-curve', curve: curveOid });
     }
     return ALGORITHM_TAG_ECDSA;
   }
-  throw new QkbError('cades.parse', { reason: 'leaf-spki-alg', oid: spkiAlg });
+  throw new ZkqesError('cades.parse', { reason: 'leaf-spki-alg', oid: spkiAlg });
 }
 
 function encodeSignedAttrsForSignature(signer: SignerInfo): Uint8Array {
   if (!signer.signedAttrs) {
-    throw new QkbError('cades.parse', { reason: 'missing-signed-attrs' });
+    throw new ZkqesError('cades.parse', { reason: 'missing-signed-attrs' });
   }
   const set = new asn1js.Set({
     value: signer.signedAttrs.attributes.map((a) => a.toSchema()),

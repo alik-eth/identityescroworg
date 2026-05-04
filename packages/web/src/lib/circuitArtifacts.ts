@@ -1,4 +1,4 @@
-// Thin re-export façade over @qkb/sdk's artifacts module.
+// Thin re-export façade over @zkqes/sdk's artifacts module.
 export {
   loadArtifacts,
   pickVariantUrls,
@@ -11,7 +11,7 @@ export {
   type LoadOptions,
   type LoadedArtifacts,
   type UrlsJson,
-} from '@qkb/sdk';
+} from '@zkqes/sdk';
 
 // ===========================================================================
 // V5 prover artifacts (single-proof architecture).
@@ -37,7 +37,7 @@ export interface V5ProverArtifacts {
   readonly zkeyUrl: string;
   readonly wasmSha256: string;
   readonly zkeySha256: string;
-  readonly schemaVersion: 'qkb/2.0';
+  readonly schemaVersion: 'zkqes/2.0';
   readonly expectedConstraintCount: number;
   readonly expectedZkeyBytes: number;
 }
@@ -54,7 +54,7 @@ export const V5_PROVER_ARTIFACTS: V5ProverArtifacts = {
   zkeyUrl: '__V5_PROVER_ZKEY_URL__',
   wasmSha256: '__V5_PROVER_WASM_SHA256__',
   zkeySha256: '__V5_PROVER_ZKEY_SHA256__',
-  schemaVersion: 'qkb/2.0',
+  schemaVersion: 'zkqes/2.0',
   expectedConstraintCount: 3_000_000,  // ±20% per V5 spec envelope
   expectedZkeyBytes: 1_500_000_000,    // ~1.5GB target post-ceremony
 };

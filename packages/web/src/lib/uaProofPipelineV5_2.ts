@@ -17,7 +17,7 @@
  *   - `publicSignalsV5_2FromArray` validates the 22-signal shape and
  *     returns a typed `PublicSignalsV5_2`.
  *   - `RegisterArgsV5_2` swaps in the new sig tuple; the calling
- *     component encodes via `qkbRegistryV5_2Abi` directly.
+ *     component encodes via `zkqesRegistryV5_2Abi` directly.
  *
  * walletSecret derivation (HKDF for EOA, Argon2id for SCW) is UNCHANGED
  * across V5.1 → V5.2 — the rotation auth stays Poseidon₂(walletSecret,
@@ -46,8 +46,8 @@ import {
   bytes32ToHex,
   CliProveError,
   type WitnessV5_2,
-} from '@qkb/sdk';
-import { SnarkjsWorkerProver } from '@qkb/sdk/prover/snarkjsWorker';
+} from '@zkqes/sdk';
+import { SnarkjsWorkerProver } from '@zkqes/sdk/prover/snarkjsWorker';
 import { V5_PROVER_ARTIFACTS } from './circuitArtifacts';
 import { runCliFirstProver } from './cliFallbackProver';
 
@@ -323,7 +323,7 @@ async function runRealPath(
 async function runBrowserProver(
   witness: WitnessV5_2,
   tick: (stage: V5_2PipelineStage, pct: number, message?: string) => void,
-): Promise<{ proofRaw: import('@qkb/sdk').Groth16Proof; publicSignalsRaw: string[] }> {
+): Promise<{ proofRaw: import('@zkqes/sdk').Groth16Proof; publicSignalsRaw: string[] }> {
   tick('prove', 50, 'running snarkjs Groth16 prover');
   const artifacts: CircuitArtifactUrls = {
     wasmUrl: V5_PROVER_ARTIFACTS.wasmUrl,

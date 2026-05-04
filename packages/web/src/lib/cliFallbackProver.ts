@@ -23,7 +23,7 @@ import {
   proveViaCli,
   type Groth16Proof,
   type WitnessV5_2,
-} from '@qkb/sdk';
+} from '@zkqes/sdk';
 
 export interface RunProverOptions {
   /** Caller-side gate: try CLI first when true; skip CLI when false. */

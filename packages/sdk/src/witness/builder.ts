@@ -2,7 +2,7 @@
  * Phase-2 split-proof witness builder. Produces the ({leaf, chain, shared})
  * tuple consumed by the Groth16 leaf + chain circuits — this is the universal
  * "parse a CAdES + binding into circuit-ready form" pipeline. The V4 layer
- * (`buildPhase2WitnessV4Draft` in @qkb/sdk/witness) takes the output here as
+ * (`buildPhase2WitnessV4Draft` in @zkqes/sdk/witness) takes the output here as
  * a base witness and projects it into the QKB/2.0 16-signal layout.
  *
  * Lifted verbatim from packages/web/src/lib/witness.ts (V1/V3 split-proof
@@ -14,7 +14,7 @@ import { buildPoseidon } from 'circomlibjs';
 import { Certificate } from 'pkijs';
 import type { Binding } from '../binding/v1.js';
 import type { AlgorithmTag, ParsedCades } from '../cert/cades.js';
-import { QkbError } from '../errors/index.js';
+import { ZkqesError } from '../errors/index.js';
 import {
   ALGORITHM_TAG_ECDSA_STR,
   ALGORITHM_TAG_RSA_STR,
@@ -84,13 +84,13 @@ export async function computeNullifier(
   ctxHash: bigint,
 ): Promise<bigint> {
   if (subjectSerialLimbs.length !== 4) {
-    throw new QkbError('witness.fieldTooLong', {
+    throw new ZkqesError('witness.fieldTooLong', {
       reason: 'subject-serial-limbs',
       got: subjectSerialLimbs.length,
     });
   }
   if (subjectSerialLen < 1n || subjectSerialLen > 32n) {
-    throw new QkbError('witness.fieldTooLong', {
+    throw new ZkqesError('witness.fieldTooLong', {
       reason: 'subject-serial-length',
       got: Number(subjectSerialLen),
     });
@@ -220,13 +220,13 @@ async function buildSharedInputs(input: BuildWitnessInput): Promise<SharedDeriva
   const { parsed, binding, bindingBytes } = input;
 
   if (bindingBytes.length > MAX_BCANON) {
-    throw new QkbError('witness.fieldTooLong', { field: 'Bcanon', got: bindingBytes.length, max: MAX_BCANON });
+    throw new ZkqesError('witness.fieldTooLong', { field: 'Bcanon', got: bindingBytes.length, max: MAX_BCANON });
   }
   if (parsed.signedAttrsDer.length > MAX_SA) {
-    throw new QkbError('witness.fieldTooLong', { field: 'signedAttrs', got: parsed.signedAttrsDer.length, max: MAX_SA });
+    throw new ZkqesError('witness.fieldTooLong', { field: 'signedAttrs', got: parsed.signedAttrsDer.length, max: MAX_SA });
   }
   if (parsed.leafCertDer.length > MAX_CERT) {
-    throw new QkbError('witness.fieldTooLong', { field: 'leafDER', got: parsed.leafCertDer.length, max: MAX_CERT });
+    throw new ZkqesError('witness.fieldTooLong', { field: 'leafDER', got: parsed.leafCertDer.length, max: MAX_CERT });
   }
 
   // Binding field offsets (JCS-canonical, keys alphabetical).
@@ -243,7 +243,7 @@ async function buildSharedInputs(input: BuildWitnessInput): Promise<SharedDeriva
   while (ctxEnd < bindingBytes.length && bindingBytes[ctxEnd] !== 0x22) ctxEnd++;
   const ctxHexLen = ctxEnd - ctxStart;
   if (ctxHexLen !== 0) {
-    throw new QkbError('witness.fieldTooLong', {
+    throw new ZkqesError('witness.fieldTooLong', {
       field: 'ctx',
       reason: 'non-empty-ctx-unsupported-phase2-mvp',
       got: ctxHexLen,
@@ -253,7 +253,7 @@ async function buildSharedInputs(input: BuildWitnessInput): Promise<SharedDeriva
 
   const pkHex = binding.pk.startsWith('0x') ? binding.pk.slice(2) : binding.pk;
   if (pkHex.length !== 130 || !pkHex.toLowerCase().startsWith('04')) {
-    throw new QkbError('witness.fieldTooLong', {
+    throw new ZkqesError('witness.fieldTooLong', {
       field: 'pk',
       reason: 'expected-uncompressed',
       got: pkHex.length,
@@ -279,7 +279,7 @@ async function buildSharedInputs(input: BuildWitnessInput): Promise<SharedDeriva
   }
   const tsDigitCount = tsEnd - tsStart;
   if (tsDigitCount === 0) {
-    throw new QkbError('witness.offsetNotFound', { field: 'timestamp', reason: 'no-digits' });
+    throw new ZkqesError('witness.offsetNotFound', { field: 'timestamp', reason: 'no-digits' });
   }
   const timestamp = BigInt(
     new TextDecoder().decode(bindingBytes.subarray(tsStart, tsEnd)),
@@ -407,10 +407,10 @@ async function buildChainFromShared(
 
   const intDer = input.intermediateCertDer ?? parsed.intermediateCertDer;
   if (!intDer) {
-    throw new QkbError('witness.offsetNotFound', { field: 'intDER', reason: 'no-intermediate' });
+    throw new ZkqesError('witness.offsetNotFound', { field: 'intDER', reason: 'no-intermediate' });
   }
   if (intDer.length > MAX_CERT) {
-    throw new QkbError('witness.fieldTooLong', { field: 'intDER', got: intDer.length, max: MAX_CERT });
+    throw new ZkqesError('witness.fieldTooLong', { field: 'intDER', got: intDer.length, max: MAX_CERT });
   }
 
   const { spkiXOffset: intSpkiXOffset, spkiYOffset: intSpkiYOffset } = findSpkiXYOffsets(intDer);
@@ -454,7 +454,7 @@ function parseFieldString(v: string | bigint): bigint {
   const s = v.trim();
   if (s.startsWith('0x') || s.startsWith('0X')) return BigInt(s);
   if (!/^\d+$/.test(s)) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'bad-field-string', got: s });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'bad-field-string', got: s });
   }
   return BigInt(s);
 }
@@ -491,7 +491,7 @@ function sliceJsonString(bytes: Uint8Array, start: number): Uint8Array {
       out.push(b);
       const next = bytes[i + 1];
       if (next === undefined) {
-        throw new QkbError('witness.offsetNotFound', { field: 'declaration', reason: 'trailing-backslash' });
+        throw new ZkqesError('witness.offsetNotFound', { field: 'declaration', reason: 'trailing-backslash' });
       }
       out.push(next);
       i += 2;
@@ -503,12 +503,12 @@ function sliceJsonString(bytes: Uint8Array, start: number): Uint8Array {
     out.push(b);
     i++;
   }
-  throw new QkbError('witness.offsetNotFound', { field: 'declaration', reason: 'unterminated' });
+  throw new ZkqesError('witness.offsetNotFound', { field: 'declaration', reason: 'unterminated' });
 }
 
 function hexToBytes(h: string): Uint8Array {
   if (h.length % 2 !== 0) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'odd-hex', len: h.length });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'odd-hex', len: h.length });
   }
   const out = new Uint8Array(h.length / 2);
   for (let i = 0; i < out.length; i++) {
@@ -521,18 +521,18 @@ function findTbs(der: Uint8Array): { tbsOffset: number; tbsLen: number } {
   const buf = toAB(der);
   const asn = asn1js.fromBER(buf);
   if (asn.offset === -1) {
-    throw new QkbError('witness.offsetNotFound', { field: 'leafTbs', reason: 'cert-asn1' });
+    throw new ZkqesError('witness.offsetNotFound', { field: 'leafTbs', reason: 'cert-asn1' });
   }
   let cert: Certificate;
   try {
     cert = new Certificate({ schema: asn.result });
   } catch (cause) {
-    throw new QkbError('witness.offsetNotFound', { field: 'leafTbs', reason: 'cert-schema', cause: String(cause) });
+    throw new ZkqesError('witness.offsetNotFound', { field: 'leafTbs', reason: 'cert-schema', cause: String(cause) });
   }
   const tbs = new Uint8Array(cert.encodeTBS().toBER(false));
   const off = indexOfSubarray(der, tbs);
   if (off === -1) {
-    throw new QkbError('witness.offsetNotFound', { field: 'leafTbs', reason: 'not-found' });
+    throw new ZkqesError('witness.offsetNotFound', { field: 'leafTbs', reason: 'not-found' });
   }
   return { tbsOffset: off, tbsLen: tbs.length };
 }
@@ -541,14 +541,14 @@ function findSpkiXYOffsets(der: Uint8Array): { spkiXOffset: number; spkiYOffset:
   const buf = toAB(der);
   const asn = asn1js.fromBER(buf);
   if (asn.offset === -1) {
-    throw new QkbError('witness.offsetNotFound', { field: 'spki', reason: 'asn1' });
+    throw new ZkqesError('witness.offsetNotFound', { field: 'spki', reason: 'asn1' });
   }
   const cert = new Certificate({ schema: asn.result });
   const pubKey = new Uint8Array(
     cert.subjectPublicKeyInfo.subjectPublicKey.valueBlock.valueHexView,
   );
   if (pubKey.length !== 65 || pubKey[0] !== 0x04) {
-    throw new QkbError('witness.offsetNotFound', {
+    throw new ZkqesError('witness.offsetNotFound', {
       field: 'spki',
       reason: 'not-uncompressed-p256',
       len: pubKey.length,
@@ -556,7 +556,7 @@ function findSpkiXYOffsets(der: Uint8Array): { spkiXOffset: number; spkiYOffset:
   }
   const off = indexOfSubarray(der, pubKey);
   if (off === -1) {
-    throw new QkbError('witness.offsetNotFound', { field: 'spki', reason: 'not-in-der' });
+    throw new ZkqesError('witness.offsetNotFound', { field: 'spki', reason: 'not-in-der' });
   }
   return { spkiXOffset: off + 1, spkiYOffset: off + 33 };
 }
@@ -564,7 +564,7 @@ function findSpkiXYOffsets(der: Uint8Array): { spkiXOffset: number; spkiYOffset:
 function ecdsaSigDerToRS32(der: Uint8Array): { r: Uint8Array; s: Uint8Array } {
   const asn = asn1js.fromBER(toAB(der));
   if (asn.offset === -1) {
-    throw new QkbError('witness.offsetNotFound', { field: 'sig', reason: 'asn1' });
+    throw new ZkqesError('witness.offsetNotFound', { field: 'sig', reason: 'asn1' });
   }
   const seq = asn.result as asn1js.Sequence;
   const [rNode, sNode] = seq.valueBlock.value as [asn1js.Integer, asn1js.Integer];
@@ -579,7 +579,7 @@ function normalizeInt32(b: Uint8Array): Uint8Array {
   while (i < b.length - 1 && b[i] === 0) i++;
   const trimmed = b.subarray(i);
   if (trimmed.length > 32) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'ecdsa-r-or-s', got: trimmed.length });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'ecdsa-r-or-s', got: trimmed.length });
   }
   const out = new Uint8Array(32);
   out.set(trimmed, 32 - trimmed.length);
@@ -588,7 +588,7 @@ function normalizeInt32(b: Uint8Array): Uint8Array {
 
 function findMessageDigestOffsetInSA(saDer: Uint8Array, mdBytes: Uint8Array): number {
   if (mdBytes.length !== 32) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'md-length', got: mdBytes.length });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'md-length', got: mdBytes.length });
   }
   const marker = new Uint8Array(2 + 32);
   marker[0] = 0x04;
@@ -596,7 +596,7 @@ function findMessageDigestOffsetInSA(saDer: Uint8Array, mdBytes: Uint8Array): nu
   marker.set(mdBytes, 2);
   const off = indexOfSubarray(saDer, marker);
   if (off === -1) {
-    throw new QkbError('witness.offsetNotFound', { field: 'messageDigest', reason: 'not-in-sa' });
+    throw new ZkqesError('witness.offsetNotFound', { field: 'messageDigest', reason: 'not-in-sa' });
   }
   return off + 2;
 }
@@ -604,17 +604,17 @@ function findMessageDigestOffsetInSA(saDer: Uint8Array, mdBytes: Uint8Array): nu
 function extractCertSignatureDer(leafDer: Uint8Array): Uint8Array {
   const asn = asn1js.fromBER(toAB(leafDer));
   if (asn.offset === -1) {
-    throw new QkbError('witness.offsetNotFound', { field: 'leafCertSig', reason: 'asn1' });
+    throw new ZkqesError('witness.offsetNotFound', { field: 'leafCertSig', reason: 'asn1' });
   }
   let cert: Certificate;
   try {
     cert = new Certificate({ schema: asn.result });
   } catch (cause) {
-    throw new QkbError('witness.offsetNotFound', { field: 'leafCertSig', reason: 'schema', cause: String(cause) });
+    throw new ZkqesError('witness.offsetNotFound', { field: 'leafCertSig', reason: 'schema', cause: String(cause) });
   }
   const raw = new Uint8Array(cert.signatureValue.valueBlock.valueHexView);
   if (raw.length < 8 || raw[0] !== 0x30) {
-    throw new QkbError('witness.offsetNotFound', {
+    throw new ZkqesError('witness.offsetNotFound', {
       field: 'leafCertSig',
       reason: 'not-ecdsa-seq',
       len: raw.length,

@@ -100,7 +100,7 @@ describe('proveViaCli — error envelope (orchestration §1.6 fallback disciplin
       new Response(
         JSON.stringify({
           error: 'origin not allowed',
-          allowed: 'https://identityescrow.org',
+          allowed: 'https://app.zkqes.org',
           got: 'https://evil.example',
         }),
         { status: 403 },

@@ -1,6 +1,6 @@
 /**
  * V5.1 proof pipeline — orchestrates the in-browser Diia QES → witness →
- * Groth16 proof → register() flow on top of the @qkb/sdk primitives.
+ * Groth16 proof → register() flow on top of the @zkqes/sdk primitives.
  *
  * The flow has four deliberately separable stages so the Step 4
  * component can render granular progress and so the Playwright e2e
@@ -38,8 +38,8 @@ import {
   type CmsExtraction,
   decodeEcdsaSigSequence,
   bytes32ToHex,
-} from '@qkb/sdk';
-import { SnarkjsWorkerProver } from '@qkb/sdk/prover/snarkjsWorker';
+} from '@zkqes/sdk';
+import { SnarkjsWorkerProver } from '@zkqes/sdk/prover/snarkjsWorker';
 import { V5_PROVER_ARTIFACTS } from './circuitArtifacts';
 
 export type V5PipelineStage =
@@ -309,7 +309,7 @@ function extractCertSignatureSeq(certDer: Buffer): Buffer {
 /**
  * Extract the 91-byte canonical P-256 SubjectPublicKeyInfo bytes from a
  * cert DER. The witness builder rejects anything other than the exact
- * canonical 91-byte named-curve form (parseP256Spki at @qkb/sdk
+ * canonical 91-byte named-curve form (parseP256Spki at @zkqes/sdk
  * witness/v5/spki-commit-ref.ts) — non-conforming CAs would fail
  * `register()`'s SpkiCommit gate anyway.
  */

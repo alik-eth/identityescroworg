@@ -13,7 +13,7 @@ import { detectCli } from './detectCli.js';
 
 const VALID_STATUS = {
   ok: true,
-  version: 'qkb-cli@1.0.0',
+  version: 'zkqes-cli@1.0.0',
   circuit: 'v5.2',
   zkeyLoaded: true,
   busy: false,
@@ -74,7 +74,7 @@ describe('detectCli', () => {
       ok: true,
       circuit: 'v5.2',
       zkeyLoaded: true,
-      version: 'qkb-cli@1.0.0',
+      version: 'zkqes-cli@1.0.0',
     });
   });
 

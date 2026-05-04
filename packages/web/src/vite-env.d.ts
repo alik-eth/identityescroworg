@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-// Typed env vars consumed by `@qkb/web`. Vite injects these into
+// Typed env vars consumed by `@zkqes/web`. Vite injects these into
 // `import.meta.env` at build time; declaring the shape here gives
 // autocomplete + type-checking at every call site.
 //
@@ -10,7 +10,7 @@
 interface ImportMetaEnv {
   /** Production status feed URL for the ceremony page. Default: same-
    *  origin `/ceremony/status.json`. Set to an absolute URL (e.g.
-   *  `https://prove.identityescrow.org/ceremony/status.json` or, post-
+   *  `https://prove.zkqes.org/ceremony/status.json` or, post-
    *  DNS migration, `https://prove.zkqes.org/ceremony/status.json`)
    *  when the SPA is served from a different origin than the status
    *  feed. Consumed by `lib/ceremonyStatus.ts`. */
@@ -25,7 +25,7 @@ interface ImportMetaEnv {
   /** WalletConnect project id. Required for production builds with
    *  WalletConnect enabled; e2e uses a mock id. Consumed by `lib/wagmi.ts`. */
   readonly VITE_WALLETCONNECT_PROJECT_ID?: string;
-  /** GH Pages base path (e.g. `/identityescroworg/`). Read in
+  /** GH Pages base path (e.g. `/`). Read in
    *  `vite.config.ts`; not consumed at runtime. */
   readonly VITE_BASE?: string;
   /** SPA build target — 'landing' for zkqes.org root (hero + ceremony

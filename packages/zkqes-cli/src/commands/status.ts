@@ -1,12 +1,12 @@
-// `qkb status` — checks whether a `qkb serve` instance is running on
+// `zkqes status` — checks whether a `zkqes serve` instance is running on
 // localhost:9080 and prints a single-line summary.
 //
 // UX shape:
-//   $ qkb status
-//   no qkb serve running on http://127.0.0.1:9080
-//   $ qkb serve --... &
-//   $ qkb status
-//   running: qkb-cli@0.5.2-pre  circuit=v5.2  zkey=ready  busy=false  proves=0  uptime=12s
+//   $ zkqes status
+//   no zkqes serve running on http://127.0.0.1:9080
+//   $ zkqes serve --... &
+//   $ zkqes status
+//   running: zkqes-cli@0.5.2-pre  circuit=v5.2  zkey=ready  busy=false  proves=0  uptime=12s
 //
 // Used by web-eng's browser-side detection probe in the future, but
 // here it's just for operator-side smoke testing.  Returns exit code
@@ -32,14 +32,14 @@ interface ServerStatus {
 export function statusCommand(program: Command): void {
   program
     .command('status')
-    .description('Check whether a qkb serve instance is running.')
+    .description('Check whether a zkqes serve instance is running.')
     .option('--host <addr>', 'host to probe', '127.0.0.1')
     .option('--port <n>', 'port to probe', '9080')
     .action(async (rawOpts: StatusOptions) => {
       const url = `http://${rawOpts.host}:${rawOpts.port}/status`;
       const res = await fetchStatus(url);
       if (res.kind === 'unreachable') {
-        process.stdout.write(`no qkb serve running on http://${rawOpts.host}:${rawOpts.port}\n`);
+        process.stdout.write(`no zkqes serve running on http://${rawOpts.host}:${rawOpts.port}\n`);
         process.exit(1);
       }
       if (res.kind === 'malformed') {

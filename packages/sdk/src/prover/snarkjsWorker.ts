@@ -24,7 +24,7 @@
  * The actual streaming-load knob is exercised by snarkjs internally via
  * URL inputs; we just avoid materializing zkey/wasm into bytes here.
  */
-import { QkbError } from '../errors/index.js';
+import { ZkqesError } from '../errors/index.js';
 import type {
   IProver,
   ProofProgress,
@@ -93,7 +93,7 @@ export class SnarkjsWorkerProver implements IProver {
           resolve({ proof: msg.proof, publicSignals: msg.publicSignals });
         } else if (msg.kind === 'error') {
           cleanup();
-          reject(new QkbError('prover.wasmOOM', { message: msg.message }));
+          reject(new ZkqesError('prover.wasmOOM', { message: msg.message }));
         }
       };
 
@@ -101,7 +101,7 @@ export class SnarkjsWorkerProver implements IProver {
         if (settled) return;
         settled = true;
         cleanup();
-        reject(new QkbError('prover.wasmOOM', { message: e.message }));
+        reject(new ZkqesError('prover.wasmOOM', { message: e.message }));
       };
 
       const handleAbort = (): void => {
@@ -110,7 +110,7 @@ export class SnarkjsWorkerProver implements IProver {
         const cancelMsg: SnarkjsWorkerMessage = { kind: 'cancel', v: 1, id };
         worker.postMessage(cancelMsg);
         cleanup();
-        reject(new QkbError('prover.cancelled'));
+        reject(new ZkqesError('prover.cancelled'));
       };
 
       if (opts.signal?.aborted) {

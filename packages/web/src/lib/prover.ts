@@ -27,7 +27,7 @@
  * during the prove stage.
  */
 import type { AlgorithmTag } from './cades';
-import { QkbError } from './errors';
+import { ZkqesError } from './errors';
 import type { ChainWitnessInput, LeafWitnessInput, Phase2Witness } from './witness';
 import type { AlgorithmArtifactUrls, CircuitArtifactUrls } from './prover.config';
 
@@ -179,11 +179,11 @@ export class SnarkjsProver implements IProver {
       };
       const onAbort = () => {
         cleanup();
-        reject(new QkbError('prover.cancelled'));
+        reject(new ZkqesError('prover.cancelled'));
       };
       const onError = (ev: ErrorEvent) => {
         cleanup();
-        reject(new QkbError('prover.wasmOOM', { message: ev.message }));
+        reject(new ZkqesError('prover.wasmOOM', { message: ev.message }));
       };
       const onMessage = (ev: MessageEvent<ProverWorkerMessage>) => {
         const msg = ev.data;
@@ -204,7 +204,7 @@ export class SnarkjsProver implements IProver {
         if (msg.type === 'error') {
           cleanup();
           const code = msg.code === 'prover.cancelled' ? 'prover.cancelled' : 'prover.wasmOOM';
-          reject(new QkbError(code, { message: msg.message }));
+          reject(new ZkqesError(code, { message: msg.message }));
         }
       };
       worker.addEventListener('message', onMessage);
@@ -212,7 +212,7 @@ export class SnarkjsProver implements IProver {
       if (opts.signal) {
         if (opts.signal.aborted) {
           cleanup();
-          reject(new QkbError('prover.cancelled'));
+          reject(new ZkqesError('prover.cancelled'));
           return;
         }
         opts.signal.addEventListener('abort', onAbort, { once: true });
@@ -242,7 +242,7 @@ function defaultWorkerFactory(): Worker {
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     if (signal?.aborted) {
-      reject(new QkbError('prover.cancelled'));
+      reject(new ZkqesError('prover.cancelled'));
       return;
     }
     const timer = setTimeout(() => {
@@ -251,14 +251,14 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     }, ms);
     const onAbort = () => {
       clearTimeout(timer);
-      reject(new QkbError('prover.cancelled'));
+      reject(new ZkqesError('prover.cancelled'));
     };
     signal?.addEventListener('abort', onAbort, { once: true });
   });
 }
 
 function checkAborted(signal?: AbortSignal): void {
-  if (signal?.aborted) throw new QkbError('prover.cancelled');
+  if (signal?.aborted) throw new ZkqesError('prover.cancelled');
 }
 
 // ---------------------------------------------------------------------------

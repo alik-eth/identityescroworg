@@ -1,8 +1,8 @@
 // V5.4 T8 — Playwright fallback-discipline E2E against the pumped
-// @qkb/cli tarball. Complements T7 (cli-flow.spec.ts) by exercising
+// @zkqes/cli tarball. Complements T7 (cli-flow.spec.ts) by exercising
 // the wire-level behaviour the dispatcher would dispatch on.
 //
-// Plan ref: docs/superpowers/plans/2026-05-03-qkb-cli-server-web-eng.md T8.
+// Plan ref: docs/superpowers/plans/2026-05-03-zkqes-cli-server-web-eng.md T8.
 // Same opt-in env-var pattern as T7: gates on `T7_DEV_MANIFEST` (the
 // manifest is required to spawn the CLI). Skips when unset.
 //
@@ -38,7 +38,7 @@ test.skip(
   !MANIFEST_PATH,
   'T8 requires T7_DEV_MANIFEST pointing at a signed dev manifest. ' +
     'Local: export T7_DEV_MANIFEST=/tmp/dev-manifest.json. ' +
-    'See docs/superpowers/plans/2026-05-03-qkb-cli-server-web-eng.md T8.',
+    'See docs/superpowers/plans/2026-05-03-zkqes-cli-server-web-eng.md T8.',
 );
 
 interface CliManifest {
@@ -78,7 +78,7 @@ function spawnCli(manifestPath: string): ChildProcess {
   return spawn(
     'node',
     [
-      'node_modules/@qkb/cli/dist/src/index.js',
+      'node_modules/@zkqes/cli/dist/src/index.js',
       'serve',
       '--zkey', fileUrlToPath(manifest.circuits['v5.2'].zkeyUrl),
       '--wasm', fileUrlToPath(manifest.circuits['v5.2'].wasmUrl),
@@ -123,7 +123,7 @@ test.describe('V5.4 T8 — CLI fallback discipline', () => {
     // return 4xx so the dispatcher's no-fallback path fires (a
     // browser prove would fail too — falling back wastes ~90 s).
     //
-    // The current CLI (`@qkb/cli` 0.5.2-pre) instead returns 500 with
+    // The current CLI (`@zkqes/cli` 0.5.2-pre) instead returns 500 with
     // a message like "Too many values for input signal X" — snarkjs's
     // witness-shape error gets caught at the catch-all 5xx layer
     // rather than triaged as 4xx pre-prove.
@@ -144,7 +144,7 @@ test.describe('V5.4 T8 — CLI fallback discipline', () => {
     if (!MANIFEST_PATH) return;
     const cli = spawnCli(MANIFEST_PATH);
     cli.stderr?.on('data', (chunk: Buffer) => {
-      process.stderr.write(`[qkb-cli] ${chunk.toString()}`);
+      process.stderr.write(`[zkqes-cli] ${chunk.toString()}`);
     });
     try {
       await waitForStatus('http://127.0.0.1:9080/status', 30_000);
@@ -177,7 +177,7 @@ test.describe('V5.4 T8 — CLI fallback discipline', () => {
     if (!MANIFEST_PATH) return;
     const cli = spawnCli(MANIFEST_PATH);
     cli.stderr?.on('data', (chunk: Buffer) => {
-      process.stderr.write(`[qkb-cli] ${chunk.toString()}`);
+      process.stderr.write(`[zkqes-cli] ${chunk.toString()}`);
     });
     try {
       await waitForStatus('http://127.0.0.1:9080/status', 30_000);

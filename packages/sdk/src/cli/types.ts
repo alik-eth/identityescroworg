@@ -1,4 +1,4 @@
-// QKB CLI-server client types — shared by `detectCli` (GET /status) and
+// zkqes CLI-server client types — shared by `detectCli` (GET /status) and
 // `proveViaCli` (POST /prove). Mirror the V1 HTTP API contract frozen in
 // `docs/superpowers/plans/2026-05-03-qkb-cli-server-orchestration.md`
 // §1.1 (which inherits verbatim from the helper's helper-orchestration
@@ -20,7 +20,7 @@ import type { Groth16Proof } from '../core/index.js';
 export interface CliStatus {
   /** Always true on a healthy server; absent on networking failures. */
   readonly ok: boolean;
-  /** Server semver, e.g. `"qkb-cli@1.0.0"`. */
+  /** Server semver, e.g. `"zkqes-cli@1.0.0"`. */
   readonly version: string;
   /** Hard-coded `"v5.2"` in V1 — `detectCli` rejects anything else. */
   readonly circuit: string;

@@ -19,7 +19,7 @@
   },
   "cli": {
     "back": "back to home",
-    "title": "Install QKB CLI for native proof generation.",
+    "title": "Install zkqes CLI for native proof generation.",
     "lede": "Optional. The browser prover works as-is. Install the CLI to make proof generation about 7× faster and 10× lighter on memory.",
     "whyHeading": "Why install it",
     "whyFasterTitle": "~7× faster.",
@@ -27,28 +27,28 @@
     "whyLighterTitle": "~10× less memory.",
     "whyLighter": "≈3.7 GB peak native vs ≈38 GB in-browser. Phones / low-RAM laptops can finally generate proofs.",
     "whyOnlyOnInvokeTitle": "Runs only when invoked.",
-    "whyOnlyOnInvoke": "Not a daemon. You start it with `qkb serve`, leave it running while you generate proofs, then Ctrl+C when done.",
+    "whyOnlyOnInvoke": "Not a daemon. You start it with `zkqes serve`, leave it running while you generate proofs, then Ctrl+C when done.",
     "whyPrivateTitle": "Keys never leave your machine.",
-    "whyPrivate": "The CLI binds to localhost:9080. The browser fetches it via the same-origin pin (https://identityescrow.org); no other origin can talk to it.",
+    "whyPrivate": "The CLI binds to localhost:9080. The browser fetches it via the same-origin pin (https://app.zkqes.org); no other origin can talk to it.",
     "installHeading": "Install",
     "installLede": "V1 ships via npm. Requires Node 20 or newer; works on macOS, Linux, and Windows + WSL.",
     "installNpmNote": "Postinstall downloads the rapidsnark sidecar matching your OS + arch (~12 MB). The CLI itself is a ~32 KB tarball.",
     "windowsCalloutLabel": "Windows note",
-    "windowsCalloutBody": "rapidsnark has no Windows prebuilt in V1. Native Windows users must build rapidsnark themselves and pass `qkb serve --rapidsnark-bin C:\\\\path\\\\to\\\\rapidsnark.exe`. WSL users install rapidsnark inside the WSL distro normally — no extra flag needed.",
-    "deferredChannels": "Homebrew formula and a one-line curl installer (`brew install identityescrow/qkb/qkb` and `curl -fsSL https://identityescrow.org/install.sh | sh`) are coming in V1.1. For V1, npm is the supported channel.",
+    "windowsCalloutBody": "rapidsnark has no Windows prebuilt in V1. Native Windows users must build rapidsnark themselves and pass `zkqes serve --rapidsnark-bin C:\\\\path\\\\to\\\\rapidsnark.exe`. WSL users install rapidsnark inside the WSL distro normally — no extra flag needed.",
+    "deferredChannels": "Homebrew formula and a one-line curl installer (`brew install alik-eth/homebrew-zkqes/zkqes` and `curl -fsSL https://zkqes.org/install.sh | sh`) are coming in V1.1. For V1, npm is the supported channel.",
     "runHeading": "Run it",
-    "runBody": "Open a terminal and start the server. Leave it running while you generate proofs — it binds to localhost:9080 and accepts /prove POSTs from https://identityescrow.org only.",
+    "runBody": "Open a terminal and start the server. Leave it running while you generate proofs — it binds to localhost:9080 and accepts /prove POSTs from https://app.zkqes.org only.",
     "runStop": "Stop with Ctrl+C when finished. The server does not auto-start; nothing runs in the background.",
     "verifyHeading": "Verify it",
-    "verifyBody": "With qkb serve running, go back to the register flow. The \"Install qkb\" banner disappears when the browser detects the running server, and your prove step shows \"proved via: cli\" instead of \"browser\".",
+    "verifyBody": "With zkqes serve running, go back to the register flow. The \"Install zkqes\" banner disappears when the browser detects the running server, and your prove step shows \"proved via: cli\" instead of \"browser\".",
     "verifyCta": "Back to the register flow →",
     "troubleshootHeading": "Troubleshooting",
     "troublePortLabel": "Port 9080 already in use",
-    "troublePortBody": "Another process is bound to :9080. Either stop it (`lsof -i :9080`, then kill the PID) or pass `qkb serve --port <other>`. The browser only auto-detects :9080 in V1; alternate ports work but the banner won't auto-disappear.",
+    "troublePortBody": "Another process is bound to :9080. Either stop it (`lsof -i :9080`, then kill the PID) or pass `zkqes serve --port <other>`. The browser only auto-detects :9080 in V1; alternate ports work but the banner won't auto-disappear.",
     "troubleSidecarLabel": "rapidsnark sidecar missing",
-    "troubleSidecarBody": "If postinstall couldn't download the sidecar (offline machine, restricted CI, or native Windows where iden3 v0.0.8 ships no prebuilt), pass `qkb serve --rapidsnark-bin <path>` with a binary you built yourself. Run `qkb cache rebuild` while online to retry the postinstall download on platforms that have a prebuilt.",
+    "troubleSidecarBody": "If postinstall couldn't download the sidecar (offline machine, restricted CI, or native Windows where iden3 v0.0.8 ships no prebuilt), pass `zkqes serve --rapidsnark-bin <path>` with a binary you built yourself. Run `zkqes cache rebuild` while online to retry the postinstall download on platforms that have a prebuilt.",
     "troubleManifestLabel": "Manifest fetch fails",
-    "troubleManifestBody": "On first run the CLI fetches the V5.2 zkey manifest from identityescrow.org. If your network blocks it, pass `--manifest-url file:///path/to/local-manifest.json` with a vendored copy. The CLI verifies the manifest signature against the embedded public key in either case."
+    "troubleManifestBody": "On first run the CLI fetches the V5.2 zkey manifest from zkqes.org. If your network blocks it, pass `--manifest-url file:///path/to/local-manifest.json` with a vendored copy. The CLI verifies the manifest signature against the embedded public key in either case."
   },
   "submit": {
     "title": "Submit your proof",
@@ -68,9 +68,9 @@
     "share": "Share"
   },
   "cliBanner": {
-    "title": "Faster proofs with the QKB CLI",
-    "body": "Install qkb for native proof generation — about 7× faster (≈14 s vs ≈90 s) and 10× less memory (≈3.7 GB vs ≈38 GB) than the in-browser prover. Optional — the browser prover works as-is.",
-    "cta": "Install qkb →",
+    "title": "Faster proofs with the zkqes CLI",
+    "body": "Install zkqes for native proof generation — about 7× faster (≈14 s vs ≈90 s) and 10× less memory (≈3.7 GB vs ≈38 GB) than the in-browser prover. Optional — the browser prover works as-is.",
+    "cta": "Install zkqes →",
     "dismiss": "Dismiss"
   },
   "registerV5": {
@@ -154,7 +154,7 @@
       "title": "Connect your new wallet",
       "body": "The wallet you connect here will own the verified identity after rotation. It must be different from your current identity-bound wallet.",
       "warningTitle": "This change is irreversible",
-      "warningBody": "After rotation the old wallet can no longer prove ownership of this identity. The IdentityEscrowNFT, if any, must be transferred separately via standard ERC-721 before you rotate.",
+      "warningBody": "After rotation the old wallet can no longer prove ownership of this identity. The zkqes certificate NFT, if any, must be transferred separately via standard ERC-721 before you rotate.",
       "newWallet": "New wallet:",
       "noWallet": "No wallet connected. Please connect the wallet you want to rotate to.",
       "advance": "Continue and lock this as the new wallet"
@@ -306,8 +306,8 @@
       "published.pending": "Ceremony is not yet complete. The final zkey hash is published here once the last contributor uploads and the public-randomness beacon is mixed in.",
       "uploadHeading": "Hash your downloaded zkey",
       "fileAriaNeutral": "Upload your downloaded zkey",
-      "fileAriaStub": "Upload your downloaded qkb-v5_2-stub.zkey",
-      "fileAriaFinal": "Upload your downloaded qkb-v5_2-final.zkey",
+      "fileAriaStub": "Upload your downloaded zkqes-v5_2-stub.zkey",
+      "fileAriaFinal": "Upload your downloaded zkqes-v5_2-final.zkey",
       "progress": "Hashing",
       "matched": "Match. This file is the same prover key the verifier contract was deployed with.",
       "mismatch": "No match. Do not use this file. Re-download from the canonical source.",
@@ -318,7 +318,7 @@
     "eyebrow": "Trusted setup ceremony in progress",
     "headline": "zk-QES.",
     "lede": "A zero-knowledge protocol over qualified electronic signatures. Prove you hold a state-issued QES — without revealing it, the cert behind it, or the document it signed.",
-    "framing": "QKB — the V1 implementation — is in trusted-setup ceremony. The Groth16 prover keys are produced by a multi-contributor ceremony; so long as one contributor honestly destroys their entropy, every future proof is sound. We need contributors.",
+    "framing": "zkqes — the V1 implementation — is in trusted-setup ceremony. The Groth16 prover keys are produced by a multi-contributor ceremony; so long as one contributor honestly destroys their entropy, every future proof is sound. We need contributors.",
     "pathsHeading": "Three ways to contribute",
     "pathSnarkjs": {
       "label": "Local snarkjs",
@@ -336,8 +336,8 @@
       "cta": "Open the Fly launcher →"
     },
     "statusLink": "Live ceremony status — every contributor, every round →",
-    "umbrellaHeading": "About Identity Escrow",
-    "umbrellaBody": "Identity Escrow is the research line. Any state-issued credential exhibits a property: the issuing authority retains the ability to identify a holder under lawful process. QKB is the first protocol that surfaces this property on-chain — every-day pseudonymity for the holder, recoverable accountability for the state, the same trust structure as the qualified electronic signature itself.",
+    "umbrellaHeading": "About zkqes",
+    "umbrellaBody": "zkqes is a zero-knowledge protocol over qualified electronic signatures. Any state-issued credential exhibits a property: the issuing authority retains the ability to identify a holder under lawful process. zkqes is the first protocol that surfaces this property on-chain — every-day pseudonymity for the holder, recoverable accountability for the state, the same trust structure as the qualified electronic signature itself.",
     "docsLink": "Specs, install, reference at docs.zkqes.org →"
   }
 }

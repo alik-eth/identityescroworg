@@ -1,7 +1,7 @@
-// @qkb/sdk witness/v5 — public API surface for the V5 witness builder.
+// @zkqes/sdk witness/v5 — public API surface for the V5 witness builder.
 //
-// Cross-read from arch-circuits f0d5a73's @qkb/circuits package (kept
-// vendored locally because @qkb/circuits is Node-only — see
+// Cross-read from arch-circuits f0d5a73's @zkqes/circuits package (kept
+// vendored locally because @zkqes/circuits is Node-only — see
 // `build-witness-v5.ts` header for the two browser patches).
 
 export {

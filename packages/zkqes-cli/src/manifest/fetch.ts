@@ -13,7 +13,7 @@
 //
 // Bypass: callers can pass `verifySignature: false` to skip the
 // crypto check (used by `--no-verify` flag).  Stderr warning on every
-// `qkb serve` boot when this is true is emitted by the caller, not
+// `zkqes serve` boot when this is true is emitted by the caller, not
 // here — this module stays free of console writes for testability.
 
 import { createPublicKey, verify } from 'node:crypto';
