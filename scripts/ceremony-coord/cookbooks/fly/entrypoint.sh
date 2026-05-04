@@ -144,7 +144,7 @@ echo " ${OUT_HASH}"
 echo ""
 echo " Save this and send it to the coordinator."
 echo " It will appear in the public contribution log at:"
-echo " https://prove.identityescrow.org/ceremony/status.json"
+echo " https://prove.zkqes.org/ceremony/status.json"
 echo "================================================================"
 echo ""
 
@@ -155,7 +155,7 @@ echo "Local artefacts removed from the Fly volume."
 echo ""
 echo "Next step: destroy this app to ensure no residue remains on Fly infra."
 echo ""
-echo "  flyctl apps destroy qkb-ceremony-<your-handle> --yes"
+echo "  flyctl apps destroy zkqes-ceremony-<your-handle> --yes"
 echo ""
 
 exit 0

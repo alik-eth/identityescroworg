@@ -1,15 +1,15 @@
 #!/bin/bash
 # zk-QES V5 Phase 2 ceremony — interactive Fly.io launcher.
 #
-# Hosted at: https://prove.identityescrow.org/ceremony/fly-launch.sh
+# Hosted at: https://prove.zkqes.org/ceremony/fly-launch.sh
 #
 # Recommended usage (inspect before running):
-#   curl -fsSL https://prove.identityescrow.org/ceremony/fly-launch.sh -o fly-launch.sh
+#   curl -fsSL https://prove.zkqes.org/ceremony/fly-launch.sh -o fly-launch.sh
 #   cat fly-launch.sh
 #   bash fly-launch.sh
 #
 # Pipe shortcut (if you trust the host):
-#   curl -fsSL https://prove.identityescrow.org/ceremony/fly-launch.sh | bash
+#   curl -fsSL https://prove.zkqes.org/ceremony/fly-launch.sh | bash
 #
 # Requires:
 #   flyctl   — https://fly.io/docs/hands-on/install-flyctl/
@@ -31,12 +31,15 @@ set -euo pipefail
 # by digest (not tag) means the team-lead cannot swap the image under your
 # feet — Docker/Fly will pull exactly this digest or fail. To independently
 # verify, compare against the digest published in the coordinator's DM and
-# at:  https://prove.identityescrow.org/ceremony/image-digest.txt
+# at:  https://prove.zkqes.org/ceremony/image-digest.txt
 #
 # TEAM-LEAD: after `docker push` (README §9), copy the resulting digest into
 # GHCR_IMAGE_DIGEST below, re-publish launcher.sh to R2, and update the
 # image-digest.txt object. Contributors NEVER see a moving target.
-GHCR_IMAGE_REPO="ghcr.io/identityescroworg/qkb-ceremony"
+# NOTE: GHCR_IMAGE_DIGEST is intentionally empty until the founder builds and
+# pushes the image under the new name (alik-eth/zkqes-ceremony). Founder
+# action required out-of-band before the next ceremony run.
+GHCR_IMAGE_REPO="ghcr.io/alik-eth/zkqes-ceremony"
 GHCR_IMAGE_TAG="v1"          # human-readable, used only as fallback in DEV
 GHCR_IMAGE_DIGEST=""         # set to "sha256:abc123..." after first push
 
@@ -231,7 +234,7 @@ BANNER
 
 # ── collect inputs ────────────────────────────────────────────────────────────
 
-DEFAULT_APP="qkb-ceremony-$(openssl rand -hex 4)"
+DEFAULT_APP="zkqes-ceremony-$(openssl rand -hex 4)"
 
 tty_out "--- Fly app name ---"
 tty_out "(leave blank for auto-generated; the name only appears in Fly logs)"
@@ -261,7 +264,7 @@ ask_required "SIGNED_PUT_URL  (your single-use upload URL)" SIGNED_PUT_URL
 
 tty_out ""
 tty_out "--- Attestation name ---"
-tty_out "(appears in the public contribution log at prove.identityescrow.org)"
+tty_out "(appears in the public contribution log at prove.zkqes.org)"
 ask_required "Contributor name" CONTRIBUTOR_NAME
 
 # ── entropy ───────────────────────────────────────────────────────────────────
@@ -441,8 +444,8 @@ cat >/dev/tty <<'LOGINFO'
 LOGINFO
 
 # Temp files in $HOME so they survive /tmp cleanup races.
-SHA_LOG="$(mktemp -p "${HOME}" qkb-ceremony-stream.XXXXXX)"
-ARCHIVE_LOG="$(mktemp -p "${HOME}" qkb-ceremony-archive.XXXXXX)"
+SHA_LOG="$(mktemp -p "${HOME}" zkqes-ceremony-stream.XXXXXX)"
+ARCHIVE_LOG="$(mktemp -p "${HOME}" zkqes-ceremony-archive.XXXXXX)"
 
 # Stream pass — real-time progress for the contributor; tee'd for awk.
 flyctl logs --app "${APP}" --follow 2>&1 | tee "${SHA_LOG}" || true
@@ -466,7 +469,7 @@ if [ -n "$CONTRIBUTION_HASH" ]; then
   # Persist a copy to the contributor's CWD so it survives terminal close,
   # scrollback overflow, etc. The hash is public-by-design (it's the public
   # commitment of the contribution); no secret material is written.
-  SUMMARY_FILE="./qkb-ceremony-round-${ROUND}.txt"
+  SUMMARY_FILE="./zkqes-ceremony-round-${ROUND}.txt"
   {
     printf '# zk-QES V5 Phase 2 ceremony — round %s contribution record\n' "${ROUND}"
     printf '# Generated: %s\n\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -495,7 +498,7 @@ if [ -n "$CONTRIBUTION_HASH" ]; then
 
  The coordinator will verify independently and publish your
  entry to the public log at:
- https://prove.identityescrow.org/ceremony/status.json
+ https://prove.zkqes.org/ceremony/status.json
 ================================================================
 SUMMARY
 

@@ -52,7 +52,7 @@ for var in "${REQUIRED[@]}"; do
 done
 [ "$missing" -eq 0 ] || exit 1
 
-APP="qkb-ceremony-${CONTRIBUTOR_HANDLE}"
+APP="zkqes-ceremony-${CONTRIBUTOR_HANDLE}"
 REGION="${FLY_REGION:-fra}"
 
 echo "=== zk-QES V5 ceremony — launching round ${ROUND} for ${CONTRIBUTOR_NAME} ==="
