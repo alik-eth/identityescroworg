@@ -1,6 +1,6 @@
-# @qkb/lotl-flattener
+# @zkqes/lotl-flattener
 
-Offline EU trusted-list flattener for QKB. It reads the EU List of Trusted
+Offline EU trusted-list flattener for zkqes. It reads the EU List of Trusted
 Lists (LOTL), fetches each Member State trusted list, verifies XML signatures
 when requested, filters qualified certificate issuing services for electronic
 signatures, and emits the Poseidon Merkle artifacts consumed by the web app and
@@ -19,7 +19,7 @@ and compare its fingerprints with the Official Journal trusted-certificate
 publication:
 
 ```sh
-pnpm -F @qkb/lotl-flattener build
+pnpm -F @zkqes/lotl-flattener build
 pnpm --dir packages/lotl-flattener exec node dist/index.js \
   --lotl https://ec.europa.eu/tools/lotl/eu-lotl.xml \
   --print-lotl-signers
@@ -37,7 +37,7 @@ Production runs must pin trusted LOTL signing certificates from the Official
 Journal / Commission publication channel, then require signatures:
 
 ```sh
-pnpm -F @qkb/lotl-flattener build
+pnpm -F @zkqes/lotl-flattener build
 pnpm --dir packages/lotl-flattener exec node dist/index.js \
   --lotl https://ec.europa.eu/tools/lotl/eu-lotl.xml \
   --out ./dist/eu-lotl \

@@ -1,9 +1,9 @@
-# `@qkb/lotl-flattener` — Maintainer Notes
+# `@zkqes/lotl-flattener` — Maintainer Notes
 
 ## Purpose
 
 Offline Node CLI that turns the EU **List of Trusted Lists** into the
-inputs the QKB protocol needs on-chain and in-circuit:
+inputs the zkqes protocol needs on-chain and in-circuit:
 
 - Walk the LOTL → each Member State Trusted List → every QES-issuing CA
   certificate (`Svctype/CA/QC` + `Svcstatus/granted`).
@@ -23,13 +23,13 @@ All commands assume the repo root and pnpm 9.x.
 
 ```bash
 # Tests (Vitest, ~2 s)
-pnpm --filter @qkb/lotl-flattener test
+pnpm --filter @zkqes/lotl-flattener test
 
 # Type-check + emit JS to dist/
-pnpm --filter @qkb/lotl-flattener build
+pnpm --filter @zkqes/lotl-flattener build
 
 # Run the CLI against the synthetic fixture
-pnpm --filter @qkb/lotl-flattener build
+pnpm --filter @zkqes/lotl-flattener build
 node packages/lotl-flattener/dist/index.js \
   --lotl packages/lotl-flattener/fixtures/lotl-mini.xml \
   --out  /tmp/flat-out \
@@ -43,7 +43,7 @@ The CLI takes:
 - `--lotl-version <id>` (default `unknown`) — written verbatim into
   `root.json.lotlVersion`.
 - `--tree-depth <n>` (default 16) — must match `TREE_DEPTH` in
-  `src/index.ts`; circuits and contracts assume 16 in Phase 1.
+  `src/index.ts`; circuits and contracts assume 16.
 
 `run(opts)` is exported from `src/index.ts` so tests and other tooling
 can inject an `msTlLoader` (e.g. read MS TL XML from disk instead of
@@ -83,7 +83,7 @@ LOTL XML ── parseLotl ──▶ pointers ─┐
 
 ## Hard algorithmic locks
 
-These behaviours are pinned in lockstep with `@qkb/circuits`. **Do not
+These behaviours are pinned in lockstep with `@zkqes/circuits`. **Do not
 change without coordinated edits to the circom mirror in
 `packages/circuits/circuits/`.**
 
@@ -133,7 +133,7 @@ SPKI (RSA, secp384r1, compressed points, etc.) — V5 only supports P-256.
 ### Merkle tree (`src/tree/merkle.ts`)
 
 - Binary, **`node = Poseidon(left, right)`** (two-input Poseidon).
-- **Fixed depth 16** in Phase 1 (`TREE_DEPTH` in `src/index.ts`,
+- **Fixed depth 16** (`TREE_DEPTH` in `src/index.ts`,
   `treeDepth` in orchestration §2.1).
 - Zero subtrees: `zero[0] = 0`, `zero[i] = Poseidon(zero[i-1], zero[i-1])`.
   Missing siblings at level *L* are the value `zero[L]`, **not** literal 0.
@@ -171,7 +171,7 @@ the source of truth — when in doubt, read it before editing
 ```bash
 openssl req -x509 -newkey rsa:2048 \
   -keyout /tmp/k.pem -out /tmp/c.pem -days 3650 -nodes \
-  -subj "/CN=QKB Test CA/O=QKB/C=EE"
+  -subj "/CN=zkqes Test CA/O=zkqes/C=EE"
 openssl x509 -in /tmp/c.pem -outform DER \
   -out packages/lotl-flattener/fixtures/certs/test-ca.der
 ```
@@ -200,8 +200,8 @@ Wired in `.github/workflows/ci.yml`, job `test-flattener`:
 
 - Pinned to Node 20.11.1 + pnpm 9.1.0.
 - `timeout-minutes: 10`.
-- Steps: install (frozen lockfile) → `pnpm --filter @qkb/lotl-flattener
-  build` → `pnpm --filter @qkb/lotl-flattener test`.
+- Steps: install (frozen lockfile) → `pnpm --filter @zkqes/lotl-flattener
+  build` → `pnpm --filter @zkqes/lotl-flattener test`.
 
 A nightly reproducibility job is planned (orchestration §7.2): rebuild
 the flattener, re-derive the rTL from the pinned LOTL, byte-compare
@@ -266,11 +266,11 @@ Treat as a coordinated breaking change:
 2. Notify circuits-eng — `MerkleProofPoseidon.circom` is parameterized
    by depth; the production `.r1cs`/`.zkey`/`.wasm` triple needs a full
    circuit rebuild + new ceremony.
-3. Update `QKBRegistry`'s `trustedListRoot` rotation procedure docs;
+3. Update `ZkqesRegistry`'s `trustedListRoot` rotation procedure docs;
    the on-chain root storage isn't depth-aware but proofs against the
    new tree won't verify against old verifying keys.
 
-## Phase-1 explicit non-goals
+## Explicit non-goals
 
 These are deliberately out of scope; reject PRs that try to add them
 without an updated spec:
@@ -278,7 +278,7 @@ without an updated spec:
 - **Live EU LOTL fetches in CI.** Production refreshes are manual
   ops-flavoured runs by the lead; the package only supports them via
   the swappable `msTlLoader` interface.
-- **DSTU-4145 cert parsing.** Ukraine's national curve. Phase 1 covers
+- **DSTU-4145 cert parsing.** Ukraine's national curve. Current scope covers
   RSA-2048 and ECDSA-P256 only (per orchestration §2.0). Adding DSTU
   requires both a cert-parsing extension here AND a circuit variant.
 - **Historical trusted-list-root tracking.** Registry stores only the
