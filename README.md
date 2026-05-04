@@ -52,9 +52,17 @@ Full issuer-blindness on registration occurrence requires Pedersen-set-membershi
 
 ## Try it
 
-- **Live demo** — pending Base Sepolia deploy. Will land at [`app.zkqes.org/ua/registerV5`](https://app.zkqes.org/ua/registerV5) after the trusted setup ceremony completes.
-- **Wallet rotation** — `/account/rotate` migrates a registered holder to a new wallet under their existing identity. Three signatures: HKDF on the new wallet, HKDF + rotation-auth on the old wallet, register tx from the new wallet. Rotation-auth is bound to `chainId + registryAddress` to prevent cross-deployment replay.
-- **Local end-to-end** — see [Build & fork](#build--fork).
+The end-user flow, once the ceremony completes and the registry deploys to Sepolia + mainnet:
+
+1. Install [Diia](https://diia.gov.ua) on your phone and obtain a qualified electronic signature. Free for Ukrainian citizens.
+2. Visit [`app.zkqes.org/ua/registerV5`](https://app.zkqes.org/ua/registerV5) and connect a wallet.
+3. Generate a binding statement in the browser; sign it with Diia. The QES private key never leaves your phone.
+4. Upload the signed binding. The browser builds a Groth16 proof in ~90 s (or ~14 s if you have `zkqes serve` running locally).
+5. Submit the `register(...)` transaction. You can optionally mint a transferable `ZkqesCertificate` NFT.
+
+Live demo lands at the URL above after the trusted setup ceremony completes — until then, see [Build & fork](#build--fork) for the local end-to-end harness.
+
+**Wallet rotation** — `/account/rotate` migrates a registered holder to a new wallet under their existing identity. Three signatures: HKDF on the new wallet, HKDF + rotation-auth on the old wallet, register tx from the new wallet. Rotation-auth is bound to `chainId + registryAddress` to prevent cross-deployment replay.
 
 ## Help with the ceremony
 
@@ -64,7 +72,40 @@ The Groth16 proving key for V5 is produced via a multi-party Phase 2 trusted set
 |---|---|---|---|
 | **Local** | 32 GB-RAM machine | ~20 min | $0 |
 | **Cloud** — [Fly.io cookbook](scripts/ceremony-coord/cookbooks/fly/README.md) | Fly performance-cpu-4x | ~20 min | ~$0.30 (free-tier covers) |
-| **Coordination** | [`zkqes.org/ceremony`](https://zkqes.org/ceremony) — live status feed, attestation chain, in-browser verifier | | |
+| **Coordination** | [`zkqes.org/ceremony`](https://zkqes.org/ceremony) — live status feed, attestation chain, in-browser verifier | — | — |
+
+### Cloud path (Fly.io — recommended if you don't have a 32 GB machine)
+
+The launcher prompts for the 4 URLs the coordinator DMs you (`PREV_ROUND_URL`, `R1CS_URL`, `PTAU_URL`, `SIGNED_PUT_URL`) and your entropy, then runs the round on a Fly machine and tears it down.
+
+```bash
+curl -sSL https://prove.zkqes.org/ceremony/fly-launch.sh -o fly-launch.sh
+cat fly-launch.sh    # inspect before running
+bash fly-launch.sh
+```
+
+Requires `flyctl`. The launcher offers to install it if missing. Full cookbook: [`scripts/ceremony-coord/cookbooks/fly/README.md`](scripts/ceremony-coord/cookbooks/fly/README.md).
+
+### Local path (if you have ≥32 GB RAM and `snarkjs` available)
+
+The coordinator DMs you the same 4 URLs. The cryptographic content is identical to the cloud path: one `snarkjs zkey contribute`, one `snarkjs zkey verify`, one upload.
+
+```bash
+# 1. Download the previous round's zkey + r1cs + ptau
+curl -fsSL "$PREV_ROUND_URL" -o prev.zkey
+curl -fsSL "$R1CS_URL"       -o circuit.r1cs
+curl -fsSL "$PTAU_URL"       -o pot23.ptau
+
+# 2. Contribute (provide entropy; ~10 min wall time)
+npx snarkjs@latest zkey contribute prev.zkey out.zkey \
+  -n="<your-contributor-name>"
+
+# 3. Verify locally (~5 min wall time)
+npx snarkjs@latest zkey verify circuit.r1cs pot23.ptau out.zkey
+
+# 4. Upload via your single-use signed PUT URL
+curl -X PUT --data-binary @out.zkey "$SIGNED_PUT_URL"
+```
 
 Cloudflare Containers (12 GiB cap) and Railway Pro (24 GB / replica) were evaluated and ruled out for the ~30 GB snarkjs peak. Hetzner CCX33 is the next viable cloud option for a contributor wanting an alternative.
 
