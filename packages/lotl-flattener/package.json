@@ -1,10 +1,10 @@
 {
-  "name": "@qkb/lotl-flattener",
+  "name": "@zkqes/lotl-flattener",
   "version": "0.1.0",
   "type": "module",
   "private": true,
   "bin": {
-    "qkb-flatten": "./dist/index.js"
+    "zkqes-flatten": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
