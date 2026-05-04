@@ -5,11 +5,12 @@ import {
     IGroth16LeafVerifierV4,
     IGroth16ChainVerifierV4,
     IGroth16AgeVerifierV4
-} from "./QKBVerifierV4Draft.sol";
+} from "./ZkqesVerifierV4Draft.sol";
 
 /// @notice Per-country QKB/2 registry. Constructor-frozen country tag; admin-
 ///         rotatable trust roots + verifier addresses.
-contract QKBRegistryV4 {
+contract ZkqesRegistryV4 {
+    // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
     string public constant VERSION = "QKB/2.0";
     string public country;
 
@@ -203,7 +204,7 @@ contract QKBRegistryV4 {
 
     /// @dev Reassemble 4x64-bit little-endian limbs into secp256k1 affine
     ///      coordinates and derive the canonical Ethereum address
-    ///      `keccak256(x32 || y32)[12:]`. Mirrors `QKBVerifierV2.toPkAddress`.
+    ///      `keccak256(x32 || y32)[12:]`. Mirrors `ZkqesVerifierV2.toPkAddress`.
     function _pkAddressFromLimbs(uint256[4] calldata pkX, uint256[4] calldata pkY)
         private pure returns (address)
     {

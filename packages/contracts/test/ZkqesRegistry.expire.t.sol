@@ -2,14 +2,14 @@
 pragma solidity 0.8.24;
 
 import { Test } from "forge-std/Test.sol";
-import { QKBRegistry } from "../src/QKBRegistry.sol";
-import { QKBVerifierV2, IGroth16VerifierV2 } from "../src/QKBVerifierV2.sol";
+import { ZkqesRegistry } from "../src/ZkqesRegistry.sol";
+import { ZkqesVerifierV2, IGroth16VerifierV2 } from "../src/ZkqesVerifierV2.sol";
 import { DeclarationHashes } from "../src/constants/DeclarationHashes.sol";
 import { StubGroth16Verifier } from "../src/verifier/StubGroth16Verifier.sol";
 import { SignatureHelpers } from "./helpers/SignatureHelpers.sol";
 
-contract QKBRegistryExpireTest is Test {
-    QKBRegistry internal registry;
+contract ZkqesRegistryExpireTest is Test {
+    ZkqesRegistry internal registry;
     StubGroth16Verifier internal verifier;
 
     address internal constant ADMIN = address(0xA11CE);
@@ -25,7 +25,7 @@ contract QKBRegistryExpireTest is Test {
         verifier = new StubGroth16Verifier();
         // Dual-verifier constructor; both slots point to the same stub for
         // expire-focused tests (only the ECDSA path is exercised here).
-        registry = new QKBRegistry(
+        registry = new ZkqesRegistry(
             IGroth16VerifierV2(address(verifier)),
             IGroth16VerifierV2(address(verifier)),
             INITIAL_ROOT,
@@ -43,7 +43,7 @@ contract QKBRegistryExpireTest is Test {
 
     function _registerG() internal returns (address pkAddr) {
         verifier.setAccept(true);
-        QKBVerifierV2.Inputs memory i;
+        ZkqesVerifierV2.Inputs memory i;
         i.pkX = _splitToLimbsLE(GX);
         i.pkY = _splitToLimbsLE(GY);
         i.ctxHash = bytes32(uint256(0xA1));
@@ -52,7 +52,7 @@ contract QKBRegistryExpireTest is Test {
         i.timestamp = uint64(block.timestamp);
         i.algorithmTag = 1;
         i.nullifier = bytes32(uint256(0xBEEF1));
-        QKBVerifierV2.Proof memory p;
+        ZkqesVerifierV2.Proof memory p;
         registry.register(p, i);
         return vm.addr(BOUND_PRIV);
     }
@@ -77,29 +77,29 @@ contract QKBRegistryExpireTest is Test {
         emit BindingExpired(pkAddr);
         registry.expire(pkAddr, sig);
 
-        (QKBRegistry.Status status,,, uint64 expiredAt,,,) = registry.bindings(pkAddr);
-        assertEq(uint8(status), uint8(QKBRegistry.Status.EXPIRED));
+        (ZkqesRegistry.Status status,,, uint64 expiredAt,,,) = registry.bindings(pkAddr);
+        assertEq(uint8(status), uint8(ZkqesRegistry.Status.EXPIRED));
         assertEq(expiredAt, uint64(block.timestamp));
     }
 
     function test_expire_revertsOnWrongSigner() public {
         address pkAddr = _registerG();
         bytes memory sig = _signExpire(2, pkAddr, _boundAt(pkAddr));
-        vm.expectRevert(QKBRegistry.BadExpireSig.selector);
+        vm.expectRevert(ZkqesRegistry.BadExpireSig.selector);
         registry.expire(pkAddr, sig);
     }
 
     function test_expire_revertsOnWrongBoundAtInDigest() public {
         address pkAddr = _registerG();
         bytes memory sig = _signExpire(BOUND_PRIV, pkAddr, _boundAt(pkAddr) + 1);
-        vm.expectRevert(QKBRegistry.BadExpireSig.selector);
+        vm.expectRevert(ZkqesRegistry.BadExpireSig.selector);
         registry.expire(pkAddr, sig);
     }
 
     function test_expire_revertsOnNotBound() public {
         address pkAddr = vm.addr(BOUND_PRIV);
         bytes memory sig = _signExpire(BOUND_PRIV, pkAddr, uint64(block.timestamp));
-        vm.expectRevert(QKBRegistry.NotBound.selector);
+        vm.expectRevert(ZkqesRegistry.NotBound.selector);
         registry.expire(pkAddr, sig);
     }
 
@@ -112,7 +112,7 @@ contract QKBRegistryExpireTest is Test {
         address pkAddr = _registerG();
         bytes memory sig = _signExpire(BOUND_PRIV, pkAddr, _boundAt(pkAddr));
         registry.expire(pkAddr, sig);
-        vm.expectRevert(QKBRegistry.NotBound.selector);
+        vm.expectRevert(ZkqesRegistry.NotBound.selector);
         registry.expire(pkAddr, sig);
     }
 }

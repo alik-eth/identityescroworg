@@ -55,7 +55,7 @@ interface IGroth16ChainVerifier {
 ///
 ///         Spec: `docs/superpowers/specs/2026-04-18-split-proof-pivot.md`.
 ///         Orchestration interface contract: §2 of the sibling plan.
-library QKBVerifier {
+library ZkqesVerifier {
     /// @dev Groth16 proof triple, identical shape on both leaf and chain
     ///      sides (the proof itself is size-independent of the public
     ///      input width).

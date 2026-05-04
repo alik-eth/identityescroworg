@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import { IQKBRegistry } from "../../src/IQKBRegistry.sol";
+import { IZkqesRegistry } from "../../src/IZkqesRegistry.sol";
 
-contract MockRegistry is IQKBRegistry {
+contract MockRegistry is IZkqesRegistry {
     mapping(address => bytes32) private _n;
     function set(address h, bytes32 v) external { _n[h] = v; }
     function isVerified(address h) external view returns (bool)  { return _n[h] != bytes32(0); }

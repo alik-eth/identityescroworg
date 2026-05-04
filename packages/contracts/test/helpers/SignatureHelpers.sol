@@ -2,7 +2,7 @@
 pragma solidity 0.8.24;
 
 /// @notice Single source of truth for the QKB `expire` digest. Mirrors the
-///         encoding done inside `QKBRegistry.expire`; off-chain fixture
+///         encoding done inside `ZkqesRegistry.expire`; off-chain fixture
 ///         generators should import this file (or duplicate the encoding
 ///         verbatim) to stay in lock-step.
 library SignatureHelpers {

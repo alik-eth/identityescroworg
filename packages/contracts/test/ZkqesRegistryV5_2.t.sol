@@ -2,7 +2,7 @@
 pragma solidity 0.8.24;
 
 import {Test} from "forge-std/Test.sol";
-import {QKBRegistryV5_2, IGroth16VerifierV5_2} from "../src/QKBRegistryV5_2.sol";
+import {ZkqesRegistryV5_2, IGroth16VerifierV5_2} from "../src/ZkqesRegistryV5_2.sol";
 import {Groth16VerifierV5_2Placeholder} from "../src/Groth16VerifierV5_2Placeholder.sol";
 import {P256Verify} from "../src/libs/P256Verify.sol";
 import {Poseidon} from "../src/libs/Poseidon.sol";
@@ -10,7 +10,7 @@ import {Poseidon} from "../src/libs/Poseidon.sol";
 /// @notice V5.2 register + rotateWallet tests. Focused on the V5.2 deltas
 ///         vs V5.1; the unchanged gate semantics (Gate 1 Groth16, Gate 2a
 ///         calldata bind, Gate 2b P256, Gate 3-4 Merkle, Gate 5 timing) are
-///         exercised by the V5.1 suite at QKBRegistryV5.register.t.sol —
+///         exercised by the V5.1 suite at ZkqesRegistryV5.register.t.sol —
 ///         the V5.2 contract inherits the same gate bodies, so V5.1's
 ///         coverage applies structurally.
 ///
@@ -29,8 +29,8 @@ import {Poseidon} from "../src/libs/Poseidon.sol";
 ///           - Negative paths use vm.mockCall for verifier or P-256 reject.
 ///           - All tests bake the V5.2 22-field PublicSignals + 4-limb pk
 ///             pattern into helpers (`_baselineSignals`, `_addrFromLimbs`).
-contract QKBRegistryV5_2Test is Test {
-    QKBRegistryV5_2 internal registry;
+contract ZkqesRegistryV5_2Test is Test {
+    ZkqesRegistryV5_2 internal registry;
     Groth16VerifierV5_2Placeholder internal verifier;
 
     address internal admin = address(0xA1);
@@ -75,7 +75,7 @@ contract QKBRegistryV5_2Test is Test {
         vm.warp(2_000_000_000);
 
         verifier = new Groth16VerifierV5_2Placeholder();
-        registry = new QKBRegistryV5_2(
+        registry = new ZkqesRegistryV5_2(
             IGroth16VerifierV5_2(address(verifier)),
             admin,
             initialTrustRoot,
@@ -123,7 +123,7 @@ contract QKBRegistryV5_2Test is Test {
 
     /* ============ Helpers ============ */
 
-    /// @dev Mirror of QKBRegistryV5_2._deriveAddrFromBindingLimbs — used
+    /// @dev Mirror of ZkqesRegistryV5_2._deriveAddrFromBindingLimbs — used
     ///      to compute the expected derived address client-side so tests
     ///      can prank as the right msg.sender.
     function _addrFromLimbs(uint256 pkXHi, uint256 pkXLo, uint256 pkYHi, uint256 pkYLo)
@@ -138,8 +138,8 @@ contract QKBRegistryV5_2Test is Test {
         return address(uint160(uint256(keccak256(pk))));
     }
 
-    function _baselineProof() internal pure returns (QKBRegistryV5_2.Groth16Proof memory) {
-        return QKBRegistryV5_2.Groth16Proof({
+    function _baselineProof() internal pure returns (ZkqesRegistryV5_2.Groth16Proof memory) {
+        return ZkqesRegistryV5_2.Groth16Proof({
             a: [uint256(0), uint256(0)],
             b: [[uint256(0), uint256(0)], [uint256(0), uint256(0)]],
             c: [uint256(0), uint256(0)]
@@ -154,7 +154,7 @@ contract QKBRegistryV5_2Test is Test {
     ///      (V5.1 commit `04b4a71` Yul stack-pressure lesson — uint[22]
     ///      hits stack-too-deep on struct literal under via_ir).
     function _baselineSignals(address sender)
-        internal view returns (QKBRegistryV5_2.PublicSignals memory sig)
+        internal view returns (ZkqesRegistryV5_2.PublicSignals memory sig)
     {
         (uint256 saHi, uint256 saLo) = _hashHiLo(BASELINE_SIGNED_ATTRS);
         uint256 baselineFp     = uint256(keccak256(abi.encodePacked("v52-test-fp", sender)));
@@ -191,8 +191,8 @@ contract QKBRegistryV5_2Test is Test {
     }
 
     function _callRegister(
-        QKBRegistryV5_2.Groth16Proof memory proof,
-        QKBRegistryV5_2.PublicSignals memory sig
+        ZkqesRegistryV5_2.Groth16Proof memory proof,
+        ZkqesRegistryV5_2.PublicSignals memory sig
     ) internal {
         bytes32[2] memory leafSig;
         bytes32[2] memory intSig;
@@ -208,8 +208,8 @@ contract QKBRegistryV5_2Test is Test {
 
     function _callRegisterAs(
         address sender,
-        QKBRegistryV5_2.Groth16Proof memory proof,
-        QKBRegistryV5_2.PublicSignals memory sig
+        ZkqesRegistryV5_2.Groth16Proof memory proof,
+        ZkqesRegistryV5_2.PublicSignals memory sig
     ) internal {
         bytes32[2] memory leafSig;
         bytes32[2] memory intSig;
@@ -223,16 +223,16 @@ contract QKBRegistryV5_2Test is Test {
         );
     }
 
-    /* ============ Constructor + admin (forked from QKBRegistryV5.t.sol) ============ */
+    /* ============ Constructor + admin (forked from ZkqesRegistryV5.t.sol) ============ */
 
     function test_constructor_reverts_onZeroVerifier() public {
-        vm.expectRevert(QKBRegistryV5_2.ZeroAddress.selector);
-        new QKBRegistryV5_2(IGroth16VerifierV5_2(address(0)), admin, 0, 0);
+        vm.expectRevert(ZkqesRegistryV5_2.ZeroAddress.selector);
+        new ZkqesRegistryV5_2(IGroth16VerifierV5_2(address(0)), admin, 0, 0);
     }
 
     function test_constructor_reverts_onZeroAdmin() public {
-        vm.expectRevert(QKBRegistryV5_2.ZeroAddress.selector);
-        new QKBRegistryV5_2(IGroth16VerifierV5_2(address(verifier)), address(0), 0, 0);
+        vm.expectRevert(ZkqesRegistryV5_2.ZeroAddress.selector);
+        new ZkqesRegistryV5_2(IGroth16VerifierV5_2(address(verifier)), address(0), 0, 0);
     }
 
     function test_constructor_setsImmutables() public view {
@@ -243,12 +243,12 @@ contract QKBRegistryV5_2Test is Test {
     }
 
     function test_setTrustedListRoot_onlyAdmin() public {
-        vm.expectRevert(QKBRegistryV5_2.OnlyAdmin.selector);
+        vm.expectRevert(ZkqesRegistryV5_2.OnlyAdmin.selector);
         registry.setTrustedListRoot(bytes32(uint256(0xC)));
     }
 
     function test_setPolicyRoot_onlyAdmin() public {
-        vm.expectRevert(QKBRegistryV5_2.OnlyAdmin.selector);
+        vm.expectRevert(ZkqesRegistryV5_2.OnlyAdmin.selector);
         registry.setPolicyRoot(bytes32(uint256(0xC)));
     }
 
@@ -262,7 +262,7 @@ contract QKBRegistryV5_2Test is Test {
     /* ============ V5.2 happy path: keccak gate + register-mode no-op ============ */
 
     function test_register_happyPath_writesState() public {
-        QKBRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
         _callRegister(_baselineProof(), sig);
 
         assertEq(registry.nullifierOf(holder), bytes32(sig.nullifier),     "nullifier write-once");
@@ -272,9 +272,9 @@ contract QKBRegistryV5_2Test is Test {
     }
 
     function test_register_emitsRegisteredEvent() public {
-        QKBRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
         vm.expectEmit(true, true, false, true);
-        emit QKBRegistryV5_2.Registered(holder, bytes32(sig.nullifier), sig.timestamp);
+        emit ZkqesRegistryV5_2.Registered(holder, bytes32(sig.nullifier), sig.timestamp);
         _callRegister(_baselineProof(), sig);
     }
 
@@ -283,20 +283,20 @@ contract QKBRegistryV5_2Test is Test {
     function test_register_revertsWalletDerivationMismatch_whenMsgSenderNotDerivedFromLimbs() public {
         // Sender is `holder` (derived from baseline limbs); we override with
         // an unrelated address — keccak(baseline limbs) != address(0xCAFE).
-        QKBRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
         address wrongSender = address(0xCAFE);
-        vm.expectRevert(QKBRegistryV5_2.WalletDerivationMismatch.selector);
+        vm.expectRevert(ZkqesRegistryV5_2.WalletDerivationMismatch.selector);
         _callRegisterAs(wrongSender, _baselineProof(), sig);
     }
 
     function test_register_revertsWalletDerivationMismatch_whenLimbsTampered() public {
-        QKBRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
         // Flip pkXHi → derivedAddr changes → no longer == holder.
         sig.bindingPkXHi = BASELINE_PKX_HI ^ uint256(1);
         // Recompute rotationNewWallet to match holder so we don't trip the
         // WrongRegisterModeNoOp check before WalletDerivationMismatch.
         sig.rotationNewWallet = uint256(uint160(holder));
-        vm.expectRevert(QKBRegistryV5_2.WalletDerivationMismatch.selector);
+        vm.expectRevert(ZkqesRegistryV5_2.WalletDerivationMismatch.selector);
         _callRegister(_baselineProof(), sig);
     }
 
@@ -308,7 +308,7 @@ contract QKBRegistryV5_2Test is Test {
         uint256 pkYLo = 0xDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD;
         address newHolder = _addrFromLimbs(pkXHi, pkXLo, pkYHi, pkYLo);
 
-        QKBRegistryV5_2.PublicSignals memory sig = _baselineSignals(newHolder);
+        ZkqesRegistryV5_2.PublicSignals memory sig = _baselineSignals(newHolder);
         sig.bindingPkXHi = pkXHi;
         sig.bindingPkXLo = pkXLo;
         sig.bindingPkYHi = pkYHi;
@@ -321,21 +321,21 @@ contract QKBRegistryV5_2Test is Test {
     /* ============ V5.2 NEW: WrongRegisterModeNoOp ============ */
 
     function test_register_revertsWrongRegisterModeNoOp_whenRotationNewWalletNotMsgSender() public {
-        QKBRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
         // Override rotationNewWallet to a different address — register-mode
         // no-op gate fires.
         sig.rotationNewWallet = uint256(uint160(address(0xBEEF)));
-        vm.expectRevert(QKBRegistryV5_2.WrongRegisterModeNoOp.selector);
+        vm.expectRevert(ZkqesRegistryV5_2.WrongRegisterModeNoOp.selector);
         _callRegister(_baselineProof(), sig);
     }
 
     /* ============ V5.2 NEW: BindingPkLimbOutOfRange ============ */
 
     function test_register_revertsBindingPkLimbOutOfRange_whenLimbExceeds128Bits() public {
-        QKBRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
         // Set pkXHi to 2^128 — out of range. Defense-in-depth gate fires.
         sig.bindingPkXHi = uint256(1) << 128;
-        vm.expectRevert(QKBRegistryV5_2.BindingPkLimbOutOfRange.selector);
+        vm.expectRevert(ZkqesRegistryV5_2.BindingPkLimbOutOfRange.selector);
         _callRegister(_baselineProof(), sig);
     }
 
@@ -347,7 +347,7 @@ contract QKBRegistryV5_2Test is Test {
         uint256 pkYLo = BASELINE_PKY_LO;
         address newHolder = _addrFromLimbs(pkXHi, pkXLo, pkYHi, pkYLo);
 
-        QKBRegistryV5_2.PublicSignals memory sig = _baselineSignals(newHolder);
+        ZkqesRegistryV5_2.PublicSignals memory sig = _baselineSignals(newHolder);
         sig.bindingPkXHi = pkXHi;
         sig.bindingPkXLo = pkXLo;
         sig.bindingPkYHi = pkYHi;
@@ -360,69 +360,69 @@ contract QKBRegistryV5_2Test is Test {
     /* ============ V5.2 mode gate (V5.1 unchanged) ============ */
 
     function test_register_revertsWrongMode_whenRotationModeIsOne() public {
-        QKBRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
         sig.rotationMode = 1;
-        vm.expectRevert(QKBRegistryV5_2.WrongMode.selector);
+        vm.expectRevert(ZkqesRegistryV5_2.WrongMode.selector);
         _callRegister(_baselineProof(), sig);
     }
 
     /* ============ V5.2 BadProof (unchanged from V5.1) ============ */
 
     function test_register_revertsBadProof_whenVerifierReturnsFalse() public {
-        QKBRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
         // Mock the verifier to reject any verifyProof call.
         vm.mockCall(
             address(verifier),
             abi.encodeWithSelector(IGroth16VerifierV5_2.verifyProof.selector),
             abi.encode(false)
         );
-        vm.expectRevert(QKBRegistryV5_2.BadProof.selector);
+        vm.expectRevert(ZkqesRegistryV5_2.BadProof.selector);
         _callRegister(_baselineProof(), sig);
     }
 
     /* ============ V5.2 BadSignedAttrs / BadLeafSpki (unchanged from V5.1) ============ */
 
     function test_register_revertsBadSignedAttrsHi_whenHiTampered() public {
-        QKBRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
         sig.signedAttrsHashHi = sig.signedAttrsHashHi ^ uint256(1);
-        vm.expectRevert(QKBRegistryV5_2.BadSignedAttrsHi.selector);
+        vm.expectRevert(ZkqesRegistryV5_2.BadSignedAttrsHi.selector);
         _callRegister(_baselineProof(), sig);
     }
 
     function test_register_revertsBadSignedAttrsLo_whenLoTampered() public {
-        QKBRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
         sig.signedAttrsHashLo = sig.signedAttrsHashLo ^ uint256(1);
-        vm.expectRevert(QKBRegistryV5_2.BadSignedAttrsLo.selector);
+        vm.expectRevert(ZkqesRegistryV5_2.BadSignedAttrsLo.selector);
         _callRegister(_baselineProof(), sig);
     }
 
     function test_register_revertsBadLeafSpki_whenLeafCommitTampered() public {
-        QKBRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
         sig.leafSpkiCommit = sig.leafSpkiCommit ^ uint256(1);
-        vm.expectRevert(QKBRegistryV5_2.BadLeafSpki.selector);
+        vm.expectRevert(ZkqesRegistryV5_2.BadLeafSpki.selector);
         _callRegister(_baselineProof(), sig);
     }
 
     function test_register_revertsBadIntSpki_whenIntCommitTampered() public {
-        QKBRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
         sig.intSpkiCommit = sig.intSpkiCommit ^ uint256(1);
-        vm.expectRevert(QKBRegistryV5_2.BadIntSpki.selector);
+        vm.expectRevert(ZkqesRegistryV5_2.BadIntSpki.selector);
         _callRegister(_baselineProof(), sig);
     }
 
     /* ============ V5.2 timing gates (unchanged from V5.1) ============ */
 
     function test_register_revertsFutureBinding_whenTimestampInFuture() public {
-        QKBRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
         sig.timestamp = block.timestamp + 1;
-        vm.expectRevert(QKBRegistryV5_2.FutureBinding.selector);
+        vm.expectRevert(ZkqesRegistryV5_2.FutureBinding.selector);
         _callRegister(_baselineProof(), sig);
     }
 
     function test_register_revertsStaleBinding_whenAgeExceedsMax() public {
-        QKBRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
         sig.timestamp = block.timestamp - 2 hours;
-        vm.expectRevert(QKBRegistryV5_2.StaleBinding.selector);
+        vm.expectRevert(ZkqesRegistryV5_2.StaleBinding.selector);
         _callRegister(_baselineProof(), sig);
     }
 
@@ -430,13 +430,13 @@ contract QKBRegistryV5_2Test is Test {
 
     function test_register_repeat_acceptsFreshCtx_sameWalletSameFp() public {
         // First claim.
-        QKBRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
         _callRegister(_baselineProof(), sig);
 
         // Repeat claim with fresh ctxKey — should write usedCtx but NOT
         // overwrite nullifierOf (V5.1 invariant 4 — write-once on first-claim).
         bytes32 firstNullifier = registry.nullifierOf(holder);
-        QKBRegistryV5_2.PublicSignals memory sig2 = _baselineSignals(holder);
+        ZkqesRegistryV5_2.PublicSignals memory sig2 = _baselineSignals(holder);
         sig2.ctxHashLo = uint256(0xABCD);
         sig2.nullifier = uint256(0xCAFEBABE); // different per-ctx nullifier
         _callRegister(_baselineProof(), sig2);
@@ -445,12 +445,12 @@ contract QKBRegistryV5_2Test is Test {
     }
 
     function test_register_revertsCtxAlreadyUsed_whenSameCtxRepeats() public {
-        QKBRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
         _callRegister(_baselineProof(), sig);
 
         // Same ctx → revert.
-        QKBRegistryV5_2.PublicSignals memory sig2 = _baselineSignals(holder);
-        vm.expectRevert(QKBRegistryV5_2.CtxAlreadyUsed.selector);
+        ZkqesRegistryV5_2.PublicSignals memory sig2 = _baselineSignals(holder);
+        vm.expectRevert(ZkqesRegistryV5_2.CtxAlreadyUsed.selector);
         _callRegister(_baselineProof(), sig2);
     }
 
@@ -467,7 +467,7 @@ contract QKBRegistryV5_2Test is Test {
         uint256 pkYLo = 0x88888888888888888888888888888888;
         address otherHolder = _addrFromLimbs(pkXHi, pkXLo, pkYHi, pkYLo);
 
-        QKBRegistryV5_2.PublicSignals memory sig = _baselineSignals(otherHolder);
+        ZkqesRegistryV5_2.PublicSignals memory sig = _baselineSignals(otherHolder);
         // Force the SAME identity fingerprint as `holder`'s baseline.
         sig.identityFingerprint = uint256(keccak256(abi.encodePacked("v52-test-fp", holder)));
         sig.identityCommitment  = uint256(keccak256(abi.encodePacked("v52-test-commit", holder)));
@@ -478,7 +478,7 @@ contract QKBRegistryV5_2Test is Test {
         sig.bindingPkYLo = pkYLo;
         sig.ctxHashLo = uint256(0xABCD);
 
-        vm.expectRevert(QKBRegistryV5_2.WalletNotBound.selector);
+        vm.expectRevert(ZkqesRegistryV5_2.WalletNotBound.selector);
         _callRegisterAs(otherHolder, _baselineProof(), sig);
     }
 
@@ -493,6 +493,7 @@ contract QKBRegistryV5_2Test is Test {
     function _rotateAuthSig(uint256 pk, bytes32 fingerprint, address newWallet)
         internal view returns (bytes memory)
     {
+        // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
         bytes32 authPayload = keccak256(
             abi.encodePacked(
                 "qkb-rotate-auth-v1",
@@ -516,7 +517,7 @@ contract QKBRegistryV5_2Test is Test {
     /// vm.sign-derived addresses ONLY in the rotation auth sig.
     /// `holder` IS the old wallet for rotation tests.
     function _firstClaim() internal {
-        QKBRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
         _callRegister(_baselineProof(), sig);
     }
 
@@ -529,7 +530,7 @@ contract QKBRegistryV5_2Test is Test {
         uint256 newCommitment,
         uint256 oldCommitment,
         address newWallet
-    ) internal view returns (QKBRegistryV5_2.PublicSignals memory sig) {
+    ) internal view returns (ZkqesRegistryV5_2.PublicSignals memory sig) {
         (uint256 saHi, uint256 saLo) = _hashHiLo(BASELINE_SIGNED_ATTRS);
 
         sig.timestamp             = block.timestamp - 1;
@@ -580,22 +581,22 @@ contract QKBRegistryV5_2Test is Test {
     ///      _deriveAddrFromBindingLimbs output for the supplied limbs).
     function test_rotateWallet_v52_revertsWrongMode_whenMode0() public {
         _firstClaim();
-        QKBRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5_2.PublicSignals memory sig = _baselineSignals(holder);
         // Mode 0 is register; rotateWallet expects mode 1.
         sig.rotationMode = 0;
         bytes memory authSig = _rotateAuthSig(ALICE_PK, bytes32(sig.identityFingerprint), _addrOf(BOB_PK));
-        vm.expectRevert(QKBRegistryV5_2.WrongMode.selector);
+        vm.expectRevert(ZkqesRegistryV5_2.WrongMode.selector);
         vm.prank(_addrOf(BOB_PK));
         registry.rotateWallet(_baselineProof(), sig, authSig);
     }
 
     function test_rotateWallet_v52_revertsUnknownIdentity_whenFingerprintNotClaimed() public {
         // No first-claim → identityWallets[fp] = address(0).
-        QKBRegistryV5_2.PublicSignals memory sig = _rotationSignals(
+        ZkqesRegistryV5_2.PublicSignals memory sig = _rotationSignals(
             uint256(0xDEADBEEF), uint256(0xFACE), uint256(0xCAFE), _addrOf(BOB_PK)
         );
         bytes memory authSig = _rotateAuthSig(ALICE_PK, bytes32(sig.identityFingerprint), _addrOf(BOB_PK));
-        vm.expectRevert(QKBRegistryV5_2.UnknownIdentity.selector);
+        vm.expectRevert(ZkqesRegistryV5_2.UnknownIdentity.selector);
         vm.prank(_addrOf(BOB_PK));
         registry.rotateWallet(_baselineProof(), sig, authSig);
     }
@@ -604,11 +605,11 @@ contract QKBRegistryV5_2Test is Test {
         _firstClaim();
         // rotationOldCommitment doesn't match what's stored in identityCommitments[fp].
         uint256 baselineFp = uint256(keccak256(abi.encodePacked("v52-test-fp", holder)));
-        QKBRegistryV5_2.PublicSignals memory sig = _rotationSignals(
+        ZkqesRegistryV5_2.PublicSignals memory sig = _rotationSignals(
             baselineFp, uint256(0xFACE), uint256(0xBADCAFE), _addrOf(BOB_PK)  // wrong oldCommit
         );
         bytes memory authSig = _rotateAuthSig(ALICE_PK, bytes32(baselineFp), _addrOf(BOB_PK));
-        vm.expectRevert(QKBRegistryV5_2.CommitmentMismatch.selector);
+        vm.expectRevert(ZkqesRegistryV5_2.CommitmentMismatch.selector);
         vm.prank(_addrOf(BOB_PK));
         registry.rotateWallet(_baselineProof(), sig, authSig);
     }
@@ -618,11 +619,11 @@ contract QKBRegistryV5_2Test is Test {
         uint256 baselineFp = uint256(keccak256(abi.encodePacked("v52-test-fp", holder)));
         uint256 baselineCommit = uint256(keccak256(abi.encodePacked("v52-test-commit", holder)));
         // rotationNewWallet = bobAddr; but caller is _addrOf(ALICE_PK).
-        QKBRegistryV5_2.PublicSignals memory sig = _rotationSignals(
+        ZkqesRegistryV5_2.PublicSignals memory sig = _rotationSignals(
             baselineFp, uint256(0xFACE), baselineCommit, _addrOf(BOB_PK)
         );
         bytes memory authSig = _rotateAuthSig(ALICE_PK, bytes32(baselineFp), _addrOf(BOB_PK));
-        vm.expectRevert(QKBRegistryV5_2.InvalidNewWallet.selector);
+        vm.expectRevert(ZkqesRegistryV5_2.InvalidNewWallet.selector);
         vm.prank(_addrOf(ALICE_PK));  // wrong sender
         registry.rotateWallet(_baselineProof(), sig, authSig);
     }
@@ -631,13 +632,13 @@ contract QKBRegistryV5_2Test is Test {
         _firstClaim();
         uint256 baselineFp = uint256(keccak256(abi.encodePacked("v52-test-fp", holder)));
         uint256 baselineCommit = uint256(keccak256(abi.encodePacked("v52-test-commit", holder)));
-        QKBRegistryV5_2.PublicSignals memory sig = _rotationSignals(
+        ZkqesRegistryV5_2.PublicSignals memory sig = _rotationSignals(
             baselineFp, uint256(0xFACE), baselineCommit, _addrOf(BOB_PK)
         );
         // Sign with BOB_PK instead of the (real) old-wallet's privkey.
         // Recovered address won't match identityWallets[fp] = holder.
         bytes memory authSig = _rotateAuthSig(BOB_PK, bytes32(baselineFp), _addrOf(BOB_PK));
-        vm.expectRevert(QKBRegistryV5_2.InvalidRotationAuth.selector);
+        vm.expectRevert(ZkqesRegistryV5_2.InvalidRotationAuth.selector);
         vm.prank(_addrOf(BOB_PK));
         registry.rotateWallet(_baselineProof(), sig, authSig);
     }
@@ -660,7 +661,7 @@ contract QKBRegistryV5_2Test is Test {
         // would silently truncate this to 0x00...00 (since the lower
         // 160 bits are zero); without F2, the contract would pass the
         // truncated value through to the wallet-uniqueness gates.
-        QKBRegistryV5_2.PublicSignals memory sig = _rotationSignals(
+        ZkqesRegistryV5_2.PublicSignals memory sig = _rotationSignals(
             baselineFp, uint256(0xFACE), baselineCommit, _addrOf(BOB_PK)
         );
         // 1 << 160: smallest value above uint160.max. uint256.max is also
@@ -671,7 +672,7 @@ contract QKBRegistryV5_2Test is Test {
         // semantics.
         sig.rotationNewWallet = uint256(1) << 160;
         bytes memory authSig = _rotateAuthSig(ALICE_PK, bytes32(baselineFp), _addrOf(BOB_PK));
-        vm.expectRevert(QKBRegistryV5_2.InvalidNewWallet.selector);
+        vm.expectRevert(ZkqesRegistryV5_2.InvalidNewWallet.selector);
         vm.prank(_addrOf(BOB_PK));
         registry.rotateWallet(_baselineProof(), sig, authSig);
     }
@@ -698,7 +699,7 @@ contract QKBRegistryV5_2Test is Test {
         uint256 baselineCommit = uint256(keccak256(abi.encodePacked("v52-test-commit", holder)));
         // newWallet at the literal uint160 boundary: address(0xFF...FF).
         address boundaryAddr = address(uint160(type(uint160).max));
-        QKBRegistryV5_2.PublicSignals memory sig = _rotationSignals(
+        ZkqesRegistryV5_2.PublicSignals memory sig = _rotationSignals(
             baselineFp, uint256(0xFACE), baselineCommit, boundaryAddr
         );
         // Sanity: _rotationSignals sets rotationNewWallet = uint256(uint160(
@@ -710,7 +711,7 @@ contract QKBRegistryV5_2Test is Test {
         // holder), so the rotation auth gate fires downstream of F2.
         // F2 not tripping at the boundary is the asserted invariant.
         bytes memory authSig = _rotateAuthSig(BOB_PK, bytes32(baselineFp), boundaryAddr);
-        vm.expectRevert(QKBRegistryV5_2.InvalidRotationAuth.selector);
+        vm.expectRevert(ZkqesRegistryV5_2.InvalidRotationAuth.selector);
         vm.prank(boundaryAddr);
         registry.rotateWallet(_baselineProof(), sig, authSig);
     }

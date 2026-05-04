@@ -4,20 +4,20 @@ pragma solidity 0.8.24;
 import { Test } from "forge-std/Test.sol";
 import { stdJson } from "forge-std/StdJson.sol";
 import {
-    QKBVerifier,
+    ZkqesVerifier,
     IGroth16LeafVerifier,
     IGroth16ChainVerifier
-} from "../src/QKBVerifier.sol";
+} from "../src/ZkqesVerifier.sol";
 import { DeclarationHashes } from "../src/constants/DeclarationHashes.sol";
-import { QKBGroth16VerifierStubEcdsaLeaf } from "../src/verifiers/dev/QKBGroth16VerifierStubEcdsaLeaf.sol";
-import { QKBGroth16VerifierStubEcdsaChain } from "../src/verifiers/dev/QKBGroth16VerifierStubEcdsaChain.sol";
+import { ZkqesGroth16VerifierStubEcdsaLeaf } from "../src/verifiers/dev/ZkqesGroth16VerifierStubEcdsaLeaf.sol";
+import { ZkqesGroth16VerifierStubEcdsaChain } from "../src/verifiers/dev/ZkqesGroth16VerifierStubEcdsaChain.sol";
 
 /// @notice K2 — split-proof stub integration.
 ///
 ///         Exercises the pumped snarkjs-generated stub verifiers
-///         (`QKBGroth16VerifierStubEcdsa{Leaf,Chain}`) against the
+///         (`ZkqesGroth16VerifierStubEcdsa{Leaf,Chain}`) against the
 ///         pumped Groth16 proofs + public signals, then closes the loop
-///         by running the full \`QKBVerifier.verify(lv, cv, ...)\` library
+///         by running the full \`ZkqesVerifier.verify(lv, cv, ...)\` library
 ///         entrypoint with \`LeafInputs\` + \`ChainInputs\` built from the
 ///         same public arrays.
 ///
@@ -37,15 +37,15 @@ import { QKBGroth16VerifierStubEcdsaChain } from "../src/verifiers/dev/QKBGroth1
 ///         Snarkjs pi_b quirk (same as V2 integration test): the JSON
 ///         stores \`[real, imaginary]\` but the Solidity verifier's
 ///         pairing precompile expects \`[imaginary, real]\`. Swap on load.
-contract QKBGroth16VerifierStubIntegrationTest is Test {
+contract ZkqesGroth16VerifierStubIntegrationTest is Test {
     using stdJson for string;
 
-    QKBGroth16VerifierStubEcdsaLeaf  internal leafVerifier;
-    QKBGroth16VerifierStubEcdsaChain internal chainVerifier;
+    ZkqesGroth16VerifierStubEcdsaLeaf  internal leafVerifier;
+    ZkqesGroth16VerifierStubEcdsaChain internal chainVerifier;
 
     function setUp() public {
-        leafVerifier  = new QKBGroth16VerifierStubEcdsaLeaf();
-        chainVerifier = new QKBGroth16VerifierStubEcdsaChain();
+        leafVerifier  = new ZkqesGroth16VerifierStubEcdsaLeaf();
+        chainVerifier = new ZkqesGroth16VerifierStubEcdsaChain();
     }
 
     // -------------------------------------------------------------------
@@ -196,7 +196,7 @@ contract QKBGroth16VerifierStubIntegrationTest is Test {
     }
 
     // -------------------------------------------------------------------
-    // 4. QKBVerifier.verify(...) round-trip — end-to-end, same library
+    // 4. ZkqesVerifier.verify(...) round-trip — end-to-end, same library
     //    entrypoint the registry calls. Construct LeafInputs + ChainInputs
     //    from the pumped public arrays, leave declHash at a canonical
     //    value (the pumped leaf carries a real declHash; keep the
@@ -206,11 +206,11 @@ contract QKBGroth16VerifierStubIntegrationTest is Test {
     // -------------------------------------------------------------------
 
     /// @dev Build LeafInputs from the pumped 13-signal public array,
-    ///      mirroring exactly the packing in \`QKBVerifier.verify\`:
+    ///      mirroring exactly the packing in \`ZkqesVerifier.verify\`:
     ///      slots 0..3 = pkX limbs, 4..7 = pkY limbs, 8 = ctxHash,
     ///      9 = declHash, 10 = timestamp, 11 = nullifier, 12 = leafSpkiCommit.
     function _buildLeafInputs(uint256[13] memory sigs)
-        internal pure returns (QKBVerifier.LeafInputs memory i)
+        internal pure returns (ZkqesVerifier.LeafInputs memory i)
     {
         i.pkX[0] = sigs[0];
         i.pkX[1] = sigs[1];
@@ -228,7 +228,7 @@ contract QKBGroth16VerifierStubIntegrationTest is Test {
     }
 
     function _buildChainInputs(uint256[3] memory sigs)
-        internal pure returns (QKBVerifier.ChainInputs memory i)
+        internal pure returns (ZkqesVerifier.ChainInputs memory i)
     {
         i.rTL            = bytes32(sigs[0]);
         i.algorithmTag   = uint8(sigs[1]);
@@ -236,7 +236,7 @@ contract QKBGroth16VerifierStubIntegrationTest is Test {
     }
 
     function _proof(uint256[2] memory a, uint256[2][2] memory b, uint256[2] memory c)
-        internal pure returns (QKBVerifier.Proof memory p)
+        internal pure returns (ZkqesVerifier.Proof memory p)
     {
         p.a = a;
         p.b = b;
@@ -247,7 +247,7 @@ contract QKBGroth16VerifierStubIntegrationTest is Test {
         return bytes32(sigs[9]);
     }
 
-    /// @notice End-to-end: `QKBVerifier.verify` on the pumped fixtures.
+    /// @notice End-to-end: `ZkqesVerifier.verify` on the pumped fixtures.
     ///         The pumped leaf carries a real but arbitrary declHash in
     ///         slot [9] — whether it matches EN or UK is a property of
     ///         the fixture, not of the library. Assert the correct
@@ -272,10 +272,10 @@ contract QKBGroth16VerifierStubIntegrationTest is Test {
             "pumped fixtures must share leafSpkiCommit across leaf and chain"
         );
 
-        QKBVerifier.LeafInputs memory leafInputs   = _buildLeafInputs(leafSigs);
-        QKBVerifier.ChainInputs memory chainInputs = _buildChainInputs(chainSigs);
+        ZkqesVerifier.LeafInputs memory leafInputs   = _buildLeafInputs(leafSigs);
+        ZkqesVerifier.ChainInputs memory chainInputs = _buildChainInputs(chainSigs);
 
-        bool out = QKBVerifier.verify(
+        bool out = ZkqesVerifier.verify(
             IGroth16LeafVerifier(address(leafVerifier)),
             IGroth16ChainVerifier(address(chainVerifier)),
             _proof(leafA, leafB, leafC), leafInputs,
@@ -303,7 +303,7 @@ contract QKBGroth16VerifierStubIntegrationTest is Test {
     }
 
     /// @notice End-to-end mismatch: perturb chainInputs.leafSpkiCommit
-    ///         so the glue no longer holds. \`QKBVerifier.verify\` must
+    ///         so the glue no longer holds. \`ZkqesVerifier.verify\` must
     ///         short-circuit false before invoking either Groth16 call.
     function test_verify_endToEnd_commitMismatch() public view {
         (uint256[2] memory leafA, uint256[2][2] memory leafB, uint256[2] memory leafC) = _loadProof("ecdsa-leaf");
@@ -311,13 +311,13 @@ contract QKBGroth16VerifierStubIntegrationTest is Test {
         uint256[13] memory leafSigs  = _loadLeafPublic();
         uint256[3]  memory chainSigs = _loadChainPublic();
 
-        QKBVerifier.LeafInputs memory leafInputs   = _buildLeafInputs(leafSigs);
-        QKBVerifier.ChainInputs memory chainInputs = _buildChainInputs(chainSigs);
+        ZkqesVerifier.LeafInputs memory leafInputs   = _buildLeafInputs(leafSigs);
+        ZkqesVerifier.ChainInputs memory chainInputs = _buildChainInputs(chainSigs);
 
         // Flip one bit of the chain-side commit → glue now fails.
         chainInputs.leafSpkiCommit = bytes32(uint256(chainInputs.leafSpkiCommit) ^ 1);
 
-        bool out = QKBVerifier.verify(
+        bool out = ZkqesVerifier.verify(
             IGroth16LeafVerifier(address(leafVerifier)),
             IGroth16ChainVerifier(address(chainVerifier)),
             _proof(leafA, leafB, leafC), leafInputs,
@@ -333,12 +333,12 @@ contract QKBGroth16VerifierStubIntegrationTest is Test {
         uint256[13] memory leafSigs  = _loadLeafPublic();
         uint256[3]  memory chainSigs = _loadChainPublic();
 
-        QKBVerifier.LeafInputs memory leafInputs   = _buildLeafInputs(leafSigs);
-        QKBVerifier.ChainInputs memory chainInputs = _buildChainInputs(chainSigs);
+        ZkqesVerifier.LeafInputs memory leafInputs   = _buildLeafInputs(leafSigs);
+        ZkqesVerifier.ChainInputs memory chainInputs = _buildChainInputs(chainSigs);
 
         leafInputs.leafSpkiCommit = bytes32(uint256(leafInputs.leafSpkiCommit) ^ 1);
 
-        bool out = QKBVerifier.verify(
+        bool out = ZkqesVerifier.verify(
             IGroth16LeafVerifier(address(leafVerifier)),
             IGroth16ChainVerifier(address(chainVerifier)),
             _proof(leafA, leafB, leafC), leafInputs,

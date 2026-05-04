@@ -2,10 +2,10 @@
 pragma solidity 0.8.24;
 
 import {
-    QKBVerifier,
+    ZkqesVerifier,
     IGroth16LeafVerifier,
     IGroth16ChainVerifier
-} from "./QKBVerifier.sol";
+} from "./ZkqesVerifier.sol";
 import { IRegistryGate } from "./arbitrators/IRegistryGate.sol";
 
 /// @notice Split-proof register-then-authenticate registry for QKB-bound
@@ -33,7 +33,7 @@ import { IRegistryGate } from "./arbitrators/IRegistryGate.sol";
 ///         verifiers only, zero real registrations). Relying parties
 ///         should dual-lookup — prefer V3, fall back to V2 only for the
 ///         (unlikely) Phase-1 legacy holder population.
-contract QKBRegistryV3 is IRegistryGate {
+contract ZkqesRegistryV3 is IRegistryGate {
     /// @dev Domain string for the `expire` signature digest. Must stay in
     ///      lock-step with `test/helpers/SignatureHelpers.sol::EXPIRE_DOMAIN`.
     string private constant EXPIRE_DOMAIN = "QKB_EXPIRE_V1";
@@ -208,17 +208,17 @@ contract QKBRegistryV3 is IRegistryGate {
     ///         uniqueness. The Groth16 calls are the expensive step, so
     ///         cheap checks come first.
     function register(
-        QKBVerifier.Proof       calldata proofLeaf,
-        QKBVerifier.LeafInputs  calldata leafInputs,
-        QKBVerifier.Proof       calldata proofChain,
-        QKBVerifier.ChainInputs calldata chainInputs
+        ZkqesVerifier.Proof       calldata proofLeaf,
+        ZkqesVerifier.LeafInputs  calldata leafInputs,
+        ZkqesVerifier.Proof       calldata proofChain,
+        ZkqesVerifier.ChainInputs calldata chainInputs
     ) external {
         (IGroth16LeafVerifier lv, IGroth16ChainVerifier cv) = _dispatch(chainInputs.algorithmTag);
 
         if (chainInputs.rTL != trustedListRoot) revert RootMismatch();
         if (leafInputs.leafSpkiCommit != chainInputs.leafSpkiCommit) revert LeafSpkiCommitMismatch();
 
-        if (!QKBVerifier.verify(lv, cv, proofLeaf, leafInputs, proofChain, chainInputs)) {
+        if (!ZkqesVerifier.verify(lv, cv, proofLeaf, leafInputs, proofChain, chainInputs)) {
             revert InvalidProof();
         }
 
@@ -226,7 +226,7 @@ contract QKBRegistryV3 is IRegistryGate {
         if (block.timestamp > uint256(leafInputs.timestamp) + MAX_AGE) revert BindingTooOld();
         if (usedNullifiers[leafInputs.nullifier]) revert NullifierUsed();
 
-        address pkAddr = QKBVerifier.toPkAddress(leafInputs.pkX, leafInputs.pkY);
+        address pkAddr = ZkqesVerifier.toPkAddress(leafInputs.pkX, leafInputs.pkY);
         if (bindings[pkAddr].status != Status.NONE) revert AlreadyBound();
 
         usedNullifiers[leafInputs.nullifier] = true;
@@ -364,10 +364,10 @@ contract QKBRegistryV3 is IRegistryGate {
         bytes32 escrowId,
         address arbitrator,
         uint64 expiry,
-        QKBVerifier.Proof       calldata proofLeaf,
-        QKBVerifier.LeafInputs  calldata leafInputs,
-        QKBVerifier.Proof       calldata proofChain,
-        QKBVerifier.ChainInputs calldata chainInputs
+        ZkqesVerifier.Proof       calldata proofLeaf,
+        ZkqesVerifier.LeafInputs  calldata leafInputs,
+        ZkqesVerifier.Proof       calldata proofChain,
+        ZkqesVerifier.ChainInputs calldata chainInputs
     ) external {
         if (arbitrator == address(0)) revert ZeroAddress();
         if (expiry <= block.timestamp) revert EscrowExpiryInPast();
@@ -388,10 +388,10 @@ contract QKBRegistryV3 is IRegistryGate {
 
     function revokeEscrow(
         bytes32 reasonHash,
-        QKBVerifier.Proof       calldata proofLeaf,
-        QKBVerifier.LeafInputs  calldata leafInputs,
-        QKBVerifier.Proof       calldata proofChain,
-        QKBVerifier.ChainInputs calldata chainInputs
+        ZkqesVerifier.Proof       calldata proofLeaf,
+        ZkqesVerifier.LeafInputs  calldata leafInputs,
+        ZkqesVerifier.Proof       calldata proofChain,
+        ZkqesVerifier.ChainInputs calldata chainInputs
     ) external {
         address pkAddr = _authorizeBinding(proofLeaf, leafInputs, proofChain, chainInputs);
         EscrowEntry storage e = escrows[pkAddr];
@@ -426,10 +426,10 @@ contract QKBRegistryV3 is IRegistryGate {
     }
 
     function cancelReleasePending(
-        QKBVerifier.Proof       calldata proofLeaf,
-        QKBVerifier.LeafInputs  calldata leafInputs,
-        QKBVerifier.Proof       calldata proofChain,
-        QKBVerifier.ChainInputs calldata chainInputs
+        ZkqesVerifier.Proof       calldata proofLeaf,
+        ZkqesVerifier.LeafInputs  calldata leafInputs,
+        ZkqesVerifier.Proof       calldata proofChain,
+        ZkqesVerifier.ChainInputs calldata chainInputs
     ) external {
         address pkAddr = _authorizeBinding(proofLeaf, leafInputs, proofChain, chainInputs);
         EscrowEntry storage e = escrows[pkAddr];
@@ -483,21 +483,21 @@ contract QKBRegistryV3 is IRegistryGate {
     ///      uniqueness clauses (those only apply to first-time binding).
     ///      Requires the pk to already be bound with status == ACTIVE.
     function _authorizeBinding(
-        QKBVerifier.Proof       calldata proofLeaf,
-        QKBVerifier.LeafInputs  calldata leafInputs,
-        QKBVerifier.Proof       calldata proofChain,
-        QKBVerifier.ChainInputs calldata chainInputs
+        ZkqesVerifier.Proof       calldata proofLeaf,
+        ZkqesVerifier.LeafInputs  calldata leafInputs,
+        ZkqesVerifier.Proof       calldata proofChain,
+        ZkqesVerifier.ChainInputs calldata chainInputs
     ) internal view returns (address pkAddr) {
         (IGroth16LeafVerifier lv, IGroth16ChainVerifier cv) = _dispatch(chainInputs.algorithmTag);
 
         if (chainInputs.rTL != trustedListRoot) revert RootMismatch();
         if (leafInputs.leafSpkiCommit != chainInputs.leafSpkiCommit) revert LeafSpkiCommitMismatch();
 
-        if (!QKBVerifier.verify(lv, cv, proofLeaf, leafInputs, proofChain, chainInputs)) {
+        if (!ZkqesVerifier.verify(lv, cv, proofLeaf, leafInputs, proofChain, chainInputs)) {
             revert InvalidProof();
         }
 
-        pkAddr = QKBVerifier.toPkAddress(leafInputs.pkX, leafInputs.pkY);
+        pkAddr = ZkqesVerifier.toPkAddress(leafInputs.pkX, leafInputs.pkY);
         if (bindings[pkAddr].status != Status.ACTIVE) revert NotBound();
     }
 }

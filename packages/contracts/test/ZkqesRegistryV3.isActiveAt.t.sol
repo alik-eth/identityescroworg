@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity 0.8.24;
 
-import { QKBRegistryV3 } from "../src/QKBRegistryV3.sol";
-import { QKBVerifier } from "../src/QKBVerifier.sol";
+import { ZkqesRegistryV3 } from "../src/ZkqesRegistryV3.sol";
+import { ZkqesVerifier } from "../src/ZkqesVerifier.sol";
 import { V3Harness } from "./helpers/V3Harness.sol";
 import { SignatureHelpers } from "./helpers/SignatureHelpers.sol";
 
-contract QKBRegistryV3IsActiveAtTest is V3Harness {
+contract ZkqesRegistryV3IsActiveAtTest is V3Harness {
     uint256 internal constant BOUND_PRIV = 1;
 
     function setUp() public {

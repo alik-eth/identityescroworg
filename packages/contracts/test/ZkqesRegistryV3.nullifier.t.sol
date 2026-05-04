@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity 0.8.24;
 
-import { QKBRegistryV3 } from "../src/QKBRegistryV3.sol";
-import { QKBVerifier } from "../src/QKBVerifier.sol";
+import { ZkqesRegistryV3 } from "../src/ZkqesRegistryV3.sol";
+import { ZkqesVerifier } from "../src/ZkqesVerifier.sol";
 import { V3Harness } from "./helpers/V3Harness.sol";
 
 /// @notice §14.4 nullifier primitive coverage for V3. Mirrors V2's
-///         \`QKBRegistry.nullifier.t.sol\` suite against the split-proof
+///         \`ZkqesRegistry.nullifier.t.sol\` suite against the split-proof
 ///         register surface.
-contract QKBRegistryV3NullifierTest is V3Harness {
+contract ZkqesRegistryV3NullifierTest is V3Harness {
     address internal constant ALICE = address(0xB0B);
 
     bytes32 internal constant NULLIFIER_A = bytes32(uint256(0xBEEF));
@@ -28,7 +28,7 @@ contract QKBRegistryV3NullifierTest is V3Harness {
     }
 
     function _leafFor(uint256 x, uint256 y, bytes32 nullifier)
-        internal view returns (QKBVerifier.LeafInputs memory i)
+        internal view returns (ZkqesVerifier.LeafInputs memory i)
     {
         i = _leafInputs(nullifier);
         i.pkX = _splitToLimbsLE(x);
@@ -59,7 +59,7 @@ contract QKBRegistryV3NullifierTest is V3Harness {
         // Second Holder uses a fresh pk (priv = 2) but the SAME nullifier
         // — simulating a Sybil by the same cert subject against the same
         // ctxHash. Must revert even though the pk is new.
-        vm.expectRevert(QKBRegistryV3.NullifierUsed.selector);
+        vm.expectRevert(ZkqesRegistryV3.NullifierUsed.selector);
         registry.register(
             _zeroProof(),
             _leafFor(GX2, GY2, NULLIFIER_A),
@@ -75,7 +75,7 @@ contract QKBRegistryV3NullifierTest is V3Harness {
             _zeroProof(),
             _chainInputs(1)
         );
-        vm.expectRevert(QKBRegistryV3.AlreadyBound.selector);
+        vm.expectRevert(ZkqesRegistryV3.AlreadyBound.selector);
         registry.register(
             _zeroProof(),
             _leafFor(GX, GY, NULLIFIER_B),
@@ -94,13 +94,13 @@ contract QKBRegistryV3NullifierTest is V3Harness {
             _chainInputs(1)
         );
         vm.prank(ALICE);
-        vm.expectRevert(QKBRegistryV3.NotAdmin.selector);
+        vm.expectRevert(ZkqesRegistryV3.NotAdmin.selector);
         registry.revokeNullifier(NULLIFIER_A, REASON);
     }
 
     function test_revokeNullifier_unknownReverts() public {
         vm.prank(ADMIN);
-        vm.expectRevert(QKBRegistryV3.UnknownNullifier.selector);
+        vm.expectRevert(ZkqesRegistryV3.UnknownNullifier.selector);
         registry.revokeNullifier(NULLIFIER_A, REASON);
     }
 
@@ -112,7 +112,7 @@ contract QKBRegistryV3NullifierTest is V3Harness {
             _chainInputs(1)
         );
         vm.prank(ADMIN);
-        vm.expectRevert(QKBRegistryV3.ZeroAddress.selector);
+        vm.expectRevert(ZkqesRegistryV3.ZeroAddress.selector);
         registry.revokeNullifier(NULLIFIER_A, bytes32(0));
     }
 
@@ -126,7 +126,7 @@ contract QKBRegistryV3NullifierTest is V3Harness {
         vm.prank(ADMIN);
         registry.revokeNullifier(NULLIFIER_A, REASON);
         vm.prank(ADMIN);
-        vm.expectRevert(QKBRegistryV3.NullifierAlreadyRevoked.selector);
+        vm.expectRevert(ZkqesRegistryV3.NullifierAlreadyRevoked.selector);
         registry.revokeNullifier(NULLIFIER_A, REASON);
     }
 

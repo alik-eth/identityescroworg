@@ -2,8 +2,8 @@
 pragma solidity 0.8.24;
 
 import { Test } from "forge-std/Test.sol";
-import { QKBRegistry } from "../src/QKBRegistry.sol";
-import { QKBVerifierV2, IGroth16VerifierV2 } from "../src/QKBVerifierV2.sol";
+import { ZkqesRegistry } from "../src/ZkqesRegistry.sol";
+import { ZkqesVerifierV2, IGroth16VerifierV2 } from "../src/ZkqesVerifierV2.sol";
 import { DeclarationHashes } from "../src/constants/DeclarationHashes.sol";
 import { StubGroth16Verifier } from "../src/verifier/StubGroth16Verifier.sol";
 
@@ -12,8 +12,8 @@ import { StubGroth16Verifier } from "../src/verifier/StubGroth16Verifier.sol";
 ///         in for the ceremony-generated ones; the auth *path* is exercised
 ///         end to end (dispatch on algorithmTag, rTL check, pk-match,
 ///         bound-binding requirement).
-contract QKBRegistryEscrowTest is Test {
-    QKBRegistry internal registry;
+contract ZkqesRegistryEscrowTest is Test {
+    ZkqesRegistry internal registry;
     StubGroth16Verifier internal rsa;
     StubGroth16Verifier internal ecdsa;
 
@@ -44,7 +44,7 @@ contract QKBRegistryEscrowTest is Test {
     function setUp() public {
         rsa = new StubGroth16Verifier();
         ecdsa = new StubGroth16Verifier();
-        registry = new QKBRegistry(
+        registry = new ZkqesRegistry(
             IGroth16VerifierV2(address(rsa)),
             IGroth16VerifierV2(address(ecdsa)),
             INITIAL_ROOT,
@@ -61,7 +61,7 @@ contract QKBRegistryEscrowTest is Test {
         out[3] = (v >> 192) & type(uint64).max;
     }
 
-    function _inputs(bytes32 nullifier) internal view returns (QKBVerifierV2.Inputs memory i) {
+    function _inputs(bytes32 nullifier) internal view returns (ZkqesVerifierV2.Inputs memory i) {
         i.pkX = _splitToLimbsLE(GX);
         i.pkY = _splitToLimbsLE(GY);
         i.ctxHash = CTX_HASH;
@@ -72,10 +72,10 @@ contract QKBRegistryEscrowTest is Test {
         i.nullifier = nullifier;
     }
 
-    function _proof() internal pure returns (QKBVerifierV2.Proof memory p) {}
+    function _proof() internal pure returns (ZkqesVerifierV2.Proof memory p) {}
 
     function _registerG() internal {
-        QKBVerifierV2.Inputs memory i = _inputs(NULLIFIER);
+        ZkqesVerifierV2.Inputs memory i = _inputs(NULLIFIER);
         registry.register(_proof(), i);
     }
 
@@ -124,62 +124,62 @@ contract QKBRegistryEscrowTest is Test {
 
     function test_registerEscrow_revertsOnZeroArbitrator() public {
         uint64 expiry = uint64(block.timestamp + 1 days);
-        vm.expectRevert(QKBRegistry.ZeroAddress.selector);
+        vm.expectRevert(ZkqesRegistry.ZeroAddress.selector);
         registry.registerEscrow(ESCROW_ID, address(0), expiry, _proof(), _inputs(NULLIFIER));
     }
 
     function test_registerEscrow_revertsOnPastExpiry() public {
-        vm.expectRevert(QKBRegistry.EscrowExpiryInPast.selector);
+        vm.expectRevert(ZkqesRegistry.EscrowExpiryInPast.selector);
         registry.registerEscrow(ESCROW_ID, ARBITRATOR, uint64(block.timestamp), _proof(), _inputs(NULLIFIER));
     }
 
     function test_registerEscrow_revertsOnDoubleRegister() public {
         uint64 expiry = uint64(block.timestamp + 365 days);
         registry.registerEscrow(ESCROW_ID, ARBITRATOR, expiry, _proof(), _inputs(NULLIFIER));
-        vm.expectRevert(QKBRegistry.EscrowExists.selector);
+        vm.expectRevert(ZkqesRegistry.EscrowExists.selector);
         registry.registerEscrow(ESCROW_ID, ARBITRATOR, expiry, _proof(), _inputs(NULLIFIER));
     }
 
     function test_registerEscrow_revertsOnBadProof() public {
         ecdsa.setAccept(false);
         uint64 expiry = uint64(block.timestamp + 1 days);
-        vm.expectRevert(QKBRegistry.InvalidProof.selector);
+        vm.expectRevert(ZkqesRegistry.InvalidProof.selector);
         registry.registerEscrow(ESCROW_ID, ARBITRATOR, expiry, _proof(), _inputs(NULLIFIER));
     }
 
     function test_registerEscrow_revertsOnRootMismatch() public {
         uint64 expiry = uint64(block.timestamp + 1 days);
-        QKBVerifierV2.Inputs memory i = _inputs(NULLIFIER);
+        ZkqesVerifierV2.Inputs memory i = _inputs(NULLIFIER);
         i.rTL = bytes32(uint256(0xDEAD));
-        vm.expectRevert(QKBRegistry.RootMismatch.selector);
+        vm.expectRevert(ZkqesRegistry.RootMismatch.selector);
         registry.registerEscrow(ESCROW_ID, ARBITRATOR, expiry, _proof(), i);
     }
 
     function test_registerEscrow_revertsOnUnknownAlgorithm() public {
         uint64 expiry = uint64(block.timestamp + 1 days);
-        QKBVerifierV2.Inputs memory i = _inputs(NULLIFIER);
+        ZkqesVerifierV2.Inputs memory i = _inputs(NULLIFIER);
         i.algorithmTag = 2;
-        vm.expectRevert(QKBRegistry.UnknownAlgorithm.selector);
+        vm.expectRevert(ZkqesRegistry.UnknownAlgorithm.selector);
         registry.registerEscrow(ESCROW_ID, ARBITRATOR, expiry, _proof(), i);
     }
 
     function test_registerEscrow_revertsWhenBindingNotActive() public {
         // Fresh registry with no prior binding for this pk.
-        QKBRegistry r2 = new QKBRegistry(
+        ZkqesRegistry r2 = new ZkqesRegistry(
             IGroth16VerifierV2(address(rsa)),
             IGroth16VerifierV2(address(ecdsa)),
             INITIAL_ROOT,
             ADMIN
         );
         uint64 expiry = uint64(block.timestamp + 1 days);
-        vm.expectRevert(QKBRegistry.NotBound.selector);
+        vm.expectRevert(ZkqesRegistry.NotBound.selector);
         r2.registerEscrow(ESCROW_ID, ARBITRATOR, expiry, _proof(), _inputs(NULLIFIER));
     }
 
     // ---- revokeEscrow reverts -----------------------------------------------
 
     function test_revokeEscrow_revertsWhenNoEscrow() public {
-        vm.expectRevert(QKBRegistry.NoEscrow.selector);
+        vm.expectRevert(ZkqesRegistry.NoEscrow.selector);
         registry.revokeEscrow(REASON, _proof(), _inputs(NULLIFIER));
     }
 
@@ -187,7 +187,7 @@ contract QKBRegistryEscrowTest is Test {
         uint64 expiry = uint64(block.timestamp + 1 days);
         registry.registerEscrow(ESCROW_ID, ARBITRATOR, expiry, _proof(), _inputs(NULLIFIER));
         registry.revokeEscrow(REASON, _proof(), _inputs(NULLIFIER));
-        vm.expectRevert(QKBRegistry.EscrowAlreadyRevoked.selector);
+        vm.expectRevert(ZkqesRegistry.EscrowAlreadyRevoked.selector);
         registry.revokeEscrow(REASON, _proof(), _inputs(NULLIFIER));
     }
 
@@ -195,7 +195,7 @@ contract QKBRegistryEscrowTest is Test {
         uint64 expiry = uint64(block.timestamp + 1 days);
         registry.registerEscrow(ESCROW_ID, ARBITRATOR, expiry, _proof(), _inputs(NULLIFIER));
         ecdsa.setAccept(false);
-        vm.expectRevert(QKBRegistry.InvalidProof.selector);
+        vm.expectRevert(ZkqesRegistry.InvalidProof.selector);
         registry.revokeEscrow(REASON, _proof(), _inputs(NULLIFIER));
     }
 
@@ -204,13 +204,13 @@ contract QKBRegistryEscrowTest is Test {
     /// @notice State machine default — an unregistered pkAddr has NONE state
     ///         and all-zero EscrowEntry fields (MVP refinement §0.3).
     function test_EscrowState_EnumDefault() public {
-        (bytes32 id, address arb, uint64 exp, uint64 pendingAt, QKBRegistry.EscrowState state)
+        (bytes32 id, address arb, uint64 exp, uint64 pendingAt, ZkqesRegistry.EscrowState state)
             = registry.escrows(address(0xdead));
         assertEq(id, bytes32(0));
         assertEq(arb, address(0));
         assertEq(exp, 0);
         assertEq(pendingAt, 0);
-        assertEq(uint8(state), uint8(QKBRegistry.EscrowState.NONE));
+        assertEq(uint8(state), uint8(ZkqesRegistry.EscrowState.NONE));
     }
 
     /// @notice Reverse escrowId → pkAddr lookup is initially empty (MVP §0.3).
@@ -226,8 +226,8 @@ contract QKBRegistryEscrowTest is Test {
         registry.registerEscrow(ESCROW_ID, ARBITRATOR, expiry, _proof(), _inputs(NULLIFIER));
 
         assertEq(registry.escrowIdToPkAddr(ESCROW_ID), pk);
-        (,,, uint64 pendingAt, QKBRegistry.EscrowState state) = registry.escrows(pk);
-        assertEq(uint8(state), uint8(QKBRegistry.EscrowState.ACTIVE));
+        (,,, uint64 pendingAt, ZkqesRegistry.EscrowState state) = registry.escrows(pk);
+        assertEq(uint8(state), uint8(ZkqesRegistry.EscrowState.ACTIVE));
         assertEq(pendingAt, 0);
     }
 
@@ -237,8 +237,8 @@ contract QKBRegistryEscrowTest is Test {
         address pk = _pkAddr();
         registry.registerEscrow(ESCROW_ID, ARBITRATOR, expiry, _proof(), _inputs(NULLIFIER));
         registry.revokeEscrow(REASON, _proof(), _inputs(NULLIFIER));
-        (,,,, QKBRegistry.EscrowState state) = registry.escrows(pk);
-        assertEq(uint8(state), uint8(QKBRegistry.EscrowState.REVOKED));
+        (,,,, ZkqesRegistry.EscrowState state) = registry.escrows(pk);
+        assertEq(uint8(state), uint8(ZkqesRegistry.EscrowState.REVOKED));
     }
 
     // ---- C2: notifyReleasePending + finalizeRelease -------------------------
@@ -255,7 +255,7 @@ contract QKBRegistryEscrowTest is Test {
     ///         state machine — anyone else reverts `NotArbitrator`.
     function test_NotifyReleasePending_OnlyArbitrator() public {
         _registerDefaultEscrow();
-        vm.expectRevert(QKBRegistry.NotArbitrator.selector);
+        vm.expectRevert(ZkqesRegistry.NotArbitrator.selector);
         vm.prank(address(0xBAD));
         registry.notifyReleasePending(ESCROW_ID);
     }
@@ -268,8 +268,8 @@ contract QKBRegistryEscrowTest is Test {
         emit EscrowReleasePendingRequested(ESCROW_ID, ARBITRATOR, uint64(block.timestamp));
         vm.prank(ARBITRATOR);
         registry.notifyReleasePending(ESCROW_ID);
-        (,,, uint64 pendingAt, QKBRegistry.EscrowState state) = registry.escrows(pk);
-        assertEq(uint8(state), uint8(QKBRegistry.EscrowState.RELEASE_PENDING));
+        (,,, uint64 pendingAt, ZkqesRegistry.EscrowState state) = registry.escrows(pk);
+        assertEq(uint8(state), uint8(ZkqesRegistry.EscrowState.RELEASE_PENDING));
         assertEq(pendingAt, uint64(block.timestamp));
     }
 
@@ -278,13 +278,13 @@ contract QKBRegistryEscrowTest is Test {
         _registerDefaultEscrow();
         vm.prank(ARBITRATOR);
         registry.notifyReleasePending(ESCROW_ID);
-        vm.expectRevert(QKBRegistry.EscrowReleasePending.selector);
+        vm.expectRevert(ZkqesRegistry.EscrowReleasePending.selector);
         registry.revokeEscrow(REASON, _proof(), _inputs(NULLIFIER));
     }
 
     /// @notice Unknown escrowId reverts `UnknownEscrowId`.
     function test_NotifyReleasePending_UnknownEscrowIdReverts() public {
-        vm.expectRevert(QKBRegistry.UnknownEscrowId.selector);
+        vm.expectRevert(ZkqesRegistry.UnknownEscrowId.selector);
         vm.prank(ARBITRATOR);
         registry.notifyReleasePending(bytes32(uint256(0xDEADBEEF)));
     }
@@ -294,7 +294,7 @@ contract QKBRegistryEscrowTest is Test {
         _registerDefaultEscrow();
         vm.prank(ARBITRATOR);
         registry.notifyReleasePending(ESCROW_ID);
-        vm.expectRevert(QKBRegistry.WrongState.selector);
+        vm.expectRevert(ZkqesRegistry.WrongState.selector);
         vm.prank(ARBITRATOR);
         registry.notifyReleasePending(ESCROW_ID);
     }
@@ -305,7 +305,7 @@ contract QKBRegistryEscrowTest is Test {
         vm.prank(ARBITRATOR);
         registry.notifyReleasePending(ESCROW_ID);
         vm.warp(block.timestamp + 48 hours);
-        vm.expectRevert(QKBRegistry.NotArbitrator.selector);
+        vm.expectRevert(ZkqesRegistry.NotArbitrator.selector);
         vm.prank(address(0xBAD));
         registry.finalizeRelease(ESCROW_ID);
     }
@@ -316,7 +316,7 @@ contract QKBRegistryEscrowTest is Test {
         vm.prank(ARBITRATOR);
         registry.notifyReleasePending(ESCROW_ID);
         vm.warp(block.timestamp + 48 hours - 1);
-        vm.expectRevert(QKBRegistry.WrongState.selector);
+        vm.expectRevert(ZkqesRegistry.WrongState.selector);
         vm.prank(ARBITRATOR);
         registry.finalizeRelease(ESCROW_ID);
     }
@@ -332,8 +332,8 @@ contract QKBRegistryEscrowTest is Test {
         emit EscrowReleased(ESCROW_ID, ARBITRATOR);
         vm.prank(ARBITRATOR);
         registry.finalizeRelease(ESCROW_ID);
-        (,,,, QKBRegistry.EscrowState state) = registry.escrows(pk);
-        assertEq(uint8(state), uint8(QKBRegistry.EscrowState.RELEASED));
+        (,,,, ZkqesRegistry.EscrowState state) = registry.escrows(pk);
+        assertEq(uint8(state), uint8(ZkqesRegistry.EscrowState.RELEASED));
     }
 
     /// @notice Once RELEASED, revoke reverts `EscrowAlreadyReleased`.
@@ -344,13 +344,13 @@ contract QKBRegistryEscrowTest is Test {
         vm.warp(block.timestamp + 48 hours);
         vm.prank(ARBITRATOR);
         registry.finalizeRelease(ESCROW_ID);
-        vm.expectRevert(QKBRegistry.EscrowAlreadyReleased.selector);
+        vm.expectRevert(ZkqesRegistry.EscrowAlreadyReleased.selector);
         registry.revokeEscrow(REASON, _proof(), _inputs(NULLIFIER));
     }
 
     /// @notice finalizeRelease on an unknown escrowId reverts `UnknownEscrowId`.
     function test_FinalizeRelease_UnknownEscrowIdReverts() public {
-        vm.expectRevert(QKBRegistry.UnknownEscrowId.selector);
+        vm.expectRevert(ZkqesRegistry.UnknownEscrowId.selector);
         vm.prank(ARBITRATOR);
         registry.finalizeRelease(bytes32(uint256(0xDEADBEEF)));
     }
@@ -369,8 +369,8 @@ contract QKBRegistryEscrowTest is Test {
         emit EscrowReleaseCancelled(ESCROW_ID, pk);
         registry.cancelReleasePending(_proof(), _inputs(NULLIFIER));
 
-        (,,, uint64 pendingAt, QKBRegistry.EscrowState state) = registry.escrows(pk);
-        assertEq(uint8(state), uint8(QKBRegistry.EscrowState.ACTIVE));
+        (,,, uint64 pendingAt, ZkqesRegistry.EscrowState state) = registry.escrows(pk);
+        assertEq(uint8(state), uint8(ZkqesRegistry.EscrowState.ACTIVE));
         assertEq(pendingAt, 0);
     }
 
@@ -381,7 +381,7 @@ contract QKBRegistryEscrowTest is Test {
         vm.prank(ARBITRATOR);
         registry.notifyReleasePending(ESCROW_ID);
         vm.warp(block.timestamp + 48 hours);
-        vm.expectRevert(QKBRegistry.WrongState.selector);
+        vm.expectRevert(ZkqesRegistry.WrongState.selector);
         registry.cancelReleasePending(_proof(), _inputs(NULLIFIER));
     }
 
@@ -389,7 +389,7 @@ contract QKBRegistryEscrowTest is Test {
     ///         cancel, state must be RELEASE_PENDING.
     function test_CancelReleasePending_RevertsWhenActive() public {
         _registerDefaultEscrow();
-        vm.expectRevert(QKBRegistry.WrongState.selector);
+        vm.expectRevert(ZkqesRegistry.WrongState.selector);
         registry.cancelReleasePending(_proof(), _inputs(NULLIFIER));
     }
 
@@ -401,8 +401,8 @@ contract QKBRegistryEscrowTest is Test {
         registry.cancelReleasePending(_proof(), _inputs(NULLIFIER));
 
         registry.revokeEscrow(REASON, _proof(), _inputs(NULLIFIER));
-        (,,,, QKBRegistry.EscrowState state) = registry.escrows(pk);
-        assertEq(uint8(state), uint8(QKBRegistry.EscrowState.REVOKED));
+        (,,,, ZkqesRegistry.EscrowState state) = registry.escrows(pk);
+        assertEq(uint8(state), uint8(ZkqesRegistry.EscrowState.REVOKED));
     }
 
     /// @notice cancel still requires a valid Groth16 proof — tamper the
@@ -412,7 +412,7 @@ contract QKBRegistryEscrowTest is Test {
         vm.prank(ARBITRATOR);
         registry.notifyReleasePending(ESCROW_ID);
         ecdsa.setAccept(false);
-        vm.expectRevert(QKBRegistry.InvalidProof.selector);
+        vm.expectRevert(ZkqesRegistry.InvalidProof.selector);
         registry.cancelReleasePending(_proof(), _inputs(NULLIFIER));
     }
 }

@@ -8,7 +8,7 @@ import { DeclarationHashes } from "./constants/DeclarationHashes.sol";
 ///         circuit. Preserved verbatim as `IGroth16VerifierV2` because V2's
 ///         contract artefacts (registry + tests) remain in-tree for
 ///         archival reference; the split-proof V3 pivot uses the two
-///         interfaces in `./QKBVerifier.sol`
+///         interfaces in `./ZkqesVerifier.sol`
 ///         (`IGroth16LeafVerifier` + `IGroth16ChainVerifier`).
 interface IGroth16VerifierV2 {
     function verifyProof(
@@ -21,9 +21,9 @@ interface IGroth16VerifierV2 {
 
 /// @notice V2 library — preserved for the V2 registry's archival build.
 ///         Do NOT use in new code; the active verifier library for V3 is
-///         `QKBVerifier` in `./QKBVerifier.sol` with split leaf+chain
+///         `ZkqesVerifier` in `./ZkqesVerifier.sol` with split leaf+chain
 ///         interfaces per the 2026-04-18 split-proof pivot.
-library QKBVerifierV2 {
+library ZkqesVerifierV2 {
     struct Proof {
         uint256[2] a;
         uint256[2][2] b;

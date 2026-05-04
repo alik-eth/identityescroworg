@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity 0.8.24;
 
-import {IQKBRegistry} from "./IdentityEscrowNFT.sol";
+import {IZkqesRegistry} from "./ZkqesCertificate.sol";
 import {Poseidon} from "./libs/Poseidon.sol";
 import {PoseidonBytecode} from "./libs/PoseidonBytecode.sol";
 import {P256Verify} from "./libs/P256Verify.sol";
@@ -21,9 +21,9 @@ interface IGroth16VerifierV5_1 {
     ) external view returns (bool);
 }
 
-/// @title  QKBRegistryV5 — V5 binding registry (5-gate `register()`).
-/// @notice Implements `IQKBRegistry` (ABI-stable across V4↔V5; downstream
-///         SDK consumers + IdentityEscrowNFT work unchanged). The V5
+/// @title  ZkqesRegistryV5 — V5 binding registry (5-gate `register()`).
+/// @notice Implements `IZkqesRegistry` (ABI-stable across V4↔V5; downstream
+///         SDK consumers + ZkqesCertificate work unchanged). The V5
 ///         architecture moves all P-256 ECDSA verification on-chain via
 ///         EIP-7212 (RIP-7212 P256VERIFY at `0x100`), with a Groth16 proof
 ///         binding the wallet caller, the nullifier, and the calldata
@@ -43,7 +43,7 @@ interface IGroth16VerifierV5_1 {
 ///           - Set admin + initial trustedListRoot + initial policyRoot.
 ///         The contract is NOT upgradeable — V4 → V5 is a fresh deploy with
 ///         a holder re-registration flow per orchestration §8.
-contract QKBRegistryV5 is IQKBRegistry {
+contract ZkqesRegistryV5 is IZkqesRegistry {
     /* ---------- immutables ---------- */
 
     /// Groth16 verifier (stub now, real ceremony output post-§14).
@@ -79,7 +79,7 @@ contract QKBRegistryV5 is IQKBRegistry {
     /// V5.1 invariant 4: write-once on first-claim only — `register()`
     /// repeat-claim path (same wallet, same identity, fresh ctx) does NOT
     /// overwrite. This preserves the bytes32 type + non-zero-iff-registered
-    /// semantics that `IdentityEscrowNFT` and `IQKBRegistry.isVerified()`
+    /// semantics that `ZkqesCertificate` and `IZkqesRegistry.isVerified()`
     /// consumers rely on.
     mapping(address => bytes32) public override nullifierOf;
 
@@ -157,7 +157,7 @@ contract QKBRegistryV5 is IQKBRegistry {
         poseidonT7 = Poseidon.deploy(PoseidonBytecode.t7Initcode());
     }
 
-    /* ---------- IQKBRegistry view fns ---------- */
+    /* ---------- IZkqesRegistry view fns ---------- */
 
     function isVerified(address holder) external view override returns (bool) {
         return nullifierOf[holder] != bytes32(0);
@@ -479,7 +479,7 @@ contract QKBRegistryV5 is IQKBRegistry {
     ///
     /// @dev    NFT contract is NOT touched per user directive 2026-04-30
     ///         ("nft is optional. if this works without nft its fine").
-    ///         Users transfer their IdentityEscrowNFT via standard ERC-721
+    ///         Users transfer their ZkqesCertificate via standard ERC-721
     ///         independently of this rotation.
     ///
     /// @param  proof              Groth16 proof for the rotation circuit.
@@ -520,7 +520,7 @@ contract QKBRegistryV5 is IQKBRegistry {
         // V5.1 invariant 5: newWallet must not already hold ANY identity.
         // Guards against a wallet collapse where rotation could merge two
         // identities into one wallet, breaking the per-wallet uniqueness
-        // that IdentityEscrowNFT.isVerified() consumers rely on.
+        // that ZkqesCertificate.isVerified() consumers rely on.
         if (nullifierOf[newWallet] != bytes32(0))     revert AlreadyRegistered();
 
         // ----- Verify old-wallet authorization signature (ECDSA recover) -----
@@ -533,6 +533,7 @@ contract QKBRegistryV5 is IQKBRegistry {
         //     redeploy or per-country registry (address(this))
         //   - other (fingerprint, newWallet) rotations (fingerprint, newWallet)
         // Per codex review on Task 3 ([P2] cross-deployment-replay).
+        // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
         bytes32 authPayload = keccak256(
             abi.encodePacked(
                 "qkb-rotate-auth-v1",
@@ -553,8 +554,8 @@ contract QKBRegistryV5 is IQKBRegistry {
         identityWallets[fingerprint]     = newWallet;
 
         // nullifierOf migration (recommended in spec Q4): preserves the
-        // first-claim nullifier value on the new wallet so IQKBRegistry
-        // consumers (IdentityEscrowNFT, Verified-modifier) keep returning
+        // first-claim nullifier value on the new wallet so IZkqesRegistry
+        // consumers (ZkqesCertificate, Verified-modifier) keep returning
         // a non-zero value for the active wallet. Old wallet's slot
         // cleared (refund).
         nullifierOf[newWallet] = nullifierOf[oldWallet];

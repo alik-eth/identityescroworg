@@ -53,7 +53,7 @@ interface IGroth16AgeVerifierV4 {
 ///         This file is intentionally forward-looking and MUST NOT be wired
 ///         into the live registry path until successor circuits and verifiers
 ///         exist.
-library QKBVerifierV4Draft {
+library ZkqesVerifierV4Draft {
     struct Proof {
         uint256[2] a;
         uint256[2][2] b;

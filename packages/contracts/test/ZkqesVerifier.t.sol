@@ -3,17 +3,17 @@ pragma solidity 0.8.24;
 
 import { Test } from "forge-std/Test.sol";
 import {
-    QKBVerifier,
+    ZkqesVerifier,
     IGroth16LeafVerifier,
     IGroth16ChainVerifier
-} from "../src/QKBVerifier.sol";
+} from "../src/ZkqesVerifier.sol";
 import { DeclarationHashes } from "../src/constants/DeclarationHashes.sol";
 import {
     StubGroth16LeafVerifier,
     StubGroth16ChainVerifier
 } from "../src/verifiers/dev/StubSplitVerifiers.sol";
 
-contract QKBVerifierTest is Test {
+contract ZkqesVerifierTest is Test {
     StubGroth16LeafVerifier  internal leafStub;
     StubGroth16ChainVerifier internal chainStub;
 
@@ -30,7 +30,7 @@ contract QKBVerifierTest is Test {
         chainStub = new StubGroth16ChainVerifier();
     }
 
-    function _zeroProof() internal pure returns (QKBVerifier.Proof memory p) {
+    function _zeroProof() internal pure returns (ZkqesVerifier.Proof memory p) {
         // All zeros — stubs ignore.
     }
 
@@ -41,7 +41,7 @@ contract QKBVerifierTest is Test {
         out[3] = (v >> 192) & type(uint64).max;
     }
 
-    function _baseLeaf() internal pure returns (QKBVerifier.LeafInputs memory i) {
+    function _baseLeaf() internal pure returns (ZkqesVerifier.LeafInputs memory i) {
         i.pkX            = _splitToLimbsLE(GX);
         i.pkY            = _splitToLimbsLE(GY);
         i.ctxHash        = bytes32(uint256(0xA1));
@@ -51,17 +51,17 @@ contract QKBVerifierTest is Test {
         i.leafSpkiCommit = SPKI_COMMIT;
     }
 
-    function _baseChain() internal pure returns (QKBVerifier.ChainInputs memory i) {
+    function _baseChain() internal pure returns (ZkqesVerifier.ChainInputs memory i) {
         i.rTL            = bytes32(uint256(0xC0FFEE));
         i.algorithmTag   = 1; // ECDSA
         i.leafSpkiCommit = SPKI_COMMIT;
     }
 
     function _verify(
-        QKBVerifier.LeafInputs memory leaf,
-        QKBVerifier.ChainInputs memory chain
+        ZkqesVerifier.LeafInputs memory leaf,
+        ZkqesVerifier.ChainInputs memory chain
     ) internal view returns (bool) {
-        return QKBVerifier.verify(
+        return ZkqesVerifier.verify(
             IGroth16LeafVerifier(address(leafStub)),
             IGroth16ChainVerifier(address(chainStub)),
             _zeroProof(),
@@ -82,7 +82,7 @@ contract QKBVerifierTest is Test {
     function test_verify_acceptsUKDeclHash() public {
         leafStub.setAccept(true);
         chainStub.setAccept(true);
-        QKBVerifier.LeafInputs memory leaf = _baseLeaf();
+        ZkqesVerifier.LeafInputs memory leaf = _baseLeaf();
         leaf.declHash = DeclarationHashes.UK;
         assertTrue(_verify(leaf, _baseChain()));
     }
@@ -108,7 +108,7 @@ contract QKBVerifierTest is Test {
         // circuits before either is consulted.
         leafStub.setAccept(true);
         chainStub.setAccept(true);
-        QKBVerifier.LeafInputs memory leaf = _baseLeaf();
+        ZkqesVerifier.LeafInputs memory leaf = _baseLeaf();
         leaf.declHash = bytes32(uint256(1));
         assertFalse(_verify(leaf, _baseChain()));
     }
@@ -118,8 +118,8 @@ contract QKBVerifierTest is Test {
     function test_verify_rejectsCommitMismatch() public {
         leafStub.setAccept(true);
         chainStub.setAccept(true);
-        QKBVerifier.LeafInputs memory leaf = _baseLeaf();
-        QKBVerifier.ChainInputs memory chain = _baseChain();
+        ZkqesVerifier.LeafInputs memory leaf = _baseLeaf();
+        ZkqesVerifier.ChainInputs memory chain = _baseChain();
         // Perturb chain's commit — glue no longer holds.
         chain.leafSpkiCommit = bytes32(uint256(SPKI_COMMIT) ^ 1);
         assertFalse(_verify(leaf, chain));
@@ -130,9 +130,9 @@ contract QKBVerifierTest is Test {
         // wide-open and a valid declHash.
         leafStub.setAccept(true);
         chainStub.setAccept(true);
-        QKBVerifier.LeafInputs memory leaf = _baseLeaf();
+        ZkqesVerifier.LeafInputs memory leaf = _baseLeaf();
         leaf.leafSpkiCommit = bytes32(uint256(1));
-        QKBVerifier.ChainInputs memory chain = _baseChain();
+        ZkqesVerifier.ChainInputs memory chain = _baseChain();
         chain.leafSpkiCommit = bytes32(uint256(2));
         assertFalse(_verify(leaf, chain));
     }
@@ -141,16 +141,16 @@ contract QKBVerifierTest is Test {
 
     function test_toPkAddress_matchesVmAddrAcrossPrivkeys() public view {
         // priv = 1 → G
-        assertEq(QKBVerifier.toPkAddress(_splitToLimbsLE(GX), _splitToLimbsLE(GY)), vm.addr(1));
+        assertEq(ZkqesVerifier.toPkAddress(_splitToLimbsLE(GX), _splitToLimbsLE(GY)), vm.addr(1));
 
         // priv = 2 → 2G
         uint256 px2 = 0xC6047F9441ED7D6D3045406E95C07CD85C778E4B8CEF3CA7ABAC09B95C709EE5;
         uint256 py2 = 0x1AE168FEA63DC339A3C58419466CEAEEF7F632653266D0E1236431A950CFE52A;
-        assertEq(QKBVerifier.toPkAddress(_splitToLimbsLE(px2), _splitToLimbsLE(py2)), vm.addr(2));
+        assertEq(ZkqesVerifier.toPkAddress(_splitToLimbsLE(px2), _splitToLimbsLE(py2)), vm.addr(2));
 
         // priv = 3 → 3G
         uint256 px3 = 0xF9308A019258C31049344F85F89D5229B531C845836F99B08601F113BCE036F9;
         uint256 py3 = 0x388F7B0F632DE8140FE337E62A37F3566500A99934C2231B6CB9FD7584B8E672;
-        assertEq(QKBVerifier.toPkAddress(_splitToLimbsLE(px3), _splitToLimbsLE(py3)), vm.addr(3));
+        assertEq(ZkqesVerifier.toPkAddress(_splitToLimbsLE(px3), _splitToLimbsLE(py3)), vm.addr(3));
     }
 }

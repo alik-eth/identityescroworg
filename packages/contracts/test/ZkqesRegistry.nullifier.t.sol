@@ -2,8 +2,8 @@
 pragma solidity 0.8.24;
 
 import { Test } from "forge-std/Test.sol";
-import { QKBRegistry } from "../src/QKBRegistry.sol";
-import { QKBVerifierV2, IGroth16VerifierV2 } from "../src/QKBVerifierV2.sol";
+import { ZkqesRegistry } from "../src/ZkqesRegistry.sol";
+import { ZkqesVerifierV2, IGroth16VerifierV2 } from "../src/ZkqesVerifierV2.sol";
 import { DeclarationHashes } from "../src/constants/DeclarationHashes.sol";
 import { StubGroth16Verifier } from "../src/verifier/StubGroth16Verifier.sol";
 
@@ -12,8 +12,8 @@ import { StubGroth16Verifier } from "../src/verifier/StubGroth16Verifier.sol";
 ///         - Storage: usedNullifiers + nullifierToPk written on success.
 ///         - Revocation: admin-only, requires non-zero reasonHash, flips
 ///           isActiveAt from true to false for the mapped binding.
-contract QKBRegistryNullifierTest is Test {
-    QKBRegistry internal registry;
+contract ZkqesRegistryNullifierTest is Test {
+    ZkqesRegistry internal registry;
     StubGroth16Verifier internal rsa;
     StubGroth16Verifier internal ecdsa;
 
@@ -38,7 +38,7 @@ contract QKBRegistryNullifierTest is Test {
     function setUp() public {
         rsa = new StubGroth16Verifier();
         ecdsa = new StubGroth16Verifier();
-        registry = new QKBRegistry(
+        registry = new ZkqesRegistry(
             IGroth16VerifierV2(address(rsa)),
             IGroth16VerifierV2(address(ecdsa)),
             INITIAL_ROOT,
@@ -54,7 +54,7 @@ contract QKBRegistryNullifierTest is Test {
         out[3] = (v >> 192) & type(uint64).max;
     }
 
-    function _inputsFor(uint256 x, uint256 y, bytes32 nullifier) internal view returns (QKBVerifierV2.Inputs memory i) {
+    function _inputsFor(uint256 x, uint256 y, bytes32 nullifier) internal view returns (ZkqesVerifierV2.Inputs memory i) {
         i.pkX = _splitToLimbsLE(x);
         i.pkY = _splitToLimbsLE(y);
         i.ctxHash = CTX_HASH;
@@ -65,12 +65,12 @@ contract QKBRegistryNullifierTest is Test {
         i.nullifier = nullifier;
     }
 
-    function _proof() internal pure returns (QKBVerifierV2.Proof memory p) {}
+    function _proof() internal pure returns (ZkqesVerifierV2.Proof memory p) {}
 
     // ---- uniqueness + storage ------------------------------------------------
 
     function test_register_storesUsedNullifierAndMapping() public {
-        QKBVerifierV2.Inputs memory i = _inputsFor(GX, GY, NULLIFIER_A);
+        ZkqesVerifierV2.Inputs memory i = _inputsFor(GX, GY, NULLIFIER_A);
         registry.register(_proof(), i);
 
         assertTrue(registry.usedNullifiers(NULLIFIER_A));
@@ -84,15 +84,15 @@ contract QKBRegistryNullifierTest is Test {
         // Second Holder uses a fresh pk (priv=2) but submits the SAME
         // nullifier — simulating a Sybil attempt by the same cert subject
         // against the same ctxHash. Must revert even though the pk is new.
-        QKBVerifierV2.Inputs memory i2 = _inputsFor(GX2, GY2, NULLIFIER_A);
-        vm.expectRevert(QKBRegistry.NullifierUsed.selector);
+        ZkqesVerifierV2.Inputs memory i2 = _inputsFor(GX2, GY2, NULLIFIER_A);
+        vm.expectRevert(ZkqesRegistry.NullifierUsed.selector);
         registry.register(_proof(), i2);
     }
 
     function test_register_differentNullifierSamePkStillRevertsOnAlreadyBound() public {
         // Complementary sanity: pk uniqueness still enforced independently.
         registry.register(_proof(), _inputsFor(GX, GY, NULLIFIER_A));
-        vm.expectRevert(QKBRegistry.AlreadyBound.selector);
+        vm.expectRevert(ZkqesRegistry.AlreadyBound.selector);
         registry.register(_proof(), _inputsFor(GX, GY, NULLIFIER_B));
     }
 
@@ -101,20 +101,20 @@ contract QKBRegistryNullifierTest is Test {
     function test_revokeNullifier_onlyAdmin() public {
         registry.register(_proof(), _inputsFor(GX, GY, NULLIFIER_A));
         vm.prank(ALICE);
-        vm.expectRevert(QKBRegistry.NotAdmin.selector);
+        vm.expectRevert(ZkqesRegistry.NotAdmin.selector);
         registry.revokeNullifier(NULLIFIER_A, REASON);
     }
 
     function test_revokeNullifier_unknownReverts() public {
         vm.prank(ADMIN);
-        vm.expectRevert(QKBRegistry.UnknownNullifier.selector);
+        vm.expectRevert(ZkqesRegistry.UnknownNullifier.selector);
         registry.revokeNullifier(NULLIFIER_A, REASON);
     }
 
     function test_revokeNullifier_zeroReasonReverts() public {
         registry.register(_proof(), _inputsFor(GX, GY, NULLIFIER_A));
         vm.prank(ADMIN);
-        vm.expectRevert(QKBRegistry.ZeroAddress.selector);
+        vm.expectRevert(ZkqesRegistry.ZeroAddress.selector);
         registry.revokeNullifier(NULLIFIER_A, bytes32(0));
     }
 
@@ -123,7 +123,7 @@ contract QKBRegistryNullifierTest is Test {
         vm.prank(ADMIN);
         registry.revokeNullifier(NULLIFIER_A, REASON);
         vm.prank(ADMIN);
-        vm.expectRevert(QKBRegistry.NullifierAlreadyRevoked.selector);
+        vm.expectRevert(ZkqesRegistry.NullifierAlreadyRevoked.selector);
         registry.revokeNullifier(NULLIFIER_A, REASON);
     }
 

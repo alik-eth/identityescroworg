@@ -2,7 +2,7 @@
 pragma solidity 0.8.24;
 
 import {Test} from "forge-std/Test.sol";
-import {QKBRegistryV5, IGroth16VerifierV5_1} from "../src/QKBRegistryV5.sol";
+import {ZkqesRegistryV5, IGroth16VerifierV5_1} from "../src/ZkqesRegistryV5.sol";
 import {Groth16VerifierV5_1Placeholder} from "../src/Groth16VerifierV5_1Placeholder.sol";
 import {P256Verify} from "../src/libs/P256Verify.sol";
 import {Poseidon} from "../src/libs/Poseidon.sol";
@@ -18,8 +18,8 @@ import {Poseidon} from "../src/libs/Poseidon.sol";
 ///     happy-path tests assert that register() does NOT revert with
 ///     BadProof when the verifier accepts. They will be promoted to
 ///     full-state-assertion tests in §6.7.
-contract QKBRegistryV5RegisterTest is Test {
-    QKBRegistryV5 internal registry;
+contract ZkqesRegistryV5RegisterTest is Test {
+    ZkqesRegistryV5 internal registry;
     Groth16VerifierV5_1Placeholder internal verifier;
 
     address internal admin = address(0xA1);
@@ -80,7 +80,7 @@ contract QKBRegistryV5RegisterTest is Test {
         // exercised against meaningful arithmetic (block.timestamp - 1 ≫ 0).
         vm.warp(2_000_000_000); // ~2033-05-18, well past current
         verifier = new Groth16VerifierV5_1Placeholder();
-        registry = new QKBRegistryV5(
+        registry = new ZkqesRegistryV5(
             IGroth16VerifierV5_1(address(verifier)),
             admin,
             initialTrustRoot,
@@ -210,15 +210,15 @@ contract QKBRegistryV5RegisterTest is Test {
     /// inspect their respective fields, so any well-formed values work
     /// for §6.2 tests. Each subsequent gate test will tweak the relevant
     /// field to trigger that gate's revert path.
-    function _baselineProof() internal pure returns (QKBRegistryV5.Groth16Proof memory) {
-        return QKBRegistryV5.Groth16Proof({
+    function _baselineProof() internal pure returns (ZkqesRegistryV5.Groth16Proof memory) {
+        return ZkqesRegistryV5.Groth16Proof({
             a: [uint256(1), uint256(2)],
             b: [[uint256(3), uint256(4)], [uint256(5), uint256(6)]],
             c: [uint256(7), uint256(8)]
         });
     }
 
-    function _baselineSignals(address sender) internal view returns (QKBRegistryV5.PublicSignals memory) {
+    function _baselineSignals(address sender) internal view returns (ZkqesRegistryV5.PublicSignals memory) {
         // Hi/Lo split of sha256(BASELINE_SIGNED_ATTRS) — Hi = top 16 bytes,
         // Lo = bottom 16 bytes (the V5 convention for fitting a 256-bit
         // hash into two BN254 field elements). This matches what Gate 2a
@@ -228,10 +228,10 @@ contract QKBRegistryV5RegisterTest is Test {
         // to identityCommitment AND rotationNewWallet to msgSender. Default
         // identityCommitment / identityFingerprint are arbitrary non-zero
         // sentinels — sufficient for Gate 1-4 tests; V5.1 register tests in
-        // QKBRegistryV5_1.t.sol exercise the new mappings explicitly.
+        // ZkqesRegistryV5_1.t.sol exercise the new mappings explicitly.
         uint256 baselineFp     = uint256(keccak256(abi.encodePacked("v51-test-fp", sender)));
         uint256 baselineCommit = uint256(keccak256(abi.encodePacked("v51-test-commit", sender)));
-        return QKBRegistryV5.PublicSignals({
+        return ZkqesRegistryV5.PublicSignals({
             msgSender:             uint256(uint160(sender)),
             // block.timestamp - 1 second so the binding is recent (well
             // within MAX_BINDING_AGE = 1 hour) but not future-dated.
@@ -264,8 +264,8 @@ contract QKBRegistryV5RegisterTest is Test {
     }
 
     function _callRegister(
-        QKBRegistryV5.Groth16Proof memory proof,
-        QKBRegistryV5.PublicSignals memory sig
+        ZkqesRegistryV5.Groth16Proof memory proof,
+        ZkqesRegistryV5.PublicSignals memory sig
     ) internal {
         bytes32[2] memory leafSig;
         bytes32[2] memory intSig;
@@ -283,8 +283,8 @@ contract QKBRegistryV5RegisterTest is Test {
 
     function _callRegisterAs(
         address sender,
-        QKBRegistryV5.Groth16Proof memory proof,
-        QKBRegistryV5.PublicSignals memory sig
+        ZkqesRegistryV5.Groth16Proof memory proof,
+        ZkqesRegistryV5.PublicSignals memory sig
     ) internal {
         bytes32[2] memory leafSig;
         bytes32[2] memory intSig;
@@ -301,8 +301,8 @@ contract QKBRegistryV5RegisterTest is Test {
     /* ===== Gate 1 — Groth16 verify ===== */
 
     function test_register_callsGroth16VerifierWithCorrectInputArray() public {
-        QKBRegistryV5.Groth16Proof memory proof = _baselineProof();
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.Groth16Proof memory proof = _baselineProof();
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
 
         // The 19-signal input array packed by register() per V5.1 spec /
         // orchestration §1.1. Indices [0..13] preserve V5 semantics; [14..18]
@@ -338,8 +338,8 @@ contract QKBRegistryV5RegisterTest is Test {
     }
 
     function test_register_revertsBadProof_whenVerifierReturnsFalse() public {
-        QKBRegistryV5.Groth16Proof memory proof = _baselineProof();
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.Groth16Proof memory proof = _baselineProof();
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
 
         // Mock the verifier to reject any verifyProof call.
         vm.mockCall(
@@ -348,7 +348,7 @@ contract QKBRegistryV5RegisterTest is Test {
             abi.encode(false)
         );
 
-        vm.expectRevert(QKBRegistryV5.BadProof.selector);
+        vm.expectRevert(ZkqesRegistryV5.BadProof.selector);
         _callRegister(proof, sig);
     }
 
@@ -359,8 +359,8 @@ contract QKBRegistryV5RegisterTest is Test {
         // land, this test continues to pass because baseline calldata is
         // designed not to trip those gates either (until their dedicated
         // negative tests configure tampered values).
-        QKBRegistryV5.Groth16Proof memory proof = _baselineProof();
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.Groth16Proof memory proof = _baselineProof();
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
         _callRegister(proof, sig); // does not revert
     }
 
@@ -377,7 +377,7 @@ contract QKBRegistryV5RegisterTest is Test {
     /// that the exact array reaches the verifier — index drift would show
     /// up as a calldata mismatch on the expectCall.
     function test_register_publicSignalLayout_matchesSpec_v5_section_0_1() public {
-        QKBRegistryV5.Groth16Proof memory proof = _baselineProof();
+        ZkqesRegistryV5.Groth16Proof memory proof = _baselineProof();
         // Sentinels 1001..1018 in slots [1..15] + [17..18] (slot [0] =
         // uint160(holder); slot [16] = 0 to satisfy the V5.1 register-mode
         // gate). Any index drift in the packing surfaces as a value
@@ -385,7 +385,7 @@ contract QKBRegistryV5RegisterTest is Test {
         // to revert at Gate 2a (BadSignedAttrsHi) because the sentinels
         // don't match the on-chain-derived values — but Gate 1 runs first,
         // so vm.expectCall still records the verifier call before the revert.
-        QKBRegistryV5.PublicSignals memory sig = QKBRegistryV5.PublicSignals({
+        ZkqesRegistryV5.PublicSignals memory sig = ZkqesRegistryV5.PublicSignals({
             msgSender:             uint256(uint160(holder)),
             timestamp:             1001,
             nullifier:             1002,
@@ -436,37 +436,37 @@ contract QKBRegistryV5RegisterTest is Test {
         // sha256(BASELINE_SIGNED_ATTRS) high half. We catch the revert so
         // vm.expectCall's post-test verification can still observe the
         // earlier Gate 1 call.
-        vm.expectRevert(QKBRegistryV5.BadSignedAttrsHi.selector);
+        vm.expectRevert(ZkqesRegistryV5.BadSignedAttrsHi.selector);
         _callRegister(proof, sig);
     }
 
     /* ===== Gate 2a — bind proof commits to calldata ===== */
 
     function test_register_revertsBadSignedAttrsHi_whenHiTampered() public {
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
         sig.signedAttrsHashHi ^= 1; // flip lowest bit of Hi half
-        vm.expectRevert(QKBRegistryV5.BadSignedAttrsHi.selector);
+        vm.expectRevert(ZkqesRegistryV5.BadSignedAttrsHi.selector);
         _callRegister(_baselineProof(), sig);
     }
 
     function test_register_revertsBadSignedAttrsLo_whenLoTampered() public {
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
         sig.signedAttrsHashLo ^= 1;
-        vm.expectRevert(QKBRegistryV5.BadSignedAttrsLo.selector);
+        vm.expectRevert(ZkqesRegistryV5.BadSignedAttrsLo.selector);
         _callRegister(_baselineProof(), sig);
     }
 
     function test_register_revertsBadLeafSpki_whenLeafCommitTampered() public {
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
         sig.leafSpkiCommit ^= 1;
-        vm.expectRevert(QKBRegistryV5.BadLeafSpki.selector);
+        vm.expectRevert(ZkqesRegistryV5.BadLeafSpki.selector);
         _callRegister(_baselineProof(), sig);
     }
 
     function test_register_revertsBadIntSpki_whenIntCommitTampered() public {
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
         sig.intSpkiCommit ^= 1;
-        vm.expectRevert(QKBRegistryV5.BadIntSpki.selector);
+        vm.expectRevert(ZkqesRegistryV5.BadIntSpki.selector);
         _callRegister(_baselineProof(), sig);
     }
 
@@ -477,9 +477,9 @@ contract QKBRegistryV5RegisterTest is Test {
     /// — but Gate 2b checks them in order (leaf first), so we observe
     /// BadLeafSig.
     function test_register_revertsBadLeafSig_whenP256Rejects() public {
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
         _mockP256RejectAll();
-        vm.expectRevert(QKBRegistryV5.BadLeafSig.selector);
+        vm.expectRevert(ZkqesRegistryV5.BadLeafSig.selector);
         _callRegister(_baselineProof(), sig);
     }
 
@@ -500,7 +500,7 @@ contract QKBRegistryV5RegisterTest is Test {
     /// the broad accept mock, then add a narrow accept mock keyed on the
     /// leaf-call's input.
     function test_register_revertsBadIntSig_whenIntP256Rejects_butLeafAccepts() public {
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
 
         // Override the broad accept-all mock with an accept-only-for-leaf
         // mock, and a reject-everything-else fallback. We don't have a
@@ -526,14 +526,14 @@ contract QKBRegistryV5RegisterTest is Test {
         // Narrow mock — only the leaf-call's 160 bytes flip to accept.
         vm.mockCall(P256_PRECOMPILE, leafInput, abi.encode(uint256(1)));
 
-        vm.expectRevert(QKBRegistryV5.BadIntSig.selector);
+        vm.expectRevert(ZkqesRegistryV5.BadIntSig.selector);
         _callRegister(_baselineProof(), sig);
     }
 
     /// Sanity: verifyWithSpki is being called at all. expectCall shows
     /// the staticcall reaches 0x100 with the right shape (160-byte input).
     function test_register_callsP256Precompile_forLeafSignature() public {
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
         bytes32 saHash = sha256(BASELINE_SIGNED_ATTRS);
         bytes32 leafX;
         bytes32 leafY;
@@ -552,14 +552,14 @@ contract QKBRegistryV5RegisterTest is Test {
     /// Tampering the trustMerklePath causes the recomputed root to differ
     /// from trustedListRoot → BadTrustList.
     function test_register_revertsBadTrustList_whenPathTampered() public {
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
         bytes32[2] memory leafSig;
         bytes32[2] memory intSig;
         bytes32[16] memory tamperedPath = baselineTrustPath;
         tamperedPath[0] = bytes32(uint256(tamperedPath[0]) ^ 1);
         bytes32[16] memory policyPath;
 
-        vm.expectRevert(QKBRegistryV5.BadTrustList.selector);
+        vm.expectRevert(ZkqesRegistryV5.BadTrustList.selector);
         registry.register(
             _baselineProof(), sig,
             leafSpki, intSpki, BASELINE_SIGNED_ATTRS,
@@ -572,12 +572,12 @@ contract QKBRegistryV5RegisterTest is Test {
     /// pathBits = 1 (current node = right at level 0) instead of 0 (left)
     /// reorders the first hash, root differs → BadTrustList.
     function test_register_revertsBadTrustList_whenPathBitsFlipped() public {
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
         bytes32[2] memory leafSig;
         bytes32[2] memory intSig;
         bytes32[16] memory policyPath;
 
-        vm.expectRevert(QKBRegistryV5.BadTrustList.selector);
+        vm.expectRevert(ZkqesRegistryV5.BadTrustList.selector);
         registry.register(
             _baselineProof(), sig,
             leafSpki, intSpki, BASELINE_SIGNED_ATTRS,
@@ -591,10 +591,10 @@ contract QKBRegistryV5RegisterTest is Test {
     /// still claims membership in the old tree → BadTrustList. This is the
     /// "registry was rotated mid-flight" scenario.
     function test_register_revertsBadTrustList_whenRootRotated() public {
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
         vm.prank(admin);
         registry.setTrustedListRoot(bytes32(uint256(0xCAFE)));
-        vm.expectRevert(QKBRegistryV5.BadTrustList.selector);
+        vm.expectRevert(ZkqesRegistryV5.BadTrustList.selector);
         _callRegister(_baselineProof(), sig);
     }
 
@@ -603,22 +603,22 @@ contract QKBRegistryV5RegisterTest is Test {
     /// SpkiCommit(intSpki). This confirms Gate 3 and Gate 2a both watch
     /// intSpkiCommit, with Gate 2a (closer to the proof) catching first.
     function test_intSpkiCommit_tamper_caught_by_gate2a_not_gate3() public {
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
         sig.intSpkiCommit = uint256(0xFEED);
-        vm.expectRevert(QKBRegistryV5.BadIntSpki.selector); // not BadTrustList
+        vm.expectRevert(ZkqesRegistryV5.BadIntSpki.selector); // not BadTrustList
         _callRegister(_baselineProof(), sig);
     }
 
     /* ===== Gate 4 — policy-list Merkle membership ===== */
 
     function test_register_revertsBadPolicy_whenPathTampered() public {
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
         bytes32[2] memory leafSig;
         bytes32[2] memory intSig;
         bytes32[16] memory tamperedPolicy = baselinePolicyPath;
         tamperedPolicy[0] = bytes32(uint256(tamperedPolicy[0]) ^ 1);
 
-        vm.expectRevert(QKBRegistryV5.BadPolicy.selector);
+        vm.expectRevert(ZkqesRegistryV5.BadPolicy.selector);
         registry.register(
             _baselineProof(), sig,
             leafSpki, intSpki, BASELINE_SIGNED_ATTRS,
@@ -629,17 +629,17 @@ contract QKBRegistryV5RegisterTest is Test {
     }
 
     function test_register_revertsBadPolicy_whenLeafHashTampered() public {
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
         sig.policyLeafHash ^= 1;
-        vm.expectRevert(QKBRegistryV5.BadPolicy.selector);
+        vm.expectRevert(ZkqesRegistryV5.BadPolicy.selector);
         _callRegister(_baselineProof(), sig);
     }
 
     function test_register_revertsBadPolicy_whenRootRotated() public {
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
         vm.prank(admin);
         registry.setPolicyRoot(bytes32(uint256(0xDEADBEEF)));
-        vm.expectRevert(QKBRegistryV5.BadPolicy.selector);
+        vm.expectRevert(ZkqesRegistryV5.BadPolicy.selector);
         _callRegister(_baselineProof(), sig);
     }
 
@@ -648,13 +648,13 @@ contract QKBRegistryV5RegisterTest is Test {
     /// vice versa (valid trust + wrong policy → BadPolicy). Earlier
     /// Gate 3 negatives cover the first; this confirms the second.
     function test_register_revertsBadPolicy_whenTrustValidButPolicyInvalid() public {
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
         bytes32[2] memory leafSig;
         bytes32[2] memory intSig;
         bytes32[16] memory tamperedPolicy = baselinePolicyPath;
         tamperedPolicy[5] = bytes32(uint256(tamperedPolicy[5]) ^ 1);
 
-        vm.expectRevert(QKBRegistryV5.BadPolicy.selector);
+        vm.expectRevert(ZkqesRegistryV5.BadPolicy.selector);
         registry.register(
             _baselineProof(), sig,
             leafSpki, intSpki, BASELINE_SIGNED_ATTRS,
@@ -667,39 +667,39 @@ contract QKBRegistryV5RegisterTest is Test {
     /* ===== Gate 5 — timing + sender + replay + state write ===== */
 
     function test_register_revertsFutureBinding_whenTimestampInFuture() public {
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
         sig.timestamp = block.timestamp + 1;
-        vm.expectRevert(QKBRegistryV5.FutureBinding.selector);
+        vm.expectRevert(ZkqesRegistryV5.FutureBinding.selector);
         _callRegister(_baselineProof(), sig);
     }
 
     function test_register_revertsStaleBinding_whenAgeExceedsMax() public {
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
         // MAX_BINDING_AGE = 1 hour. Age = MAX + 1 → stale.
         sig.timestamp = block.timestamp - registry.MAX_BINDING_AGE() - 1;
-        vm.expectRevert(QKBRegistryV5.StaleBinding.selector);
+        vm.expectRevert(ZkqesRegistryV5.StaleBinding.selector);
         _callRegister(_baselineProof(), sig);
     }
 
     function test_register_acceptsTimestamp_atMaxAgeBoundary() public {
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
         // Age = exactly MAX_BINDING_AGE → allowed (boundary inclusive).
         sig.timestamp = block.timestamp - registry.MAX_BINDING_AGE();
         _callRegister(_baselineProof(), sig); // does not revert
     }
 
     function test_register_revertsBadSender_whenMsgSenderMismatch() public {
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
         // msgSender in sig is uint160(holder); call from a different address.
         address attacker = address(0xBAD);
-        vm.expectRevert(QKBRegistryV5.BadSender.selector);
+        vm.expectRevert(ZkqesRegistryV5.BadSender.selector);
         _callRegisterAs(attacker, _baselineProof(), sig);
     }
 
     /* ===== Gate 5 — replay (per-holder + per-nullifier) ===== */
 
     function test_register_revertsCtxAlreadyUsed_whenSameWalletSameCtx() public {
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
         _callRegister(_baselineProof(), sig); // first registration succeeds
 
         // V5.1: second attempt by the SAME wallet against the SAME ctx
@@ -709,7 +709,7 @@ contract QKBRegistryV5RegisterTest is Test {
         //  nullifier" — moved to the first-claim branch only; same-wallet
         //  re-registration is now discriminated by ctx.)
         sig.nullifier = uint256(0xFEED);
-        vm.expectRevert(QKBRegistryV5.CtxAlreadyUsed.selector);
+        vm.expectRevert(ZkqesRegistryV5.CtxAlreadyUsed.selector);
         _callRegister(_baselineProof(), sig);
     }
 
@@ -717,12 +717,12 @@ contract QKBRegistryV5RegisterTest is Test {
     // collision is no longer possible because the V5.1 nullifier is
     // Poseidon₂(walletSecret, ctxHash) and walletSecret is wallet-bound.
     // Cross-wallet anti-Sybil is now enforced by usedCtx[fp][ctxKey],
-    // exercised in QKBRegistryV5_1.t.sol (Task 2).
+    // exercised in ZkqesRegistryV5_1.t.sol (Task 2).
 
     /* ===== Gate 5 — success path: state writes + event ===== */
 
     function test_register_writesStateAndEmitsRegistered() public {
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
 
         // Pre-conditions: zero state.
         assertEq(registry.nullifierOf(holder), bytes32(0));
@@ -730,7 +730,7 @@ contract QKBRegistryV5RegisterTest is Test {
 
         // Expect Registered(holder, nullifier, timestamp).
         vm.expectEmit(true, true, false, true);
-        emit QKBRegistryV5.Registered(holder, bytes32(sig.nullifier), sig.timestamp);
+        emit ZkqesRegistryV5.Registered(holder, bytes32(sig.nullifier), sig.timestamp);
 
         _callRegister(_baselineProof(), sig);
 
@@ -742,7 +742,7 @@ contract QKBRegistryV5RegisterTest is Test {
     /* ===== End-to-end happy path with all 5 gates green + gas budget ===== */
 
     function test_register_endToEnd_allGatesGreen_within_gasBudget() public {
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
 
         uint256 gasBefore = gasleft();
         _callRegister(_baselineProof(), sig);
@@ -764,7 +764,7 @@ contract QKBRegistryV5RegisterTest is Test {
     /// value) should also fail Gate 2a — the on-chain SpkiCommit of the
     /// tampered bytes won't match the (untampered) commit signal.
     function test_register_revertsBadLeafSpki_whenLeafBytesTampered() public {
-        QKBRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
+        ZkqesRegistryV5.PublicSignals memory sig = _baselineSignals(holder);
         bytes memory tamperedLeaf = vm.readFileBinary(
             "./packages/contracts/test/fixtures/v5/admin-ecdsa/leaf-spki.bin"
         );
@@ -777,7 +777,7 @@ contract QKBRegistryV5RegisterTest is Test {
         bytes32[2] memory intSig;
         bytes32[16] memory trustPath;
         bytes32[16] memory policyPath;
-        vm.expectRevert(QKBRegistryV5.BadLeafSpki.selector);
+        vm.expectRevert(ZkqesRegistryV5.BadLeafSpki.selector);
         registry.register(
             _baselineProof(), sig,
             tamperedLeaf, intSpki, BASELINE_SIGNED_ATTRS,

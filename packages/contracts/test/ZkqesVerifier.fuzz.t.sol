@@ -2,17 +2,17 @@
 pragma solidity 0.8.24;
 
 import { Test } from "forge-std/Test.sol";
-import { QKBVerifierV2 } from "../src/QKBVerifierV2.sol";
+import { ZkqesVerifierV2 } from "../src/ZkqesVerifierV2.sol";
 
-/// @notice Pinned-vector "fuzz" for QKBVerifierV2.toPkAddress.
+/// @notice Pinned-vector "fuzz" for ZkqesVerifierV2.toPkAddress.
 ///         Foundry exposes vm.addr(priv) for the Ethereum address but not the
 ///         underlying secp256k1 affine coordinates, so a true Solidity-side
-///         fuzzer cannot derive the (x, y) input QKBVerifierV2 needs. We use a
+///         fuzzer cannot derive the (x, y) input ZkqesVerifierV2 needs. We use a
 ///         pinned table of (priv, x, y) vectors generated offline with
 ///         python's `ecdsa` library and assert toPkAddress(LE-limbs of x,y)
 ///         equals vm.addr(priv) for each. forge-std treats this as a single
 ///         test that exercises 18 independent ground-truth points.
-contract QKBVerifierVectorsTest is Test {
+contract ZkqesVerifierVectorsTest is Test {
     struct Vec {
         uint256 priv;
         uint256 x;
@@ -51,7 +51,7 @@ contract QKBVerifierVectorsTest is Test {
     function test_toPkAddress_matchesVmAddr_acrossPinnedVectors() public view {
         Vec[18] memory vs = _vectors();
         for (uint256 idx = 0; idx < vs.length; ++idx) {
-            address derived = QKBVerifierV2.toPkAddress(_splitLE(vs[idx].x), _splitLE(vs[idx].y));
+            address derived = ZkqesVerifierV2.toPkAddress(_splitLE(vs[idx].x), _splitLE(vs[idx].y));
             address expected = vm.addr(vs[idx].priv);
             assertEq(derived, expected, "toPkAddress vs vm.addr mismatch");
         }

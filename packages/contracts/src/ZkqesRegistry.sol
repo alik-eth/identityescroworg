@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity 0.8.24;
 
-import { QKBVerifierV2, IGroth16VerifierV2 } from "./QKBVerifierV2.sol";
+import { ZkqesVerifierV2, IGroth16VerifierV2 } from "./ZkqesVerifierV2.sol";
 import { IRegistryGate } from "./arbitrators/IRegistryGate.sol";
 
 /// @notice Reference register-then-authenticate registry for QKB-bound
@@ -17,7 +17,7 @@ import { IRegistryGate } from "./arbitrators/IRegistryGate.sol";
 ///
 ///         `trustedListRoot` is admin-rotatable state; `register` enforces
 ///         `i.rTL == trustedListRoot` (S0.3 — restored after Phase-1 drop).
-contract QKBRegistry is IRegistryGate {
+contract ZkqesRegistry is IRegistryGate {
     /// @dev Domain string for the `expire` signature digest. Must stay in
     ///      lock-step with `test/helpers/SignatureHelpers.sol::EXPIRE_DOMAIN`.
     string private constant EXPIRE_DOMAIN = "QKB_EXPIRE_V1";
@@ -168,7 +168,7 @@ contract QKBRegistry is IRegistryGate {
     ///         `rsaVerifier` or `ecdsaVerifier` per the restored §2.0
     ///         convention. Unknown tags revert `UnknownAlgorithm`. `i.rTL`
     ///         must equal `trustedListRoot` (S0.3).
-    function register(QKBVerifierV2.Proof calldata p, QKBVerifierV2.Inputs calldata i) external {
+    function register(ZkqesVerifierV2.Proof calldata p, ZkqesVerifierV2.Inputs calldata i) external {
         IGroth16VerifierV2 v;
         if (i.algorithmTag == ALG_RSA) {
             v = rsaVerifier;
@@ -179,12 +179,12 @@ contract QKBRegistry is IRegistryGate {
         }
 
         if (i.rTL != trustedListRoot) revert RootMismatch();
-        if (!QKBVerifierV2.verify(v, p, i)) revert InvalidProof();
+        if (!ZkqesVerifierV2.verify(v, p, i)) revert InvalidProof();
         if (i.timestamp > block.timestamp) revert BindingFromFuture();
         if (block.timestamp > uint256(i.timestamp) + MAX_AGE) revert BindingTooOld();
         if (usedNullifiers[i.nullifier]) revert NullifierUsed();
 
-        address pkAddr = QKBVerifierV2.toPkAddress(i.pkX, i.pkY);
+        address pkAddr = ZkqesVerifierV2.toPkAddress(i.pkX, i.pkY);
         if (bindings[pkAddr].status != Status.NONE) revert AlreadyBound();
 
         usedNullifiers[i.nullifier] = true;
@@ -281,7 +281,7 @@ contract QKBRegistry is IRegistryGate {
     ///         QKB binding. Authorisation is a fresh Phase-1 Groth16 proof
     ///         of the same pk — we re-run the full `register`-style check
     ///         (rTL + nullifier + algorithmTag dispatch + declHash
-    ///         whitelist inside QKBVerifierV2.verify) and then bind the
+    ///         whitelist inside ZkqesVerifierV2.verify) and then bind the
     ///         escrow under `pkAddr = toPkAddress(i.pkX, i.pkY)`.
     ///
     ///         Invariants enforced:
@@ -301,8 +301,8 @@ contract QKBRegistry is IRegistryGate {
         bytes32 escrowId,
         address arbitrator,
         uint64 expiry,
-        QKBVerifierV2.Proof calldata p,
-        QKBVerifierV2.Inputs calldata i
+        ZkqesVerifierV2.Proof calldata p,
+        ZkqesVerifierV2.Inputs calldata i
     ) external {
         if (arbitrator == address(0)) revert ZeroAddress();
         if (expiry <= block.timestamp) revert EscrowExpiryInPast();
@@ -327,8 +327,8 @@ contract QKBRegistry is IRegistryGate {
     ///         reference it to an off-chain justification if needed.
     function revokeEscrow(
         bytes32 reasonHash,
-        QKBVerifierV2.Proof calldata p,
-        QKBVerifierV2.Inputs calldata i
+        ZkqesVerifierV2.Proof calldata p,
+        ZkqesVerifierV2.Inputs calldata i
     ) external {
         address pkAddr = _authorizeBinding(p, i);
         EscrowEntry storage e = escrows[pkAddr];
@@ -380,8 +380,8 @@ contract QKBRegistry is IRegistryGate {
     ///         elapsed — after that the arbitrator's `finalizeRelease`
     ///         claim priority and cancel reverts `WrongState`.
     function cancelReleasePending(
-        QKBVerifierV2.Proof calldata p,
-        QKBVerifierV2.Inputs calldata i
+        ZkqesVerifierV2.Proof calldata p,
+        ZkqesVerifierV2.Inputs calldata i
     ) external {
         address pkAddr = _authorizeBinding(p, i);
         EscrowEntry storage e = escrows[pkAddr];
@@ -414,8 +414,8 @@ contract QKBRegistry is IRegistryGate {
     ///      `register()` performs minus the pk-uniqueness / timestamp-age
     ///      clauses (those apply only to first-time binding).
     function _authorizeBinding(
-        QKBVerifierV2.Proof calldata p,
-        QKBVerifierV2.Inputs calldata i
+        ZkqesVerifierV2.Proof calldata p,
+        ZkqesVerifierV2.Inputs calldata i
     ) internal view returns (address pkAddr) {
         IGroth16VerifierV2 v;
         if (i.algorithmTag == ALG_RSA) {
@@ -426,9 +426,9 @@ contract QKBRegistry is IRegistryGate {
             revert UnknownAlgorithm();
         }
         if (i.rTL != trustedListRoot) revert RootMismatch();
-        if (!QKBVerifierV2.verify(v, p, i)) revert InvalidProof();
+        if (!ZkqesVerifierV2.verify(v, p, i)) revert InvalidProof();
 
-        pkAddr = QKBVerifierV2.toPkAddress(i.pkX, i.pkY);
+        pkAddr = ZkqesVerifierV2.toPkAddress(i.pkX, i.pkY);
         if (bindings[pkAddr].status != Status.ACTIVE) revert NotBound();
     }
 

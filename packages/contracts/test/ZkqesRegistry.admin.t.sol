@@ -2,12 +2,12 @@
 pragma solidity 0.8.24;
 
 import { Test } from "forge-std/Test.sol";
-import { QKBRegistry } from "../src/QKBRegistry.sol";
-import { IGroth16VerifierV2 } from "../src/QKBVerifierV2.sol";
+import { ZkqesRegistry } from "../src/ZkqesRegistry.sol";
+import { IGroth16VerifierV2 } from "../src/ZkqesVerifierV2.sol";
 import { StubGroth16Verifier } from "../src/verifier/StubGroth16Verifier.sol";
 
-contract QKBRegistryAdminTest is Test {
-    QKBRegistry internal registry;
+contract ZkqesRegistryAdminTest is Test {
+    ZkqesRegistry internal registry;
     StubGroth16Verifier internal verifier;
 
     address internal constant ADMIN = address(0xA11CE);
@@ -25,7 +25,7 @@ contract QKBRegistryAdminTest is Test {
         verifier = new StubGroth16Verifier();
         rsa = verifier; // alias for RSA slot
         ecdsa = new StubGroth16Verifier();
-        registry = new QKBRegistry(
+        registry = new ZkqesRegistry(
             IGroth16VerifierV2(address(rsa)),
             IGroth16VerifierV2(address(ecdsa)),
             INITIAL_ROOT,
@@ -41,8 +41,8 @@ contract QKBRegistryAdminTest is Test {
     }
 
     function test_constructor_revertsOnZeroAdmin() public {
-        vm.expectRevert(QKBRegistry.ZeroAddress.selector);
-        new QKBRegistry(
+        vm.expectRevert(ZkqesRegistry.ZeroAddress.selector);
+        new ZkqesRegistry(
             IGroth16VerifierV2(address(rsa)),
             IGroth16VerifierV2(address(ecdsa)),
             INITIAL_ROOT,
@@ -51,8 +51,8 @@ contract QKBRegistryAdminTest is Test {
     }
 
     function test_constructor_revertsOnZeroRsaVerifier() public {
-        vm.expectRevert(QKBRegistry.ZeroAddress.selector);
-        new QKBRegistry(
+        vm.expectRevert(ZkqesRegistry.ZeroAddress.selector);
+        new ZkqesRegistry(
             IGroth16VerifierV2(address(0)),
             IGroth16VerifierV2(address(ecdsa)),
             INITIAL_ROOT,
@@ -61,8 +61,8 @@ contract QKBRegistryAdminTest is Test {
     }
 
     function test_constructor_revertsOnZeroEcdsaVerifier() public {
-        vm.expectRevert(QKBRegistry.ZeroAddress.selector);
-        new QKBRegistry(
+        vm.expectRevert(ZkqesRegistry.ZeroAddress.selector);
+        new ZkqesRegistry(
             IGroth16VerifierV2(address(rsa)),
             IGroth16VerifierV2(address(0)),
             INITIAL_ROOT,
@@ -72,7 +72,7 @@ contract QKBRegistryAdminTest is Test {
 
     function test_updateTrustedListRoot_onlyAdmin() public {
         vm.prank(ALICE);
-        vm.expectRevert(QKBRegistry.NotAdmin.selector);
+        vm.expectRevert(ZkqesRegistry.NotAdmin.selector);
         registry.updateTrustedListRoot(bytes32(uint256(1)));
     }
 
@@ -87,13 +87,13 @@ contract QKBRegistryAdminTest is Test {
 
     function test_setAdmin_onlyAdmin() public {
         vm.prank(ALICE);
-        vm.expectRevert(QKBRegistry.NotAdmin.selector);
+        vm.expectRevert(ZkqesRegistry.NotAdmin.selector);
         registry.setAdmin(ALICE);
     }
 
     function test_setAdmin_revertsOnZero() public {
         vm.prank(ADMIN);
-        vm.expectRevert(QKBRegistry.ZeroAddress.selector);
+        vm.expectRevert(ZkqesRegistry.ZeroAddress.selector);
         registry.setAdmin(address(0));
     }
 
@@ -105,7 +105,7 @@ contract QKBRegistryAdminTest is Test {
         assertEq(registry.admin(), ALICE);
 
         vm.prank(ADMIN);
-        vm.expectRevert(QKBRegistry.NotAdmin.selector);
+        vm.expectRevert(ZkqesRegistry.NotAdmin.selector);
         registry.updateTrustedListRoot(bytes32(uint256(2)));
 
         vm.prank(ALICE);
@@ -116,13 +116,13 @@ contract QKBRegistryAdminTest is Test {
     function test_setRsaVerifier_onlyAdmin() public {
         StubGroth16Verifier newV = new StubGroth16Verifier();
         vm.prank(ALICE);
-        vm.expectRevert(QKBRegistry.NotAdmin.selector);
+        vm.expectRevert(ZkqesRegistry.NotAdmin.selector);
         registry.setRsaVerifier(IGroth16VerifierV2(address(newV)));
     }
 
     function test_setRsaVerifier_revertsOnZero() public {
         vm.prank(ADMIN);
-        vm.expectRevert(QKBRegistry.ZeroAddress.selector);
+        vm.expectRevert(ZkqesRegistry.ZeroAddress.selector);
         registry.setRsaVerifier(IGroth16VerifierV2(address(0)));
     }
 
@@ -138,13 +138,13 @@ contract QKBRegistryAdminTest is Test {
     function test_setEcdsaVerifier_onlyAdmin() public {
         StubGroth16Verifier newV = new StubGroth16Verifier();
         vm.prank(ALICE);
-        vm.expectRevert(QKBRegistry.NotAdmin.selector);
+        vm.expectRevert(ZkqesRegistry.NotAdmin.selector);
         registry.setEcdsaVerifier(IGroth16VerifierV2(address(newV)));
     }
 
     function test_setEcdsaVerifier_revertsOnZero() public {
         vm.prank(ADMIN);
-        vm.expectRevert(QKBRegistry.ZeroAddress.selector);
+        vm.expectRevert(ZkqesRegistry.ZeroAddress.selector);
         registry.setEcdsaVerifier(IGroth16VerifierV2(address(0)));
     }
 

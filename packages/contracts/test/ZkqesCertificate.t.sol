@@ -2,10 +2,10 @@
 pragma solidity 0.8.24;
 
 import "forge-std/Test.sol";
-import { IdentityEscrowNFT } from "../src/IdentityEscrowNFT.sol";
-import { IQKBRegistry }      from "../src/IdentityEscrowNFT.sol";
+import { ZkqesCertificate } from "../src/ZkqesCertificate.sol";
+import { IZkqesRegistry }      from "../src/ZkqesCertificate.sol";
 
-contract MockRegistry is IQKBRegistry {
+contract MockRegistry is IZkqesRegistry {
     mapping(address => bytes32) private _n;
     function set(address holder, bytes32 nullifier) external { _n[holder] = nullifier; }
     function isVerified(address h) external view returns (bool)  { return _n[h] != bytes32(0); }
@@ -13,8 +13,8 @@ contract MockRegistry is IQKBRegistry {
     function trustedListRoot() external pure returns (bytes32) { return bytes32(uint256(0xABC)); }
 }
 
-contract IdentityEscrowNFTTest is Test {
-    IdentityEscrowNFT nft;
+contract ZkqesCertificateTest is Test {
+    ZkqesCertificate nft;
     MockRegistry      registry;
     address constant ALICE = address(0xA11CE);
     address constant BOB   = address(0xB0B);
@@ -22,7 +22,7 @@ contract IdentityEscrowNFTTest is Test {
 
     function setUp() public {
         registry = new MockRegistry();
-        nft = new IdentityEscrowNFT(IQKBRegistry(address(registry)), DEADLINE, "Sepolia");
+        nft = new ZkqesCertificate(IZkqesRegistry(address(registry)), DEADLINE, "Sepolia");
     }
 
     function test_mint_succeedsWhenVerifiedBeforeDeadline() public {
@@ -75,7 +75,7 @@ contract IdentityEscrowNFTTest is Test {
         registry.set(ALICE, n);
         vm.warp(DEADLINE - 1);
         vm.expectEmit(true, true, true, true);
-        emit IdentityEscrowNFT.CertificateMinted(1, ALICE, n, uint64(DEADLINE - 1));
+        emit ZkqesCertificate.CertificateMinted(1, ALICE, n, uint64(DEADLINE - 1));
         vm.prank(ALICE);
         nft.mint();
     }

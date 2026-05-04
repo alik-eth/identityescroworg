@@ -2,7 +2,7 @@
 pragma solidity 0.8.24;
 
 import { Test, console2 } from "forge-std/Test.sol";
-import { QKBRegistryV5_2, IGroth16VerifierV5_2 } from "../../src/QKBRegistryV5_2.sol";
+import { ZkqesRegistryV5_2, IGroth16VerifierV5_2 } from "../../src/ZkqesRegistryV5_2.sol";
 import { Groth16VerifierV5_2Stub } from "../../src/Groth16VerifierV5_2Stub.sol";
 import { P256Verify } from "../../src/libs/P256Verify.sol";
 import { Poseidon } from "../../src/libs/Poseidon.sol";
@@ -27,7 +27,7 @@ import { Poseidon } from "../../src/libs/Poseidon.sol";
 ///           5. Field-by-field PublicSignals struct assignment is REQUIRED
 ///              for V5.2 (22 fields amplify the Yul-IR stack-pressure issue
 ///              that V5.1's 19 fields already triggered — see
-///              QKBRegistryV5_1 commit `04b4a71` and V5.2 commit `c47b5a5`).
+///              ZkqesRegistryV5_1 commit `04b4a71` and V5.2 commit `c47b5a5`).
 ///
 ///         Three measurements (parity with V5.1):
 ///           1. `test_real_tuple_groth16_verify_only_gas` — direct
@@ -59,7 +59,7 @@ import { Poseidon } from "../../src/libs/Poseidon.sol";
 ///         doesn't ship RIP-7212; reachability is regression-checked
 ///         elsewhere via P256PrecompileSmoke.t.sol + probe-eip7212.ts).
 contract RealTupleGasSnapshotV5_2Test is Test {
-    QKBRegistryV5_2 internal registry;
+    ZkqesRegistryV5_2 internal registry;
     Groth16VerifierV5_2Stub internal verifier;
 
     address internal admin = address(0xA1);
@@ -175,7 +175,7 @@ contract RealTupleGasSnapshotV5_2Test is Test {
         // V5.2 timestamp lives at slot [0] (V5.1 was [1]).
         vm.warp(pubInputs[0] + 1);
 
-        registry = new QKBRegistryV5_2(
+        registry = new ZkqesRegistryV5_2(
             IGroth16VerifierV5_2(address(verifier)),
             admin,
             bytes32(uint256(0)), // overwritten below
@@ -225,8 +225,8 @@ contract RealTupleGasSnapshotV5_2Test is Test {
     ///         sha256 + calldata + storage writes (~80K), and the new
     ///         keccak-derive (~5K).
     function test_real_tuple_full_register_gas() public {
-        QKBRegistryV5_2.PublicSignals memory sig = _publicSignalsStruct();
-        QKBRegistryV5_2.Groth16Proof memory proof = QKBRegistryV5_2.Groth16Proof({
+        ZkqesRegistryV5_2.PublicSignals memory sig = _publicSignalsStruct();
+        ZkqesRegistryV5_2.Groth16Proof memory proof = ZkqesRegistryV5_2.Groth16Proof({
             a: pA,
             b: pB,
             c: pC
@@ -339,7 +339,7 @@ contract RealTupleGasSnapshotV5_2Test is Test {
 
     /* ------------ Helpers ------------ */
 
-    /// @dev Off-chain replay of `QKBRegistryV5_2._deriveAddrFromBindingLimbs`.
+    /// @dev Off-chain replay of `ZkqesRegistryV5_2._deriveAddrFromBindingLimbs`.
     ///      Same encoding the contract performs at Gate 2a-prime: limb
     ///      range checks (defense-in-depth, mirrors the
     ///      `BindingPkLimbOutOfRange` revert) → big-endian abi.encodePacked
@@ -361,7 +361,7 @@ contract RealTupleGasSnapshotV5_2Test is Test {
         return address(uint160(uint256(keccak256(pk))));
     }
 
-    function _publicSignalsStruct() internal view returns (QKBRegistryV5_2.PublicSignals memory sig) {
+    function _publicSignalsStruct() internal view returns (ZkqesRegistryV5_2.PublicSignals memory sig) {
         // V5.2 22-field shape. All slots read from the V5.2 ceremony
         // public-sample.json — slots 18..21 are the V5.2 keccak-on-chain
         // bindingPk limb additions (replacing V5.1's in-circuit
@@ -408,7 +408,7 @@ contract RealTupleGasSnapshotV5_2Test is Test {
         }
     }
 
-    /// Mirror of QKBRegistryV5.register.t.sol's _readEmptySubtreeRoots,
+    /// Mirror of ZkqesRegistryV5.register.t.sol's _readEmptySubtreeRoots,
     /// kept private so this test stays self-contained without bleeding
     /// internal helpers across files. (Identical implementation as the
     /// V5.1 RealTupleGasSnapshot; merkle.json is V5-static.)

@@ -3,8 +3,8 @@ pragma solidity 0.8.24;
 
 import { Test, console2 } from "forge-std/Test.sol";
 import { Groth16VerifierV5_1Placeholder } from "../../src/Groth16VerifierV5_1Placeholder.sol";
-import { QKBRegistryV5, IGroth16VerifierV5_1 } from "../../src/QKBRegistryV5.sol";
-import { IdentityEscrowNFT } from "../../src/IdentityEscrowNFT.sol";
+import { ZkqesRegistryV5, IGroth16VerifierV5_1 } from "../../src/ZkqesRegistryV5.sol";
+import { ZkqesCertificate } from "../../src/ZkqesCertificate.sol";
 
 /// @notice CI mirror of `script/DeployV5.s.sol` — replays the same
 ///         constructor sequence the live deploy script uses, so any
@@ -45,17 +45,17 @@ contract DeployV5ForkTest is Test {
     /// Replays the DeployV5.s.sol constructor sequence and asserts wiring.
     function _deployAndAssert() internal returns (
         Groth16VerifierV5_1Placeholder verifier,
-        QKBRegistryV5 registry,
-        IdentityEscrowNFT nft
+        ZkqesRegistryV5 registry,
+        ZkqesCertificate nft
     ) {
         verifier = new Groth16VerifierV5_1Placeholder();
-        registry = new QKBRegistryV5(
+        registry = new ZkqesRegistryV5(
             IGroth16VerifierV5_1(address(verifier)),
             DEV_ADMIN,
             DEV_TRUST,
             DEV_POLICY
         );
-        nft = new IdentityEscrowNFT(registry, DEV_MINT_DEADLINE, DEV_LABEL);
+        nft = new ZkqesCertificate(registry, DEV_MINT_DEADLINE, DEV_LABEL);
 
         // Registry wiring.
         assertEq(registry.admin(), DEV_ADMIN, "registry.admin");
@@ -84,7 +84,7 @@ contract DeployV5ForkTest is Test {
     /* -------- always-on deploy-graph regression -------- */
 
     function test_deploy_local_constructor_sequence() public {
-        (, QKBRegistryV5 registry, ) = _deployAndAssert();
+        (, ZkqesRegistryV5 registry, ) = _deployAndAssert();
         // Surface artifact size for ad-hoc gas/limit tracking.
         console2.log("local: registry codesize", address(registry).code.length);
     }
@@ -113,7 +113,7 @@ contract DeployV5ForkTest is Test {
         console2.log("fork chainid", block.chainid);
         console2.log("fork block", block.number);
 
-        (, QKBRegistryV5 registry, IdentityEscrowNFT nft) = _deployAndAssert();
+        (, ZkqesRegistryV5 registry, ZkqesCertificate nft) = _deployAndAssert();
         console2.log("fork: registry @", address(registry));
         console2.log("fork: nft      @", address(nft));
     }

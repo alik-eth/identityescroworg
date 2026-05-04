@@ -12,7 +12,7 @@ import { LeafVerifierV4_UA_V2 } from "../src/verifiers/LeafVerifierV4_UA_V2.sol"
 ///         unaffected by the M11 hardening.
 ///
 ///         After deploy the admin must rotate it in on the UA
-///         QKBRegistryV4 at 0x4c8541f4Ff16AE2650C4e146587E81eD56A2456C via
+///         ZkqesRegistryV4 at 0x4c8541f4Ff16AE2650C4e146587E81eD56A2456C via
 ///         `setLeafVerifier(<newAddress>)`.
 ///
 ///         Required env:

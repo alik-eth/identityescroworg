@@ -2,18 +2,18 @@
 pragma solidity 0.8.24;
 
 import { Test } from "forge-std/Test.sol";
-import { QKBRegistryV3 } from "../src/QKBRegistryV3.sol";
+import { ZkqesRegistryV3 } from "../src/ZkqesRegistryV3.sol";
 import {
     IGroth16LeafVerifier,
     IGroth16ChainVerifier
-} from "../src/QKBVerifier.sol";
+} from "../src/ZkqesVerifier.sol";
 import {
     StubGroth16LeafVerifier,
     StubGroth16ChainVerifier
 } from "../src/verifiers/dev/StubSplitVerifiers.sol";
 
-contract QKBRegistryV3AdminTest is Test {
-    QKBRegistryV3 internal registry;
+contract ZkqesRegistryV3AdminTest is Test {
+    ZkqesRegistryV3 internal registry;
 
     StubGroth16LeafVerifier  internal rsaLeaf;
     StubGroth16ChainVerifier internal rsaChain;
@@ -38,7 +38,7 @@ contract QKBRegistryV3AdminTest is Test {
         rsaChain   = new StubGroth16ChainVerifier();
         ecdsaLeaf  = new StubGroth16LeafVerifier();
         ecdsaChain = new StubGroth16ChainVerifier();
-        registry   = new QKBRegistryV3(
+        registry   = new ZkqesRegistryV3(
             IGroth16LeafVerifier(address(rsaLeaf)),
             IGroth16ChainVerifier(address(rsaChain)),
             IGroth16LeafVerifier(address(ecdsaLeaf)),
@@ -60,8 +60,8 @@ contract QKBRegistryV3AdminTest is Test {
     }
 
     function test_constructor_revertsOnZeroRsaLeaf() public {
-        vm.expectRevert(QKBRegistryV3.ZeroAddress.selector);
-        new QKBRegistryV3(
+        vm.expectRevert(ZkqesRegistryV3.ZeroAddress.selector);
+        new ZkqesRegistryV3(
             IGroth16LeafVerifier(address(0)),
             IGroth16ChainVerifier(address(rsaChain)),
             IGroth16LeafVerifier(address(ecdsaLeaf)),
@@ -72,8 +72,8 @@ contract QKBRegistryV3AdminTest is Test {
     }
 
     function test_constructor_revertsOnZeroRsaChain() public {
-        vm.expectRevert(QKBRegistryV3.ZeroAddress.selector);
-        new QKBRegistryV3(
+        vm.expectRevert(ZkqesRegistryV3.ZeroAddress.selector);
+        new ZkqesRegistryV3(
             IGroth16LeafVerifier(address(rsaLeaf)),
             IGroth16ChainVerifier(address(0)),
             IGroth16LeafVerifier(address(ecdsaLeaf)),
@@ -84,8 +84,8 @@ contract QKBRegistryV3AdminTest is Test {
     }
 
     function test_constructor_revertsOnZeroEcdsaLeaf() public {
-        vm.expectRevert(QKBRegistryV3.ZeroAddress.selector);
-        new QKBRegistryV3(
+        vm.expectRevert(ZkqesRegistryV3.ZeroAddress.selector);
+        new ZkqesRegistryV3(
             IGroth16LeafVerifier(address(rsaLeaf)),
             IGroth16ChainVerifier(address(rsaChain)),
             IGroth16LeafVerifier(address(0)),
@@ -96,8 +96,8 @@ contract QKBRegistryV3AdminTest is Test {
     }
 
     function test_constructor_revertsOnZeroEcdsaChain() public {
-        vm.expectRevert(QKBRegistryV3.ZeroAddress.selector);
-        new QKBRegistryV3(
+        vm.expectRevert(ZkqesRegistryV3.ZeroAddress.selector);
+        new ZkqesRegistryV3(
             IGroth16LeafVerifier(address(rsaLeaf)),
             IGroth16ChainVerifier(address(rsaChain)),
             IGroth16LeafVerifier(address(ecdsaLeaf)),
@@ -108,8 +108,8 @@ contract QKBRegistryV3AdminTest is Test {
     }
 
     function test_constructor_revertsOnZeroAdmin() public {
-        vm.expectRevert(QKBRegistryV3.ZeroAddress.selector);
-        new QKBRegistryV3(
+        vm.expectRevert(ZkqesRegistryV3.ZeroAddress.selector);
+        new ZkqesRegistryV3(
             IGroth16LeafVerifier(address(rsaLeaf)),
             IGroth16ChainVerifier(address(rsaChain)),
             IGroth16LeafVerifier(address(ecdsaLeaf)),
@@ -123,7 +123,7 @@ contract QKBRegistryV3AdminTest is Test {
 
     function test_updateTrustedListRoot_onlyAdmin() public {
         vm.prank(ALICE);
-        vm.expectRevert(QKBRegistryV3.NotAdmin.selector);
+        vm.expectRevert(ZkqesRegistryV3.NotAdmin.selector);
         registry.updateTrustedListRoot(bytes32(uint256(1)));
     }
 
@@ -140,13 +140,13 @@ contract QKBRegistryV3AdminTest is Test {
 
     function test_setAdmin_onlyAdmin() public {
         vm.prank(ALICE);
-        vm.expectRevert(QKBRegistryV3.NotAdmin.selector);
+        vm.expectRevert(ZkqesRegistryV3.NotAdmin.selector);
         registry.setAdmin(ALICE);
     }
 
     function test_setAdmin_revertsOnZero() public {
         vm.prank(ADMIN);
-        vm.expectRevert(QKBRegistryV3.ZeroAddress.selector);
+        vm.expectRevert(ZkqesRegistryV3.ZeroAddress.selector);
         registry.setAdmin(address(0));
     }
 
@@ -159,7 +159,7 @@ contract QKBRegistryV3AdminTest is Test {
 
         // Old admin no longer authoritative.
         vm.prank(ADMIN);
-        vm.expectRevert(QKBRegistryV3.NotAdmin.selector);
+        vm.expectRevert(ZkqesRegistryV3.NotAdmin.selector);
         registry.updateTrustedListRoot(bytes32(uint256(2)));
 
         // New admin can rotate root.
@@ -173,13 +173,13 @@ contract QKBRegistryV3AdminTest is Test {
     function test_setRsaLeafVerifier_onlyAdmin() public {
         StubGroth16LeafVerifier newV = new StubGroth16LeafVerifier();
         vm.prank(ALICE);
-        vm.expectRevert(QKBRegistryV3.NotAdmin.selector);
+        vm.expectRevert(ZkqesRegistryV3.NotAdmin.selector);
         registry.setRsaLeafVerifier(IGroth16LeafVerifier(address(newV)));
     }
 
     function test_setRsaLeafVerifier_revertsOnZero() public {
         vm.prank(ADMIN);
-        vm.expectRevert(QKBRegistryV3.ZeroAddress.selector);
+        vm.expectRevert(ZkqesRegistryV3.ZeroAddress.selector);
         registry.setRsaLeafVerifier(IGroth16LeafVerifier(address(0)));
     }
 
@@ -197,13 +197,13 @@ contract QKBRegistryV3AdminTest is Test {
     function test_setRsaChainVerifier_onlyAdmin() public {
         StubGroth16ChainVerifier newV = new StubGroth16ChainVerifier();
         vm.prank(ALICE);
-        vm.expectRevert(QKBRegistryV3.NotAdmin.selector);
+        vm.expectRevert(ZkqesRegistryV3.NotAdmin.selector);
         registry.setRsaChainVerifier(IGroth16ChainVerifier(address(newV)));
     }
 
     function test_setRsaChainVerifier_revertsOnZero() public {
         vm.prank(ADMIN);
-        vm.expectRevert(QKBRegistryV3.ZeroAddress.selector);
+        vm.expectRevert(ZkqesRegistryV3.ZeroAddress.selector);
         registry.setRsaChainVerifier(IGroth16ChainVerifier(address(0)));
     }
 
@@ -221,13 +221,13 @@ contract QKBRegistryV3AdminTest is Test {
     function test_setEcdsaLeafVerifier_onlyAdmin() public {
         StubGroth16LeafVerifier newV = new StubGroth16LeafVerifier();
         vm.prank(ALICE);
-        vm.expectRevert(QKBRegistryV3.NotAdmin.selector);
+        vm.expectRevert(ZkqesRegistryV3.NotAdmin.selector);
         registry.setEcdsaLeafVerifier(IGroth16LeafVerifier(address(newV)));
     }
 
     function test_setEcdsaLeafVerifier_revertsOnZero() public {
         vm.prank(ADMIN);
-        vm.expectRevert(QKBRegistryV3.ZeroAddress.selector);
+        vm.expectRevert(ZkqesRegistryV3.ZeroAddress.selector);
         registry.setEcdsaLeafVerifier(IGroth16LeafVerifier(address(0)));
     }
 
@@ -245,13 +245,13 @@ contract QKBRegistryV3AdminTest is Test {
     function test_setEcdsaChainVerifier_onlyAdmin() public {
         StubGroth16ChainVerifier newV = new StubGroth16ChainVerifier();
         vm.prank(ALICE);
-        vm.expectRevert(QKBRegistryV3.NotAdmin.selector);
+        vm.expectRevert(ZkqesRegistryV3.NotAdmin.selector);
         registry.setEcdsaChainVerifier(IGroth16ChainVerifier(address(newV)));
     }
 
     function test_setEcdsaChainVerifier_revertsOnZero() public {
         vm.prank(ADMIN);
-        vm.expectRevert(QKBRegistryV3.ZeroAddress.selector);
+        vm.expectRevert(ZkqesRegistryV3.ZeroAddress.selector);
         registry.setEcdsaChainVerifier(IGroth16ChainVerifier(address(0)));
     }
 

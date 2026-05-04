@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity 0.8.24;
 
-import { QKBRegistryV3 } from "../src/QKBRegistryV3.sol";
-import { QKBVerifier } from "../src/QKBVerifier.sol";
+import { ZkqesRegistryV3 } from "../src/ZkqesRegistryV3.sol";
+import { ZkqesVerifier } from "../src/ZkqesVerifier.sol";
 import { DeclarationHashes } from "../src/constants/DeclarationHashes.sol";
 import { V3Harness } from "./helpers/V3Harness.sol";
 import { SignatureHelpers } from "./helpers/SignatureHelpers.sol";
 
-contract QKBRegistryV3ExpireTest is V3Harness {
+contract ZkqesRegistryV3ExpireTest is V3Harness {
     uint256 internal constant BOUND_PRIV = 1;
 
     event BindingExpired(address indexed pkAddr);
@@ -48,29 +48,29 @@ contract QKBRegistryV3ExpireTest is V3Harness {
         emit BindingExpired(pkAddr);
         registry.expire(pkAddr, sig);
 
-        (QKBRegistryV3.Status status,,, uint64 expiredAt,,,) = registry.bindings(pkAddr);
-        assertEq(uint8(status), uint8(QKBRegistryV3.Status.EXPIRED));
+        (ZkqesRegistryV3.Status status,,, uint64 expiredAt,,,) = registry.bindings(pkAddr);
+        assertEq(uint8(status), uint8(ZkqesRegistryV3.Status.EXPIRED));
         assertEq(expiredAt, uint64(block.timestamp));
     }
 
     function test_expire_revertsOnWrongSigner() public {
         address pkAddr = _registerG();
         bytes memory sig = _signExpire(2, pkAddr, _boundAt(pkAddr));
-        vm.expectRevert(QKBRegistryV3.BadExpireSig.selector);
+        vm.expectRevert(ZkqesRegistryV3.BadExpireSig.selector);
         registry.expire(pkAddr, sig);
     }
 
     function test_expire_revertsOnWrongBoundAtInDigest() public {
         address pkAddr = _registerG();
         bytes memory sig = _signExpire(BOUND_PRIV, pkAddr, _boundAt(pkAddr) + 1);
-        vm.expectRevert(QKBRegistryV3.BadExpireSig.selector);
+        vm.expectRevert(ZkqesRegistryV3.BadExpireSig.selector);
         registry.expire(pkAddr, sig);
     }
 
     function test_expire_revertsOnNotBound() public {
         address pkAddr = vm.addr(BOUND_PRIV);
         bytes memory sig = _signExpire(BOUND_PRIV, pkAddr, uint64(block.timestamp));
-        vm.expectRevert(QKBRegistryV3.NotBound.selector);
+        vm.expectRevert(ZkqesRegistryV3.NotBound.selector);
         registry.expire(pkAddr, sig);
     }
 
@@ -79,7 +79,7 @@ contract QKBRegistryV3ExpireTest is V3Harness {
         address pkAddr = _registerG();
         bytes memory sig = _signExpire(BOUND_PRIV, pkAddr, _boundAt(pkAddr));
         registry.expire(pkAddr, sig);
-        vm.expectRevert(QKBRegistryV3.NotBound.selector);
+        vm.expectRevert(ZkqesRegistryV3.NotBound.selector);
         registry.expire(pkAddr, sig);
     }
 }

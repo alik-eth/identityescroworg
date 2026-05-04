@@ -4,8 +4,8 @@ pragma solidity 0.8.24;
 import { Script } from "forge-std/Script.sol";
 import { console2 } from "forge-std/console2.sol";
 
-import { QKBGroth16VerifierEcdsaLeaf }  from "../src/verifiers/QKBGroth16VerifierEcdsaLeaf.sol";
-import { QKBGroth16VerifierEcdsaChain } from "../src/verifiers/QKBGroth16VerifierEcdsaChain.sol";
+import { ZkqesGroth16VerifierEcdsaLeaf }  from "../src/verifiers/ZkqesGroth16VerifierEcdsaLeaf.sol";
+import { ZkqesGroth16VerifierEcdsaChain } from "../src/verifiers/ZkqesGroth16VerifierEcdsaChain.sol";
 
 /// @notice Deploys the two REAL ECDSA Groth16 verifiers emitted by the
 ///         split-proof ceremony (2026-04-19). Deploy BEFORE
@@ -46,13 +46,13 @@ contract DeployEcdsaVerifiers is Script {
 
         vm.startBroadcast(adminPriv);
 
-        leafVerifier  = address(new QKBGroth16VerifierEcdsaLeaf());
-        chainVerifier = address(new QKBGroth16VerifierEcdsaChain());
+        leafVerifier  = address(new ZkqesGroth16VerifierEcdsaLeaf());
+        chainVerifier = address(new ZkqesGroth16VerifierEcdsaChain());
 
         vm.stopBroadcast();
 
-        console2.log("QKBGroth16VerifierEcdsaLeaf :", leafVerifier);
-        console2.log("QKBGroth16VerifierEcdsaChain:", chainVerifier);
+        console2.log("ZkqesGroth16VerifierEcdsaLeaf :", leafVerifier);
+        console2.log("ZkqesGroth16VerifierEcdsaChain:", chainVerifier);
         console2.log("  admin  :", admin);
         console2.log("  chainid:", block.chainid);
         console2.log("");

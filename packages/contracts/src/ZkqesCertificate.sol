@@ -4,7 +4,7 @@ pragma solidity 0.8.24;
 import { ERC721 } from "openzeppelin-contracts/token/ERC721/ERC721.sol";
 import { CertificateRenderer } from "./CertificateRenderer.sol";
 
-interface IQKBRegistry {
+interface IZkqesRegistry {
     function isVerified(address holder)  external view returns (bool);
     function nullifierOf(address holder) external view returns (bytes32);
     function trustedListRoot()           external view returns (bytes32);
@@ -12,8 +12,8 @@ interface IQKBRegistry {
 
 /// @notice ERC-721 transferable certificate, mintable only by verified Ukrainians
 ///         while the mint window is open. One mint per nullifier (per identity).
-contract IdentityEscrowNFT is ERC721 {
-    IQKBRegistry public immutable registry;
+contract ZkqesCertificate is ERC721 {
+    IZkqesRegistry public immutable registry;
     uint64       public immutable mintDeadline;
     string       public chainLabel;
 
@@ -29,7 +29,7 @@ contract IdentityEscrowNFT is ERC721 {
     );
 
     constructor(
-        IQKBRegistry _registry,
+        IZkqesRegistry _registry,
         uint64 _mintDeadline,
         string memory _chainLabel
     ) ERC721("Verified Identity Certificate", "VIC") {
