@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
-# Compile QKBPresentationEcdsaLeaf to a stable build dir (outside test-cache).
+# Compile ZkqesPresentationEcdsaLeaf to a stable build dir (outside test-cache).
 # Re-uses the cached wasm/r1cs if already produced by the test harness.
 set -euo pipefail
 
 PKG_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-SRC="$PKG_DIR/circuits/QKBPresentationEcdsaLeaf.circom"
-OUT="$PKG_DIR/build/qkb-presentation"
+SRC="$PKG_DIR/circuits/ZkqesPresentationEcdsaLeaf.circom"
+OUT="$PKG_DIR/build/zkqes-presentation"
 mkdir -p "$OUT"
 
 # If the test harness already compiled into test-cache, copy from the newest one.
-LATEST_CACHE=$(ls -td "$PKG_DIR/build/test-cache"/*/QKBPresentationEcdsaLeaf.r1cs 2>/dev/null | head -1 || true)
+LATEST_CACHE=$(ls -td "$PKG_DIR/build/test-cache"/*/ZkqesPresentationEcdsaLeaf.r1cs 2>/dev/null | head -1 || true)
 if [[ -n "$LATEST_CACHE" ]]; then
   CACHE_DIR="$(dirname "$LATEST_CACHE")"
   echo "Reusing compiled artifacts from $CACHE_DIR"
-  cp -f "$CACHE_DIR/QKBPresentationEcdsaLeaf.r1cs" "$OUT/"
-  cp -f "$CACHE_DIR/QKBPresentationEcdsaLeaf.sym" "$OUT/"
-  mkdir -p "$OUT/QKBPresentationEcdsaLeaf_js"
-  cp -f "$CACHE_DIR/QKBPresentationEcdsaLeaf_js/"*.wasm "$OUT/QKBPresentationEcdsaLeaf_js/"
+  cp -f "$CACHE_DIR/ZkqesPresentationEcdsaLeaf.r1cs" "$OUT/"
+  cp -f "$CACHE_DIR/ZkqesPresentationEcdsaLeaf.sym" "$OUT/"
+  mkdir -p "$OUT/ZkqesPresentationEcdsaLeaf_js"
+  cp -f "$CACHE_DIR/ZkqesPresentationEcdsaLeaf_js/"*.wasm "$OUT/ZkqesPresentationEcdsaLeaf_js/"
   exit 0
 fi
 

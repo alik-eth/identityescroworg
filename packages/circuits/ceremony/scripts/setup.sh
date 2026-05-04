@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Groth16 setup + dev contribution on QKBPresentationEcdsaLeaf.
+# Groth16 setup + dev contribution on ZkqesPresentationEcdsaLeaf.
 # Produces qkb.zkey + vkey.json + QKBGroth16Verifier.sol.
 #
 # NOTE: memory-heavy. 7.6M-constraint circuit + ptau 2^23 pushes snarkjs to
@@ -8,11 +8,11 @@
 set -euo pipefail
 
 PKG_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-OUT="$PKG_DIR/build/qkb-presentation"
+OUT="$PKG_DIR/build/zkqes-presentation"
 PTAU_DIR="$PKG_DIR/ceremony/ptau"
 POWER="${POWER:-23}"
 PTAU="$PTAU_DIR/powersOfTau28_hez_final_${POWER}.ptau"
-R1CS="$OUT/QKBPresentationEcdsaLeaf.r1cs"
+R1CS="$OUT/ZkqesPresentationEcdsaLeaf.r1cs"
 ZKEY0="$OUT/qkb_0000.zkey"
 ZKEY="$OUT/qkb.zkey"
 VKEY="$OUT/verification_key.json"

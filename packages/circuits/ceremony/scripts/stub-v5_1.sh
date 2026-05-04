@@ -5,7 +5,7 @@
 # (which is left as a V5 archive, sees no further work).  Produces:
 #
 #   ceremony/v5_1/Groth16VerifierV5_1Stub.sol
-#   ceremony/v5_1/qkb-v5_1-stub.zkey            (gitignored — *.zkey)
+#   ceremony/v5_1/zkqes-v5_1-stub.zkey            (gitignored — *.zkey)
 #   ceremony/v5_1/verification_key.json
 #   ceremony/v5_1/zkey.sha256
 #   ceremony/v5_1/proof-sample.json             # sample proof for sanity
@@ -27,7 +27,7 @@
 set -euo pipefail
 
 PKG_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-PTAU_PATH="$PKG_DIR/build/qkb-presentation/powersOfTau28_hez_final_23.ptau"
+PTAU_PATH="$PKG_DIR/build/zkqes-presentation/powersOfTau28_hez_final_23.ptau"
 PTAU_URL="https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_23.ptau"
 # Canonical Hermez pot23 sha256 (CLAUDE.md V5.7).  Pinned so a corrupted
 # or replaced ptau cannot silently bind the rest of the bundle to a
@@ -36,16 +36,16 @@ PTAU_URL="https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_23.p
 PTAU_SHA256="047f16d75daaccd6fb3f859acc8cc26ad1fb41ef030da070431e95edb126d19d"
 CIRCOMLIB="$PKG_DIR/node_modules"
 
-CIRCUIT_SRC="$PKG_DIR/circuits/QKBPresentationV5.circom"
+CIRCUIT_SRC="$PKG_DIR/circuits/ZkqesPresentationV5.circom"
 BUILD_DIR="$PKG_DIR/build/v5_1-stub"
 OUT_DIR="$PKG_DIR/ceremony/v5_1"
 
-R1CS="$BUILD_DIR/QKBPresentationV5.r1cs"
-WASM_DIR="$BUILD_DIR/QKBPresentationV5_js"
-WASM="$WASM_DIR/QKBPresentationV5.wasm"
+R1CS="$BUILD_DIR/ZkqesPresentationV5.r1cs"
+WASM_DIR="$BUILD_DIR/ZkqesPresentationV5_js"
+WASM="$WASM_DIR/ZkqesPresentationV5.wasm"
 
-ZKEY0="$BUILD_DIR/qkb-v5_1-stub_0000.zkey"
-ZKEY="$OUT_DIR/qkb-v5_1-stub.zkey"
+ZKEY0="$BUILD_DIR/zkqes-v5_1-stub_0000.zkey"
+ZKEY="$OUT_DIR/zkqes-v5_1-stub.zkey"
 VKEY="$OUT_DIR/verification_key.json"
 VERIFIER="$OUT_DIR/Groth16VerifierV5_1Stub.sol"
 HASH_FILE="$OUT_DIR/zkey.sha256"
@@ -166,7 +166,7 @@ if [[ ! -f "$ZKEY" ]]; then
   ENTROPY="$(head -c 64 /dev/urandom | base64 | tr -d '\n')"
   NODE_OPTIONS='--max-old-space-size=49152' \
     pnpm exec snarkjs zkey contribute "$ZKEY0" "$ZKEY" \
-      --name="qkb-v5_1-stub-dev-1" -v -e="$ENTROPY"
+      --name="zkqes-v5_1-stub-dev-1" -v -e="$ENTROPY"
 fi
 
 # ---------- 5. Export verification key + Solidity verifier ----------
@@ -281,10 +281,10 @@ trap 'rm -f "$HASH_TMP"' EXIT
 (
   cd "$PKG_DIR"
   sha256sum \
-    "ceremony/v5_1/qkb-v5_1-stub.zkey" \
+    "ceremony/v5_1/zkqes-v5_1-stub.zkey" \
     "ceremony/v5_1/verification_key.json" \
     "ceremony/v5_1/Groth16VerifierV5_1Stub.sol" \
-    "build/v5_1-stub/QKBPresentationV5.r1cs" \
+    "build/v5_1-stub/ZkqesPresentationV5.r1cs" \
     "ceremony/v5_1/proof-sample.json" \
     "ceremony/v5_1/public-sample.json" \
     "ceremony/v5_1/witness-input-sample.json"
