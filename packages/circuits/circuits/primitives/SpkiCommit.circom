@@ -6,7 +6,7 @@ include "circomlib/circuits/poseidon.circom";
 ///         SpkiCommit(spki) = Poseidon₂(Poseidon₆(xLimbs), Poseidon₆(yLimbs)).
 ///
 /// @dev    Pure refactor of V4's inline construction at
-///         QKBPresentationEcdsaLeaf.circom:290-299, factored into a reusable
+///         ZkqesPresentationEcdsaLeaf.circom:290-299, factored into a reusable
 ///         template so the V5 main circuit can instantiate it twice (once for
 ///         the leaf SPKI commit, once for the intermediate). Witness side runs
 ///         the same Poseidon parameters (BN254, iden3) as the TS reference

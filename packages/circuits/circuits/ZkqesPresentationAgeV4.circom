@@ -3,7 +3,7 @@ pragma circom 2.1.9;
 include "circomlib/circuits/poseidon.circom";
 include "circomlib/circuits/comparators.circom";
 
-// QKBPresentationAgeV4 — age qualification proof for QKB/2 bindings.
+// ZkqesPresentationAgeV4 — age qualification proof for QKB/2 bindings.
 // Public signals (3, in on-chain order):
 //   [0] dobCommit       = Poseidon(dobYmd, sourceTag)
 //   [1] ageCutoffDate   YYYYMMDD integer (public input)
@@ -22,7 +22,7 @@ include "circomlib/circuits/comparators.circom";
 // country registry. The leaf proof binds dobCommit; this circuit re-opens it
 // and asserts the age predicate over the pre-image (dobYmd, sourceTag).
 
-template QKBPresentationAgeV4() {
+template ZkqesPresentationAgeV4() {
     signal input dobCommit;
     signal input ageCutoffDate;
     signal input ageQualified;
@@ -45,4 +45,4 @@ template QKBPresentationAgeV4() {
 }
 
 component main {public [dobCommit, ageCutoffDate, ageQualified]}
-    = QKBPresentationAgeV4();
+    = ZkqesPresentationAgeV4();

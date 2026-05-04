@@ -45,7 +45,7 @@ pragma circom 2.1.9;
 //
 // Constraint cost (dominant):
 //   32 × Multiplexer(1, MAX_CERT) — same per-byte cost as the existing
-//   SPKI coordinate extractors in QKBPresentationEcdsaLeaf. For MAX_CERT=2048
+//   SPKI coordinate extractors in ZkqesPresentationEcdsaLeaf. For MAX_CERT=2048
 //   this is ~32 × 2048 = ~65 k linear constraints plus byte-range R1CS,
 //   well under 0.1 M of the 8 M circuit budget.
 

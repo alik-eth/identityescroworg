@@ -19,7 +19,7 @@ include "circomlib/circuits/multiplexer.circom";
 // the contract layer; circuit just emits the binding's claimed pk as 4 ×
 // 128-bit limbs (bindingPkXHi/Lo, bindingPkYHi/Lo) for the contract to keccak.
 
-/// @title  QKBPresentationV5 — V5.2 single-circuit ZK presentation proof.
+/// @title  ZkqesPresentationV5 — V5.2 single-circuit ZK presentation proof.
 /// @notice Public-signal layout per V5.2 keccak-on-chain amendment
 ///         (`docs/superpowers/specs/2026-05-01-keccak-on-chain-amendment.md`,
 ///         pending user-review at v0.4) layered on V5.1 wallet-bound nullifier
@@ -97,7 +97,7 @@ include "circomlib/circuits/multiplexer.circom";
 /// rotationOldCommitment no-op still implemented via
 /// `ForceEqualIfEnabled(enabled = 1 - rotationMode, ...)`. rotationMode itself
 /// is boolean-range-checked (`rm * (rm - 1) === 0`).
-template QKBPresentationV5() {
+template ZkqesPresentationV5() {
     // MAX bounds per V5 spec v5 §0.5. Two empirical bumps from the original
     // estimates (commit b8e0f74 / 139c475 in this worktree):
     //   MAX_SA     256 → 1536  (real Diia CAdES-X-L signedAttrs measured 1388 B)
@@ -937,4 +937,4 @@ component main { public [
     bindingPkXLo,
     bindingPkYHi,
     bindingPkYLo
-] } = QKBPresentationV5();
+] } = ZkqesPresentationV5();
