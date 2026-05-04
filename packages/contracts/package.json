@@ -1,8 +1,8 @@
 {
-  "name": "@qkb/contracts",
+  "name": "@zkqes/contracts",
   "version": "0.0.0",
   "private": true,
-  "description": "QKB Phase 1 Solidity contracts (verifier library + registry).",
+  "description": "zkqes Solidity contracts (verifier library + registry).",
   "scripts": {
     "build": "forge build --root ../..",
     "test": "forge test --root ../..",
