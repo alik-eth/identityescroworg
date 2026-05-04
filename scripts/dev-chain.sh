@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dev-chain.sh — bring up a local anvil + deploy QKBRegistry +
+# dev-chain.sh — bring up a local anvil + deploy ZkqesRegistry +
 # AuthorityArbitrator, then copy the deployment manifest into the web
 # package's public/ directory so the SPA's useChainDeployment hook can
 # pick it up from `/local.json`.
@@ -10,13 +10,28 @@
 #
 # Idempotent: re-running performs `docker compose up -d`, which is a
 # no-op when the services are already healthy.
+#
+# NOTE: deploy/mock-qtsps/ was deleted in the zkqes rename (Phase 5,
+# 2026-05-03). This script requires a replacement deployer compose file
+# before it can run. See scripts/dev-chain.sh TODO once a V5 dev-chain
+# deployer is scaffolded under deploy/.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# TODO: update COMPOSE_FILE path once a V5 dev-chain deployer is
+# scaffolded under deploy/ (deploy/mock-qtsps/ was deleted 2026-05-03).
 COMPOSE_FILE="${REPO_ROOT}/deploy/mock-qtsps/docker-compose.yml"
 MANIFEST_OUT="${REPO_ROOT}/packages/web/public/local.json"
 
 cmd="${1:-up}"
+
+if [ ! -f "${COMPOSE_FILE}" ]; then
+  echo "[dev-chain] ERROR: compose file not found: ${COMPOSE_FILE}" >&2
+  echo "[dev-chain] deploy/mock-qtsps/ was removed in the zkqes rename." >&2
+  echo "[dev-chain] A replacement deployer for ZkqesRegistry must be scaffolded" >&2
+  echo "[dev-chain] under deploy/ before this script can run." >&2
+  exit 1
+fi
 
 case "${cmd}" in
   stop|down)
@@ -58,4 +73,4 @@ docker compose -f "${COMPOSE_FILE}" exec -T deployer cat /shared/local.json \
 echo "[dev-chain] ready. Manifest:"
 cat "${MANIFEST_OUT}"
 echo
-echo "[dev-chain] Next: pnpm -F @qkb/web dev"
+echo "[dev-chain] Next: pnpm -F @zkqes/web dev"

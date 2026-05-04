@@ -33,8 +33,8 @@ export function loadR2Config(): R2Config {
   const publicBase =
     process.env.R2_PUBLIC_BASE_URL ??
     process.env.R2_PUBLIC_BASE ??
-    'https://prove.identityescrow.org';
-  // Allow either `prove.identityescrow.org` or `https://...` form.
+    'https://prove.zkqes.org';
+  // Allow either `prove.zkqes.org` or `https://...` form.
   const normalizedPublicBase = publicBase.startsWith('http')
     ? publicBase
     : `https://${publicBase}`;
@@ -60,7 +60,7 @@ export function makeR2Client(cfg: R2Config): S3Client {
 
 export const ROUND_KEY = (round: number) => `ceremony/rounds/round-${round}.zkey`;
 export const STATUS_KEY = 'ceremony/status.json';
-export const FINAL_ZKEY_KEY = 'qkb-v5-final.zkey';
+export const FINAL_ZKEY_KEY = 'zkqes-v5-final.zkey';
 export const VKEY_KEY = 'verification_key.json';
 export const PTAU_KEY = 'ceremony/pot/pot23.ptau';
 

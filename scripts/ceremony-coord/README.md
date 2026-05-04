@@ -2,7 +2,7 @@
 
 Lead-side tooling for the V5 Phase 2 trusted-setup ceremony. Mints signed
 upload URLs per round, verifies contributions, and publishes the public
-status feed at `https://prove.identityescrow.org/ceremony/status.json`.
+status feed at `https://prove.zkqes.org/ceremony/status.json`.
 
 These scripts are **admin-only**. Contributors never run them.
 
@@ -19,8 +19,8 @@ These scripts are **admin-only**. Contributors never run them.
 
 ## R2 layout
 
-Production bucket `prove-identityescrow-org` with a public domain mapped to
-`prove.identityescrow.org`. Object keys:
+Production bucket `prove-zkqes-org` with a public domain mapped to
+`prove.zkqes.org`. Object keys:
 
 ```
 ceremony/
@@ -30,8 +30,8 @@ ceremony/
   rounds/round-1.zkey             # public-read after upload-verify
   rounds/round-2.zkey
   ...
-  rounds/round-N.zkey             # post-beacon final = qkb-v5-final.zkey
-qkb-v5-final.zkey                 # symlink-equivalent: copy of final round
+  rounds/round-N.zkey             # post-beacon final = zkqes-v5-final.zkey
+zkqes-v5-final.zkey               # symlink-equivalent: copy of final round
 verification_key.json             # public-read, post-finalization
 ```
 
@@ -76,8 +76,8 @@ After the last individual contribution lands and is verified:
 
 1. Pin a future Ethereum mainnet block (typically +24h, ≥ 12 confirms).
 2. After that block lands: `pnpm tsx scripts/publish-status.ts --beacon <block-height> <block-hash>`
-3. Run `snarkjs zkey beacon` locally to apply the beacon → produces `qkb-v5-final.zkey`.
-4. Upload `qkb-v5-final.zkey` to `ceremony/qkb-v5-final.zkey` (and copy to root `qkb-v5-final.zkey` for the public download URL).
+3. Run `snarkjs zkey beacon` locally to apply the beacon → produces `zkqes-v5-final.zkey`.
+4. Upload `zkqes-v5-final.zkey` to `ceremony/zkqes-v5-final.zkey` (and copy to root `zkqes-v5-final.zkey` for the public download URL).
 5. Auto-generate `Groth16VerifierV5.sol` via `snarkjs zkey export solidityverifier`. Pump to contracts-eng.
 6. Auto-export `verification_key.json` via `snarkjs zkey export verificationkey`. Upload to R2 + pump to web-eng.
 7. Final `publish-status.ts` invocation sets `finalZkeySha256` non-null.
@@ -96,8 +96,8 @@ Required env vars (all in `.env`, gitignored):
 - `R2_ACCOUNT_ID` — Cloudflare account ID
 - `R2_ACCESS_KEY_ID` — R2 API token (write scope)
 - `R2_SECRET_ACCESS_KEY`
-- `R2_BUCKET` — defaults to `prove-identityescrow-org`
-- `R2_PUBLIC_BASE` — defaults to `https://prove.identityescrow.org`
+- `R2_BUCKET` — defaults to `prove-zkqes-org`
+- `R2_PUBLIC_BASE` — defaults to `https://prove.zkqes.org`
 
 Pre-flight check after setup:
 
@@ -114,7 +114,7 @@ Hello — your slot in the zk-QES Phase 2 ceremony is now open. ~20 minutes
 on a 32 GB+ RAM PC. The four commands:
 
 # 1. Download the previous round's zkey:
-curl -L https://prove.identityescrow.org/ceremony/rounds/round-{N-1}.zkey \
+curl -L https://prove.zkqes.org/ceremony/rounds/round-{N-1}.zkey \
   -o round-{N-1}.zkey
 
 # 2. Contribute (random entropy, your choice — the more, the better):
@@ -131,7 +131,7 @@ curl -X PUT --upload-file round-{N}.zkey \
   "<SIGNED_URL>"
 
 I'll verify on my end and publish your contribution to the public chain at
-prove.identityescrow.org/ceremony/status.json. Reply when done.
+prove.zkqes.org/ceremony/status.json. Reply when done.
 
 — Alik.eth
 ```

@@ -6,7 +6,7 @@
 // Beacon mode (after final round, beacon block confirmed):
 //   pnpm tsx scripts/publish-status.ts --beacon 21000000 0xdeadbeef… --commit
 //
-// Final mode (after qkb-v5-final.zkey is uploaded):
+// Final mode (after zkqes-v5-final.zkey is uploaded):
 //   pnpm tsx scripts/publish-status.ts --finalize --commit
 //
 // Without --commit: dry-run prints the diff and exits.
