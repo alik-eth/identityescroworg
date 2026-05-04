@@ -1,7 +1,7 @@
 {
-  "name": "@qkb/contracts-sdk",
+  "name": "@zkqes/contracts-sdk",
   "version": "0.5.2-pre",
-  "description": "Solidity SDK for gating contracts on verified-Ukrainian status (QKB protocol).",
+  "description": "Solidity SDK for gating contracts on verified-Ukrainian status (zkqes protocol).",
   "license": "MIT",
   "files": [
     "src/**/*.sol",

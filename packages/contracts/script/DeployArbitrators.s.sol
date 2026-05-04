@@ -8,13 +8,13 @@ import { AuthorityArbitrator } from "../src/arbitrators/AuthorityArbitrator.sol"
 // import { TimelockArbitrator } from "../src/arbitrators/TimelockArbitrator.sol";
 
 /// @notice Deploys the Phase 2 AuthorityArbitrator pointing at a given
-///         QKBRegistry (v2). TimelockArbitrator deploy is commented out
+///         ZkqesRegistry (v2). TimelockArbitrator deploy is commented out
 ///         for the MVP window (see plan §3.2) — the contract itself is
 ///         reduced to an interface-only stub in-tree.
 ///
 ///         Required env:
 ///           QIE_AUTHORITY_ADDRESS   address — AuthorityArbitrator authority
-///           QIE_REGISTRY_ADDRESS    address — QKBRegistry v2 deployment
+///           QIE_REGISTRY_ADDRESS    address — ZkqesRegistry v2 deployment
 ///           ADMIN_PRIVATE_KEY       uint256 — broadcasting key
 ///
 ///         Sepolia (lead-triggered):

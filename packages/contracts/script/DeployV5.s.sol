@@ -3,14 +3,14 @@ pragma solidity 0.8.24;
 
 import {Script, console2} from "forge-std/Script.sol";
 import {Groth16VerifierV5_1Placeholder} from "../src/Groth16VerifierV5_1Placeholder.sol";
-import {QKBRegistryV5, IGroth16VerifierV5_1} from "../src/QKBRegistryV5.sol";
-import {IdentityEscrowNFT} from "../src/IdentityEscrowNFT.sol";
+import {ZkqesRegistryV5, IGroth16VerifierV5_1} from "../src/ZkqesRegistryV5.sol";
+import {ZkqesCertificate} from "../src/ZkqesCertificate.sol";
 
 /// @notice V5 deploy script for Base Sepolia + Base mainnet.
 /// @dev    Deploys, in order: Groth16VerifierV5 (or reuses an existing
-///         deployed verifier), QKBRegistryV5 (which CREATE-deploys
+///         deployed verifier), ZkqesRegistryV5 (which CREATE-deploys
 ///         PoseidonT3 + PoseidonT7 in its constructor), and
-///         IdentityEscrowNFT bound to the V5 registry. Logs all three
+///         ZkqesCertificate bound to the V5 registry. Logs all three
 ///         addresses to stdout for downstream consumption.
 ///
 /// Required env:
@@ -81,25 +81,25 @@ contract DeployV5 is Script {
         }
         console2.log("Groth16VerifierV5_1:", address(verifier));
 
-        QKBRegistryV5 registry = new QKBRegistryV5(
+        ZkqesRegistryV5 registry = new ZkqesRegistryV5(
             verifier,
             admin,
             initialTrustRoot,
             initialPolicyRoot
         );
-        console2.log("QKBRegistryV5:    ", address(registry));
+        console2.log("ZkqesRegistryV5:    ", address(registry));
         console2.log("  PoseidonT3:     ", registry.poseidonT3());
         console2.log("  PoseidonT7:     ", registry.poseidonT7());
         console2.log("  admin:          ", registry.admin());
         console2.log("  trustedListRoot:", uint256(registry.trustedListRoot()));
         console2.log("  policyRoot:     ", uint256(registry.policyRoot()));
 
-        IdentityEscrowNFT nft = new IdentityEscrowNFT(
+        ZkqesCertificate nft = new ZkqesCertificate(
             registry,
             mintDeadline,
             chainLabel
         );
-        console2.log("IdentityEscrowNFT:", address(nft));
+        console2.log("ZkqesCertificate:", address(nft));
         console2.log("  mintDeadline:   ", mintDeadline);
         console2.log("  chainLabel:     ", chainLabel);
 

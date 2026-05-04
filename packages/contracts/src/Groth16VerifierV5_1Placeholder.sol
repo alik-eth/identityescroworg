@@ -7,9 +7,9 @@ pragma solidity 0.8.24;
 ///         deployed separately and passed via GROTH16_VERIFIER_ADDR.
 /// @notice Three Groth16 verifier roles coexist intentionally:
 ///           - This placeholder (always-true, 19-input shape) — wired
-///             into the synthetic unit tests (`QKBRegistryV5.t.sol`,
-///             `QKBRegistryV5.register.t.sol`, `QKBRegistryV5_1.t.sol`,
-///             `IdentityEscrowNFT.v5.t.sol`, `DeployV5.fork.t.sol`),
+///             into the synthetic unit tests (`ZkqesRegistryV5.t.sol`,
+///             `ZkqesRegistryV5.register.t.sol`, `ZkqesRegistryV5_1.t.sol`,
+///             `ZkqesCertificate.v5.t.sol`, `DeployV5.fork.t.sol`),
 ///             which exercise register/rotateWallet flows against
 ///             SYNTHETIC public signals computed off-circuit. Those
 ///             signals don't satisfy the real BN254 pairing equation;

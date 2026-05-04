@@ -1,6 +1,6 @@
 # Phase 1 -> Phase 2 Registry Migration
 
-Phase 2 (QIE) requires a fresh deployment of `QKBRegistry`: Solidity
+Phase 2 requires a fresh deployment of `ZkqesRegistry`: Solidity
 contracts are non-upgradeable, and Phase 2 extends the storage layout
 with
 
@@ -9,9 +9,9 @@ with
 - the escrow surface (`escrows`, register/revoke, getters),
 - dual-verifier slots (`rsaVerifier` + `ecdsaVerifier`).
 
-Phase 1's deployed `QKBRegistry` at
+Phase 1's deployed `ZkqesRegistry` at
 `0x7F36aF783538Ae8f981053F2b0E45421a1BF4815` on Sepolia cannot absorb
-these extensions. Deploying `QKBRegistryV2` at a fresh address is the
+these extensions. Deploying `ZkqesRegistryV2` at a fresh address is the
 intended migration path.
 
 ## For Holders
@@ -20,11 +20,11 @@ intended migration path.
    envelope — is unchanged. Nothing in your QES certificate needs to
    rotate.
 2. Re-generate a 14-signal Groth16 proof against the Phase 2
-   `QKBPresentation` circuit (the Web app will do this transparently).
+   `ZkqesPresentationV5` circuit (the Web app will do this transparently).
    The new proof adds `rTL`, `algorithmTag`, and `nullifier` to the
    public signals.
 3. Submit `register(proof, inputs)` against the v2 contract address
-   (see `fixtures/qie/arbitrators/sepolia.json -> registry_v2`).
+   (see `fixtures/contracts/sepolia.json -> registry_v2`).
 4. Your Phase 1 v1 binding remains valid at the v1 address for
    historical audit. Only v2 participates in Phase 2 escrow flows and
    nullifier-based revocation.
@@ -32,8 +32,8 @@ intended migration path.
 ## For Relying Parties
 
 Check both v1 (`fixtures/contracts/sepolia.json -> registry`) and v2
-(`fixtures/qie/arbitrators/sepolia.json -> registry_v2`) addresses
-when confirming a binding exists. Either is authoritative for the QKB
+(`fixtures/contracts/sepolia.json -> registry_v2`) addresses
+when confirming a binding exists. Either is authoritative for the zkqes
 claim in isolation, but:
 
 - only v2 carries `isEscrowActive(pkAddr)`,
@@ -46,16 +46,16 @@ New relying-party integrations should target v2 exclusively.
 
 ## Deploy steps
 
-1. Circuits-eng ships fresh 14-signal `QKBGroth16VerifierRSA.sol` and
-   `QKBGroth16VerifierEcdsa.sol` from the Phase 2 ceremony
+1. Circuits-eng ships fresh 14-signal `ZkqesGroth16VerifierRsa.sol` and
+   `ZkqesGroth16VerifierEcdsa.sol` from the Phase 2 ceremony
    (local 48+ GB machine — spec §14.2).
 2. Lead deploys each verifier to Sepolia and records the addresses.
 3. Lead runs `DeployRegistryV2.s.sol` with
    `RSA_VERIFIER_ADDR`, `ECDSA_VERIFIER_ADDR`, `ROOT_TL`,
    `ADMIN_PRIVATE_KEY`, `ADMIN_ADDRESS` set in `.env`.
 4. Resulting address is written to
-   `fixtures/qie/arbitrators/sepolia.json` under `registry_v2`.
-5. Lead pumps the new fixtures to web + qie worktrees.
+   `fixtures/contracts/sepolia.json` under `registry_v2`.
+5. Lead pumps the new fixtures to web worktrees.
 
 ## Notes on `revokeEscrow` auth
 
@@ -75,7 +75,7 @@ ceremony) for every revoke. The existing per-pk proof is sufficient.
 
 ### Why
 
-Phase 2 shipped a unified 14-signal presentation circuit (`QKBPresentation.circom`)
+Phase 2 shipped a unified 14-signal presentation circuit (`ZkqesPresentationV5.circom`)
 targeting V2. Setting up the Groth16 proving key for that circuit
 **fails deterministically** on every RAM budget we can provision — the
 circuit compiles to ~10.85 M R1CS constraints and snarkjs /
@@ -98,7 +98,7 @@ The pivot reverts to Phase-1's §5.4 split architecture:
   `leafSpkiCommit`. pow-22 ptau, ~12 GB setup peak. Shares layout
   across RSA and ECDSA.
 
-`QKBVerifier.verify` is rewritten to take both proofs and require
+`ZkqesVerifier.verify` is rewritten to take both proofs and require
 `leafInputs.leafSpkiCommit == chainInputs.leafSpkiCommit` on-chain.
 
 ### V3 is a fresh contract, not an upgrade
@@ -120,9 +120,9 @@ needs to migrate out of V2. Consider the address dead.
 
 There are no V2 -> V3 holders to migrate: V2 had zero real
 registrations. Submit your first registration directly to V3 at the
-address published in `fixtures/qie/arbitrators/sepolia.json ->
-registry_v3`, using the split-proof pair (two Groth16 proofs built
-from the same CAdES `.p7s` — the Web app handles this transparently).
+address published in `fixtures/contracts/sepolia.json -> registry_v3`,
+using the split-proof pair (two Groth16 proofs built from the same
+CAdES `.p7s` — the Web app handles this transparently).
 
 The Phase-1 V1 registry at
 `0x7F36aF783538Ae8f981053F2b0E45421a1BF4815` remains valid for its
@@ -142,8 +142,8 @@ to gain escrow eligibility + nullifier-based Sybil protection.
 
 1. Circuits-eng ships split-proof leaf + chain verifiers per algorithm
    from the pow-24 + pow-22 ceremonies:
-   `QKBGroth16VerifierEcdsaLeaf.sol`,
-   `QKBGroth16VerifierEcdsaChain.sol`,
+   `ZkqesGroth16VerifierEcdsaLeaf.sol`,
+   `ZkqesGroth16VerifierEcdsaChain.sol`,
    (RSA variants deferred until real RSA QES test material lands).
 2. Lead deploys each verifier to Sepolia and records the four
    addresses.
@@ -154,10 +154,10 @@ to gain escrow eligibility + nullifier-based Sybil protection.
    verifier envs and set `USE_STUB_VERIFIER=true` for anvil dry-runs
    only).
 4. Resulting address is written to
-   `fixtures/qie/arbitrators/sepolia.json` under `registry_v3`.
-5. Lead pumps the new fixtures to web + qie worktrees.
+   `fixtures/contracts/sepolia.json` under `registry_v3`.
+5. Lead pumps the new fixtures to web worktrees.
 
 ### Gas note
 
-`QKBRegistryV3.register` costs ~600k on mainnet (two Groth16 pairings).
+`ZkqesRegistryV3.register` costs ~600k on mainnet (two Groth16 pairings).
 See `packages/contracts/CLAUDE.md` §8.1 for the target + rationale.

@@ -3,11 +3,11 @@ pragma solidity 0.8.24;
 
 import { Script } from "forge-std/Script.sol";
 import { console2 } from "forge-std/console2.sol";
-import { QKBRegistry } from "../src/QKBRegistry.sol";
-import { IGroth16VerifierV2 } from "../src/QKBVerifierV2.sol";
+import { ZkqesRegistry } from "../src/ZkqesRegistry.sol";
+import { IGroth16VerifierV2 } from "../src/ZkqesVerifierV2.sol";
 import { StubGroth16Verifier } from "../src/verifier/StubGroth16Verifier.sol";
 
-/// @notice Fresh Phase 2 deployment of the (now extended) QKBRegistry.
+/// @notice Fresh Phase 2 deployment of the (now extended) ZkqesRegistry.
 ///         Solidity contracts are non-upgradeable and Phase 2 extends the
 ///         storage layout with the nullifier maps + escrow surface, so
 ///         Phase 1's Sepolia deployment cannot absorb the changes. This
@@ -54,7 +54,7 @@ contract DeployRegistryV2 is Script {
             console2.log("Deployed StubGroth16Verifier (ECDSA slot, CI only):", ecdsaAddr);
         }
 
-        registry = address(new QKBRegistry(
+        registry = address(new ZkqesRegistry(
             IGroth16VerifierV2(rsaAddr),
             IGroth16VerifierV2(ecdsaAddr),
             initialRoot,
@@ -63,7 +63,7 @@ contract DeployRegistryV2 is Script {
 
         vm.stopBroadcast();
 
-        console2.log("QKBRegistryV2:", registry);
+        console2.log("ZkqesRegistryV2:", registry);
         console2.log("  rsaVerifier :", rsaAddr);
         console2.log("  ecdsaVerifier:", ecdsaAddr);
         console2.log("  admin        :", admin);

@@ -2,7 +2,7 @@
 pragma solidity 0.8.24;
 
 /// @notice The minimal registry surface an arbitrator calls into while
-///         driving the release state machine. Implemented by QKBRegistry.
+///         driving the release state machine. Implemented by ZkqesRegistry.
 ///
 ///         Split from the full registry ABI so arbitrators (and mocks) can
 ///         depend only on the hooks they actually need — the rest of the

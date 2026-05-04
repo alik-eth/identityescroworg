@@ -3,11 +3,11 @@ pragma solidity 0.8.24;
 
 import { Script } from "forge-std/Script.sol";
 import { console2 } from "forge-std/console2.sol";
-import { QKBRegistry } from "../src/QKBRegistry.sol";
-import { IGroth16VerifierV2 } from "../src/QKBVerifierV2.sol";
+import { ZkqesRegistry } from "../src/ZkqesRegistry.sol";
+import { IGroth16VerifierV2 } from "../src/ZkqesVerifierV2.sol";
 import { StubGroth16Verifier } from "../src/verifier/StubGroth16Verifier.sol";
 
-/// @notice Deploy QKBRegistry wired to the dual (RSA + ECDSA) Groth16 verifiers.
+/// @notice Deploy ZkqesRegistry wired to the dual (RSA + ECDSA) Groth16 verifiers.
 ///
 ///         Sprint 0 transitional state: real 14-signal verifiers are in flight
 ///         from circuits-eng. This script accepts either pre-deployed verifier
@@ -36,7 +36,7 @@ import { StubGroth16Verifier } from "../src/verifier/StubGroth16Verifier.sol";
 contract Deploy is Script {
     error AdminMismatch(address expected, address derived);
 
-    function run() external returns (QKBRegistry registry, address rsaAddr, address ecdsaAddr) {
+    function run() external returns (ZkqesRegistry registry, address rsaAddr, address ecdsaAddr) {
         bytes32 initialRoot = vm.envBytes32("ROOT_TL");
         uint256 adminPriv = vm.envUint("ADMIN_PRIVATE_KEY");
         address admin = vm.envAddress("ADMIN_ADDRESS");
@@ -61,7 +61,7 @@ contract Deploy is Script {
             console2.log("Deployed StubGroth16Verifier (ECDSA slot, CI only):", ecdsaAddr);
         }
 
-        registry = new QKBRegistry(
+        registry = new ZkqesRegistry(
             IGroth16VerifierV2(rsaAddr),
             IGroth16VerifierV2(ecdsaAddr),
             initialRoot,
@@ -70,7 +70,7 @@ contract Deploy is Script {
 
         vm.stopBroadcast();
 
-        console2.log("QKBRegistry:", address(registry));
+        console2.log("ZkqesRegistry:", address(registry));
         console2.log("rsaVerifier:", rsaAddr);
         console2.log("ecdsaVerifier:", ecdsaAddr);
         console2.log("admin:", admin);
