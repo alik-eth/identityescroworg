@@ -44,7 +44,7 @@ interface IGroth16ChainVerifier {
     ) external view returns (bool);
 }
 
-/// @notice Split-proof QKB verifier library — 2026-04-18 pivot.
+/// @notice Split-proof zkqes verifier library — 2026-04-18 pivot.
 ///         The Phase-2 unified 14-signal presentation circuit couldn't be
 ///         Groth16-setup (10.85 M constraints overflowed V8 ArrayBuffer
 ///         limits in ffjavascript). Reverted to Phase-1 §5.4 split: one

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 pragma solidity 0.8.24;
 
-/// @notice Unified Groth16 verifier interface for the QKB/2 leaf circuit
+/// @notice Unified Groth16 verifier interface for the zkqes/2 leaf circuit
 ///         (16 public signals):
 ///           [0..3]  pkX[4]
 ///           [4..7]  pkY[4]
@@ -49,7 +49,7 @@ interface IGroth16AgeVerifierV4 {
     ) external view returns (bool);
 }
 
-/// @notice Draft verifier library for the `QKB/2` + optional age architecture.
+/// @notice Draft verifier library for the `zkqes/2` + optional age architecture.
 ///         This file is intentionally forward-looking and MUST NOT be wired
 ///         into the live registry path until successor circuits and verifiers
 ///         exist.

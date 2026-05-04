@@ -8,7 +8,7 @@ import {
 } from "./ZkqesVerifier.sol";
 import { IRegistryGate } from "./arbitrators/IRegistryGate.sol";
 
-/// @notice Split-proof register-then-authenticate registry for QKB-bound
+/// @notice Split-proof register-then-authenticate registry for zkqes-bound
 ///         secp256k1 keys. Fresh deploy (NOT an upgrade of V2 — storage
 ///         layout changes). Per the 2026-04-18 split-proof pivot, a
 ///         registration carries two Groth16 proofs:
@@ -198,7 +198,7 @@ contract ZkqesRegistryV3 is IRegistryGate {
     // Register
     // -------------------------------------------------------------------
 
-    /// @notice Register a fresh QKB binding. Dispatch on
+    /// @notice Register a fresh zkqes binding. Dispatch on
     ///         `chainInputs.algorithmTag` — the authoritative tag lives on
     ///         the chain side per orchestration §2.2. Leaf carries no
     ///         algorithmTag (it is credential-binding data).
@@ -357,7 +357,7 @@ contract ZkqesRegistryV3 is IRegistryGate {
     // QIE escrow surface
     // -------------------------------------------------------------------
 
-    /// @notice Attach an escrow commitment to an existing QKB binding.
+    /// @notice Attach an escrow commitment to an existing zkqes binding.
     ///         Authentication is a fresh split-proof pair proving pk
     ///         ownership (same gate as `register` minus the uniqueness
     ///         checks).

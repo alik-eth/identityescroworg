@@ -7,7 +7,7 @@ import {
     IGroth16AgeVerifierV4
 } from "./ZkqesVerifierV4Draft.sol";
 
-/// @notice Per-country QKB/2 registry. Constructor-frozen country tag; admin-
+/// @notice Per-country zkqes/2 registry. Constructor-frozen country tag; admin-
 ///         rotatable trust roots + verifier addresses.
 contract ZkqesRegistryV4 {
     // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3

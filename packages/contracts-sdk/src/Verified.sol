@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import { IZkqesRegistry } from "./IZkqesRegistry.sol";
 
-/// @title Verified — abstract base contract gating callers on QKB verification.
+/// @title Verified — abstract base contract gating callers on zkqes verification.
 /// @notice Inherit and apply `onlyVerifiedUkrainian` to any external function
 ///         that should only be callable by a verified Ukrainian holder.
 abstract contract Verified {

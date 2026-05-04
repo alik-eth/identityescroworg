@@ -64,7 +64,7 @@ contract ZkqesRegistryV5 is IZkqesRegistry {
     bytes32 public override trustedListRoot;
 
     /// Merkle root of the qualified-policy-list. Leaves = `policyLeafHash`
-    /// (already field-domain Poseidon commitments to the QKB binding).
+    /// (already field-domain Poseidon commitments to the zkqes binding).
     bytes32 public policyRoot;
 
     /// Maximum age of a binding before it's considered stale. The proof
@@ -360,7 +360,7 @@ contract ZkqesRegistryV5 is IZkqesRegistry {
         /* ===== Gate 4 (§6.6): policy-list Merkle membership ===== */
         // Leaf = sig.policyLeafHash (already field-domain Poseidon
         // commitment per spec §0.5; no SpkiCommit step needed). The policy
-        // tree contains all currently-accepted QKB binding policies; admin
+        // tree contains all currently-accepted zkqes binding policies; admin
         // rotates the root when the policy fleet changes.
         if (!PoseidonMerkle.verify(
             poseidonT3,
@@ -526,7 +526,7 @@ contract ZkqesRegistryV5 is IZkqesRegistry {
         // ----- Verify old-wallet authorization signature (ECDSA recover) -----
         // Domain tag binds this signature to the rotation use case + this
         // exact registry deployment, preventing replay across:
-        //   - other QKB / DApp signing flows ("qkb-rotate-auth-v1" tag)
+        //   - other zkqes / DApp signing flows ("qkb-rotate-auth-v1" tag)
         //   - other chains where the same registry source might deploy
         //     (block.chainid)
         //   - other registry instances on the same chain, e.g. an upgrade

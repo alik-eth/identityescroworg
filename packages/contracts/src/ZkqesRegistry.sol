@@ -4,9 +4,9 @@ pragma solidity 0.8.24;
 import { ZkqesVerifierV2, IGroth16VerifierV2 } from "./ZkqesVerifierV2.sol";
 import { IRegistryGate } from "./arbitrators/IRegistryGate.sol";
 
-/// @notice Reference register-then-authenticate registry for QKB-bound
+/// @notice Reference register-then-authenticate registry for zkqes-bound
 ///         secp256k1 keys. Phase 2 (Sprint 0) restores the dual-verifier
-///         dispatch path from the original QKB design: the registry holds
+///         dispatch path from the original zkqes design: the registry holds
 ///         both an RSA and an ECDSA Groth16 verifier, and `register`
 ///         dispatches on the proof's `algorithmTag` public signal.
 ///
@@ -164,7 +164,7 @@ contract ZkqesRegistry is IRegistryGate {
         emit VerifierUpdated(ALG_ECDSA, address(0), address(ecdsa_));
     }
 
-    /// @notice Register a fresh QKB binding. See spec §6.2 steps 1–7.
+    /// @notice Register a fresh zkqes binding. See spec §6.2 steps 1–7.
     ///         Dispatch on `i.algorithmTag`: route verification through
     ///         `rsaVerifier` or `ecdsaVerifier` per the restored §2.0
     ///         convention. Unknown tags revert `UnknownAlgorithm`. `i.rTL`
@@ -279,7 +279,7 @@ contract ZkqesRegistry is IRegistryGate {
     // ---------------------------------------------------------------------
 
     /// @notice Attach an escrow commitment (`escrowId`) to an existing
-    ///         QKB binding. Authorisation is a fresh Phase-1 Groth16 proof
+    ///         zkqes binding. Authorisation is a fresh Phase-1 Groth16 proof
     ///         of the same pk — we re-run the full `register`-style check
     ///         (rTL + nullifier + algorithmTag dispatch + declHash
     ///         whitelist inside ZkqesVerifierV2.verify) and then bind the
