@@ -13,11 +13,11 @@
 // the doc site picks it up unchanged.
 //
 // **Inclusion policy** (per BRAND.md §"How to write about the project"):
-//   - QIE Phase-2 docs are internal codename only — `docs/qie/` excluded.
+//   - Deleted Phase-2 docs — `docs/qie/` excluded (deleted in v0.6.0 rename).
 //   - Marketing drafts are not public docs surface — `docs/marketing/` excluded.
 //   - Worker-handoff sessions are scaffolding — `docs/handoffs/` excluded.
 //   - Working notes — `docs/superpowers/notes/` excluded.
-//   - Deferred specs (trustless-eIDAS, qie-*) are excluded by default.
+//   - Deferred specs (trustless-eIDAS, historical-phase2) are excluded by default.
 //     Inclusion of a parked spec needs lead sign-off.
 //
 // **URL policy:** dated filenames in the source tree
@@ -76,7 +76,7 @@ export default defineConfig({
   // Files we DON'T want rendered in the public site, even though they
   // live under `docs/` for orchestration purposes:
   srcExclude: [
-    // QIE Phase-2 codename — internal only per BRAND.md §Names.
+    // zkqes Phase-2 QIE docs (deleted in v0.6.0 rename); glob retained as safety net.
     'qie/**',
     // Marketing drafts — not part of the developer doc surface.
     'marketing/**',
@@ -84,7 +84,7 @@ export default defineConfig({
     'handoffs/**',
     // Working notes — pre-spec scratch.
     'superpowers/notes/**',
-    // Specs that are parked or QIE-flavored — explicit list rather
+    // Specs that are parked or historical-only — explicit list rather
     // than glob so a future addition shows up in this file's diff.
     'superpowers/specs/2026-04-17-qie-mvp-refinement.md',
     'superpowers/specs/2026-04-17-qie-phase2-design.md',
