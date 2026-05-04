@@ -1,5 +1,7 @@
 # V5 Architecture — Orchestration Plan
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **For team lead:** This is the master orchestration document for sub-project A1. It freezes the cross-package interface contracts, defines the dispatch sequence, lists lead-side scaffold steps, and tracks artifact pumps between worker worktrees. **Workers read §2 (Interface Contracts) before touching anything in their package.** Lead does NOT write production code — lead scaffolds, reviews, pumps, merges, and runs the ceremony.
 
 **Spec:** [`2026-04-29-v5-architecture-design.md`](../specs/2026-04-29-v5-architecture-design.md) (commit `330b757`).
@@ -16,7 +18,7 @@ Per project CLAUDE.md, persistent named agents. Spawn **once** per worker via `A
 
 | Worker | Package | Worktree | Branch | Plan file |
 |--------|---------|----------|--------|-----------|
-| `lead` (you) | (orchestration) | `/data/Develop/identityescroworg` | `feat/v5-frontend` (current) → merge target after sub-merges | this file |
+| `lead` (you) | (orchestration) | `/data/Develop/zkqes` | `feat/v5-frontend` (current) → merge target after sub-merges | this file |
 | `flattener-eng` | `packages/lotl-flattener` | `/data/Develop/qkb-wt-v5/flattener` | `feat/v5-flattener` | `2026-04-29-v5-architecture-flattener.md` |
 | `circuits-eng` | `packages/circuits` | `/data/Develop/qkb-wt-v5/circuits` | `feat/v5-circuits` | `2026-04-29-v5-architecture-circuits.md` |
 | `contracts-eng` | `packages/contracts` | `/data/Develop/qkb-wt-v5/contracts` | `feat/v5-contracts` | `2026-04-29-v5-architecture-contracts.md` |
@@ -234,7 +236,7 @@ Single message, parallel dispatch with `Agent({name: ...})` for each — but **o
 
 ## §4 — Lead scaffold (lead-only, BEFORE worker dispatch)
 
-Run these in order from `/data/Develop/identityescroworg` on `feat/v5-frontend`. Each is ~5-15 min.
+Run these in order from `/data/Develop/zkqes` on `feat/v5-frontend`. Each is ~5-15 min.
 
 ### §4.1 — Verify clean state
 
@@ -371,11 +373,11 @@ Lead commits to repo:
 
 ```bash
 # Upload zkey (~300-400 MB)
-aws s3 cp packages/circuits/build/v5/qkb-v5.zkey s3://prove.identityescrow.org/v5/qkb-v5.zkey \
+aws s3 cp packages/circuits/build/v5/qkb-v5.zkey s3://prove.zkqes.org/v5/qkb-v5.zkey \
   --endpoint-url https://<R2-account>.r2.cloudflarestorage.com
 
 # Upload .wasm (~10 MB)
-aws s3 cp packages/circuits/build/v5/QKBPresentationV5.wasm s3://prove.identityescrow.org/v5/QKBPresentationV5.wasm \
+aws s3 cp packages/circuits/build/v5/QKBPresentationV5.wasm s3://prove.zkqes.org/v5/QKBPresentationV5.wasm \
   --endpoint-url https://<R2-account>.r2.cloudflarestorage.com
 ```
 
@@ -461,10 +463,10 @@ Estimated: ~50 tasks, 2-3 weeks (parallel with circuits-eng).
 (Started after circuit public-signal layout + contract ABI converge — ~2 weeks into the parallel circuits/contracts work.)
 
 1. **Lead scaffold check** — V4 SDK inventoried, V5 spec §2 read.
-2. **`@qkb/sdk` witness builder for V5** — TS function building all witness inputs from a real Diia .p7s. Reuses V4's CAdES parsing (`packages/sdk/src/cert/cades.ts`).
-3. **`@qkb/sdk` SpkiCommit TS impl** — same code path as `circuits-eng`'s reference impl; vendored or imported.
-4. **`@qkb/sdk` register-tx builder** — `qkbRegistry.encodeRegisterCalldata(witness, proof, publicSignals, merkleProofs)` returning ready-to-send tx data.
-5. **`@qkb/cli` updated to V5 flow** — `qkb prove --binding ... --registry-version v5` produces both proof.json and the calldata bundle for register().
+2. **`@zkqes/sdk` witness builder for V5** — TS function building all witness inputs from a real Diia .p7s. Reuses V4's CAdES parsing (`packages/sdk/src/cert/cades.ts`).
+3. **`@zkqes/sdk` SpkiCommit TS impl** — same code path as `circuits-eng`'s reference impl; vendored or imported.
+4. **`@zkqes/sdk` register-tx builder** — `qkbRegistry.encodeRegisterCalldata(witness, proof, publicSignals, merkleProofs)` returning ready-to-send tx data.
+5. **`@zkqes/cli` updated to V5 flow** — `qkb prove --binding ... --registry-version v5` produces both proof.json and the calldata bundle for register().
 6. **Frontend `/ua/submit` updated for V5 ABI** — minimal change: submit calldata payload to V5 registry instead of V4. Same UX.
 7. **Browser-side prove path** — load V5 zkey + .wasm from R2 at first proof attempt, OPFS-cache for subsequent. Show prove progress.
 8. **Frontend smoke against Base Sepolia** — full flow: connect wallet → upload .p7s → prove in browser → register → mint. Playwright E2E in headed mode.

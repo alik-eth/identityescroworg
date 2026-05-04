@@ -1,5 +1,7 @@
 # V5 Release Plan — Phases A through E
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 **Date:** 2026-04-30
 **Status:** Drafted post-A1-implementation-complete
 **Spec:** [`2026-04-29-v5-architecture-design.md`](../specs/2026-04-29-v5-architecture-design.md) at HEAD `def6270`
@@ -62,7 +64,7 @@ Phase F (Base mainnet, separately gated)
 - Owner: `team-lead`
 - New task to create
 - Deliverables:
-  - R2 bucket `prove.identityescrow.org/ceremony/` with public-read on artifacts + signed-write for uploads
+  - R2 bucket `prove.zkqes.org/ceremony/` with public-read on artifacts + signed-write for uploads
   - Per-round signed upload URL generator script
   - Per-round download URL publisher
   - `status.json` publisher (admin updates manually after each contribution lands)
@@ -147,7 +149,7 @@ If a contributor goes silent for >48h: lead skips, founder recruits a replacemen
 - Deliverables to commit / publish:
   - `Groth16VerifierV5.sol` (auto-generated from final zkey, drop-in replacement for `Groth16VerifierV5Stub.sol`)
   - `verification_key.json`
-  - `qkb-v5-final.zkey` uploaded to R2 production URL `prove.identityescrow.org/qkb-v5-final.zkey`
+  - `qkb-v5-final.zkey` uploaded to R2 production URL `prove.zkqes.org/qkb-v5-final.zkey`
   - `zkey.sha256` integrity reference
   - Attestation chain (every contributor + their hash) committed to `packages/circuits/ceremony/v5/contribution-log.md`
   - Beacon attestation: `packages/circuits/ceremony/v5/beacon-attestation.md`
@@ -218,7 +220,7 @@ If a contributor goes silent for >48h: lead skips, founder recruits a replacemen
 ### C5. Pump zkey + verifier URLs (web-eng)
 
 - Owner: `web-eng`
-- Update `circuitArtifacts.ts` with R2 production zkey URL (`prove.identityescrow.org/qkb-v5-final.zkey`)
+- Update `circuitArtifacts.ts` with R2 production zkey URL (`prove.zkqes.org/qkb-v5-final.zkey`)
 - Pump `verification_key.json` from final ceremony to `packages/sdk/fixtures/v5/` (replacing stub)
 - Real-fullProve E2E test (deferred from Task 13): wire up `e2e:real-prover` invocation that pulls real zkey, runs full prove, asserts byte-equality against the ceremony's final sample-proof
 - Acceptance: real-prover E2E passes against live R2 zkey; SDK + web tests still green.
@@ -245,7 +247,7 @@ If a contributor goes silent for >48h: lead skips, founder recruits a replacemen
 - Sequence:
   1. Founder generates fresh Diia QES on QKB/2.0 binding (real Diia mobile app)
   2. Pumps `.p7s` to laptop
-  3. Visits `https://identityescrow.org/ua/registerV5` (still on Fly during Phase D — GH Pages migration is Phase E)
+  3. Visits `https://zkqes.org/ua/registerV5` (still on Fly during Phase D — GH Pages migration is Phase E)
   4. Connects wallet (Sepolia)
   5. Generates V5 binding via Step 2 → witness via build-witness-v5 → proof via SnarkjsWorkerProver against real zkey
   6. Submits register tx → captures hash
@@ -299,7 +301,7 @@ If a contributor goes silent for >48h: lead skips, founder recruits a replacemen
 
 ## Phase E — Frontend cutover + public launch
 
-**Goal:** Move frontend from Fly (currently scaled-to-0) to GitHub Pages on `identityescrow.org`. Execute public launch sequence.
+**Goal:** Move frontend from Fly (currently scaled-to-0) to GitHub Pages on `zkqes.org`. Execute public launch sequence.
 
 **Wall estimate:** 3-5 days, parallel-able sub-tasks.
 
@@ -309,18 +311,18 @@ If a contributor goes silent for >48h: lead skips, founder recruits a replacemen
 - Tracker: Task #17
 - Deliverables:
   - GitHub Actions workflow `actions/deploy-pages` triggered on push to main + post-merge from `feat/v5arch-web`
-  - Custom domain `identityescrow.org` configured (DNS already on Cloudflare; just CNAME to `<org>.github.io`)
+  - Custom domain `zkqes.org` configured (DNS already on Cloudflare; just CNAME to `<org>.github.io`)
   - Auto-issued Let's Encrypt cert via GH Pages
   - `coi-serviceworker` shim added if multithreaded snarkjs proving turns out to need `SharedArrayBuffer` (validate via desktop benchmark first; skip if single-threaded prove time is acceptable)
   - Fly app stays scaled-to-0 as ≥ 1-week rollback fallback
-- Acceptance: `https://identityescrow.org/` returns 200 from GH Pages; HTTPS valid; multithreaded prove either works (with shim) or single-threaded path is documented; rollback to Fly is a 2-record DNS flip in CF.
+- Acceptance: `https://zkqes.org/` returns 200 from GH Pages; HTTPS valid; multithreaded prove either works (with shim) or single-threaded path is documented; rollback to Fly is a 2-record DNS flip in CF.
 
 ### E2. Branding finalization (lead + founder)
 
 - Owner: `founder` (decision) + `team-lead` (execution)
 - Tracker: Task #21
 - Founder decides:
-  - Lock zk-QES (the protocol) vs Identity Escrow (the project) framing in spec / README / `BRAND.md`
+  - Lock zk-QES (the protocol) vs zkqes (the project) framing in spec / README / `BRAND.md`
   - Or leave at marketing-doc level only
 - If locking: spec amendment + README update + marketer drafts updated to match
 - Acceptance: framing decision made, propagated to all surfaces (or explicitly held at marketing-only).
@@ -332,7 +334,7 @@ If a contributor goes silent for >48h: lead skips, founder recruits a replacemen
 - Founder reads 6 drafts at `docs/marketing/2026-04-29-launch-drafts/`:
   - `positioning.md`, `launch-sequence.md`, `x-thread-launch.md`, `hn-post.md`, `faq.md`, `pre-launch-tease-1.md`
 - Decides on:
-  - Repo URL (currently placeholder `github.com/qkb-eth/identityescroworg`)
+  - Repo URL (currently placeholder `github.com/qkb-eth/zkqes`)
   - HN title pick (3 options offered)
   - Tease draft pick (A / B / C variants)
   - Audit framing terminology (currently "scope letter / pre-print / pending")
@@ -441,7 +443,7 @@ These are the gating items not in any worker's scope:
 
 1. **§11 ceremony go-ahead.** Required to enter Phase B.
 2. **Recruitment list.** Founder-driven; report back when 5+ confirmed.
-3. **Branding lock (#21).** zk-QES vs Identity Escrow framing in formal docs vs marketing-only.
+3. **Branding lock (#21).** zk-QES vs zkqes framing in formal docs vs marketing-only.
 4. **Marketer drafts review (#20).** 7 sub-decisions across 6 files.
 5. **Pre-launch tease timing.** T-2 weeks before launch event; defines launch date countdown.
 6. **Audit posture for launch.** Ship-without-audit + clear FAQ language, or hold for pre-print first.
@@ -468,9 +470,9 @@ Closed tasks for the V5 architecture (1-26 sans pending): see team todo list.
 
 **Sepolia public launch (end of Phase E):**
 
-- `https://identityescrow.org/` live on GH Pages
+- `https://zkqes.org/` live on GH Pages
 - V5 contracts deployed on Base Sepolia, all verified on Basescan
-- Final production zkey on `prove.identityescrow.org/qkb-v5-final.zkey`
+- Final production zkey on `prove.zkqes.org/qkb-v5-final.zkey`
 - 7-10 contributor ceremony attested + chain published
 - Founder mint #1 visible on Sepolia
 - Public spec + repo + LICENSE

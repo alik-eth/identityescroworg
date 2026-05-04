@@ -1,5 +1,7 @@
 # QIE In-Browser Demo Implementation Plan
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Fold the custodian agent role into the web SPA as a visually distinct section so a single demo URL exercises the full Holder → Custodian → Recipient/Notary flow against local anvil, without requiring docker-compose.

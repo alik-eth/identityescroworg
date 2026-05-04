@@ -1,5 +1,7 @@
 # QIE Phase 2 — Sprint 0 Circuits Plan
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Close the four Phase-1 circuit-side deviations before any QIE-core work starts — RSA variant, unified single-proof ECDSA, nullifier primitive, local ceremony ×2, R2 upload. Every downstream package depends on the 14-signal public layout that lands here.

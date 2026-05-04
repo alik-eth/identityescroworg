@@ -1,5 +1,7 @@
 # QKB/2 — Per-Country Registries
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > Date: 2026-04-24. Status: design target. Successor to
 > `2026-04-23-qkb-binding-v2-policy-root.md` — this doc adopts the
 > policy-root + scoped-credential-nullifier + modular-DOB surface from

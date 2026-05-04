@@ -1,5 +1,7 @@
 # web-eng Handoff Summary — 2026-04-30
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **Outgoing**: web-eng (this agent), idle on `feat/v5arch-web` waiting on circuits-eng + contracts-eng artifacts for A6.3 Tasks 2-5.
 > **Incoming**: fresh web-eng. Worktree at `/data/Develop/qkb-wt-v5/arch-web/`, branch `feat/v5arch-web`. Resume after the artifact pumps land.
 > **Lead context**: full task table in `/data/Develop/identityescroworg/CLAUDE.md`. Plans + specs at `docs/superpowers/{plans,specs}/` (lead head copy is authoritative).

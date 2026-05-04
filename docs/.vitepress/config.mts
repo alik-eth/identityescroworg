@@ -13,11 +13,11 @@
 // the doc site picks it up unchanged.
 //
 // **Inclusion policy** (per BRAND.md §"How to write about the project"):
-//   - QIE Phase-2 docs are internal codename only — `docs/qie/` excluded.
+//   - Deleted Phase-2 docs — `docs/qie/` excluded (deleted in v0.6.0 rename).
 //   - Marketing drafts are not public docs surface — `docs/marketing/` excluded.
 //   - Worker-handoff sessions are scaffolding — `docs/handoffs/` excluded.
 //   - Working notes — `docs/superpowers/notes/` excluded.
-//   - Deferred specs (trustless-eIDAS, qie-*) are excluded by default.
+//   - Deferred specs (trustless-eIDAS, historical-phase2) are excluded by default.
 //     Inclusion of a parked spec needs lead sign-off.
 //
 // **URL policy:** dated filenames in the source tree
@@ -28,11 +28,10 @@ import { defineConfig } from 'vitepress';
 
 export default defineConfig({
   title: 'zk-QES docs',
-  // Per BRAND.md §"How to write about the project": lead with the
-  // descriptor, use QKB as the protocol noun.
+  // Per BRAND.md §"How to write about the project": single noun is zkqes.
   description:
     'A zero-knowledge protocol over qualified electronic signatures. ' +
-    'Documentation for QKB — the V1 implementation of zk-QES.',
+    'Documentation for zkqes — the V1 implementation.',
 
   // Match the SPA's `<meta>` aesthetic; docs.zkqes.org carries a
   // sibling civic-monumental theme override (see `theme/index.ts`).
@@ -77,7 +76,7 @@ export default defineConfig({
   // Files we DON'T want rendered in the public site, even though they
   // live under `docs/` for orchestration purposes:
   srcExclude: [
-    // QIE Phase-2 codename — internal only per BRAND.md §Names.
+    // zkqes Phase-2 QIE docs (deleted in v0.6.0 rename); glob retained as safety net.
     'qie/**',
     // Marketing drafts — not part of the developer doc surface.
     'marketing/**',
@@ -85,7 +84,7 @@ export default defineConfig({
     'handoffs/**',
     // Working notes — pre-spec scratch.
     'superpowers/notes/**',
-    // Specs that are parked or QIE-flavored — explicit list rather
+    // Specs that are parked or historical-only — explicit list rather
     // than glob so a future addition shows up in this file's diff.
     'superpowers/specs/2026-04-17-qie-mvp-refinement.md',
     'superpowers/specs/2026-04-17-qie-phase2-design.md',
@@ -121,7 +120,7 @@ export default defineConfig({
   // surface" — adding a route requires adding a mapping here.
   rewrites: {
     'superpowers/specs/2026-04-19-qkb-cli-design.md':
-      'specs/qkb-cli-design.md',
+      'specs/zkqes-cli-design.md',
     'superpowers/specs/2026-04-29-v5-architecture-design.md':
       'specs/v5-architecture.md',
     'superpowers/specs/2026-04-30-wallet-bound-nullifier-amendment.md':
@@ -140,10 +139,10 @@ export default defineConfig({
     'superpowers/plans/2026-04-30-wallet-bound-nullifier-orchestration.md':
       'contributing/plans/v5_1-wallet-bound-nullifier.md',
     'superpowers/plans/2026-05-03-qkb-cli-server-orchestration.md':
-      'contributing/plans/v5_4-qkb-cli-server.md',
+      'contributing/plans/v5_4-zkqes-cli-server.md',
     'superpowers/plans/2026-05-03-v5_3-orchestration.md':
       'contributing/plans/v5_3-orchestration.md',
-    'cli-release.md': 'install/qkb-cli.md',
+    'cli-release.md': 'install/zkqes-cli.md',
     'integrations.md': 'reference/integrations.md',
     'release-notes/v0.5.2-contracts.md':
       'reference/release-notes/v0.5.2-contracts.md',
@@ -153,7 +152,7 @@ export default defineConfig({
   themeConfig: {
     siteTitle: 'zk-QES',
     nav: [
-      { text: 'Install', link: '/install/qkb-cli' },
+      { text: 'Install', link: '/install/zkqes-cli' },
       { text: 'Specs', link: '/specs/v5-architecture' },
       { text: 'Ceremony', link: '/ceremony/' },
       { text: 'Reference', link: '/reference/integrations' },
@@ -183,7 +182,7 @@ export default defineConfig({
               link: '/specs/v5_2-keccak-on-chain',
             },
             { text: 'V5.3 — OID anchor', link: '/specs/v5_3-oid-anchor' },
-            { text: 'QKB CLI design', link: '/specs/qkb-cli-design' },
+            { text: 'zkqes CLI design', link: '/specs/zkqes-cli-design' },
           ],
         },
         {
@@ -198,7 +197,7 @@ export default defineConfig({
       '/install/': [
         {
           text: 'Install',
-          items: [{ text: 'QKB CLI', link: '/install/qkb-cli' }],
+          items: [{ text: 'zkqes CLI', link: '/install/zkqes-cli' }],
         },
       ],
       '/reference/': [
@@ -246,8 +245,8 @@ export default defineConfig({
               link: '/contributing/plans/v5_3-orchestration',
             },
             {
-              text: 'V5.4 — QKB CLI server',
-              link: '/contributing/plans/v5_4-qkb-cli-server',
+              text: 'V5.4 — zkqes CLI server',
+              link: '/contributing/plans/v5_4-zkqes-cli-server',
             },
           ],
         },
@@ -257,20 +256,20 @@ export default defineConfig({
     socialLinks: [
       {
         icon: 'github',
-        link: 'https://github.com/alik-eth/identityescroworg',
+        link: 'https://github.com/alik-eth/zkqes',
       },
     ],
 
     editLink: {
       pattern:
-        'https://github.com/alik-eth/identityescroworg/edit/main/docs/:path',
+        'https://github.com/alik-eth/zkqes/edit/main/docs/:path',
       text: 'Edit this page on GitHub',
     },
 
     footer: {
       message:
         'Released under the MIT License. zk-QES — a zero-knowledge protocol over qualified electronic signatures.',
-      copyright: 'Copyright © 2026 — Identity Escrow contributors',
+      copyright: 'Copyright © 2026 — zkqes contributors',
     },
 
     search: {

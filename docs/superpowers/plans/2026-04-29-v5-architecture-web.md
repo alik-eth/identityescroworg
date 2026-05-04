@@ -1,8 +1,10 @@
 # V5 Architecture — web-eng Implementation Plan
 
-> **For agentic workers:** this plan is task-by-task TDD. Steps use checkbox (`- [ ]`) syntax. Commit per step where indicated. The `@qkb/sdk` package is in scope alongside `@qkb/web` — they're coupled, web-eng owns both for the V5 migration.
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
 
-**Goal:** Migrate the @qkb/web SPA + @qkb/sdk from V4 (chain-proof + leaf-proof split, RegistryV4 ABI, ECDSA-in-circuit) to V5 (single Groth16 proof, RegistryV5 ABI, EIP-7212 P-256 off-circuit). End state: production-grade Ukrainian-targeted register flow that takes a Diia QES `.p7s` upload, generates a proof in the browser, calls `register()` on Base mainnet, and mints an IdentityEscrowNFT — all client-side.
+> **For agentic workers:** this plan is task-by-task TDD. Steps use checkbox (`- [ ]`) syntax. Commit per step where indicated. The `@zkqes/sdk` package is in scope alongside `@zkqes/web` — they're coupled, web-eng owns both for the V5 migration.
+
+**Goal:** Migrate the @zkqes/web SPA + @zkqes/sdk from V4 (chain-proof + leaf-proof split, RegistryV4 ABI, ECDSA-in-circuit) to V5 (single Groth16 proof, RegistryV5 ABI, EIP-7212 P-256 off-circuit). End state: production-grade Ukrainian-targeted register flow that takes a Diia QES `.p7s` upload, generates a proof in the browser, calls `register()` on Base mainnet, and mints an IdentityEscrowNFT — all client-side.
 
 **Architecture:** V5 collapses V4's two-proof flow into a single proof. The browser prover loads ONE zkey (~1.5GB target post-ceremony, ~1.4GB current target with envelope amendment to 3M constraints). The register() call has named structs (`PublicSignals` + `Groth16Proof`) plus raw bytes for `leafSpki`, `intSpki`, signatures, Merkle paths. Trust-list leaves are now `SpkiCommit(intSpki)` instead of full-cert hashes. NFT mint is a separate transaction post-register, using the existing `IdentityEscrowNFT` contract (preserved from V4 — `IQKBRegistry` interface kept verbatim by contracts-eng's §7).
 
@@ -72,7 +74,7 @@ admin-leaf-ecdsa:         215719403044763568549229940922660753349735862845475641
 admin-intermediate-ecdsa:  3062275996413807393972187453260313408742194132301219197208947046150619781839
 ```
 
-The TS impl in `@qkb/sdk` (V4-era at `packages/sdk/src/binding/spki.ts` or similar — verify location) is one of the four already-passing impls. V5 work doesn't change this; just ensure the V5 register-flow uses it consistently for `leafSpkiCommit` and `intSpkiCommit` derivation.
+The TS impl in `@zkqes/sdk` (V4-era at `packages/sdk/src/binding/spki.ts` or similar — verify location) is one of the four already-passing impls. V5 work doesn't change this; just ensure the V5 register-flow uses it consistently for `leafSpkiCommit` and `intSpkiCommit` derivation.
 
 ### §0.4 Witness shape from circuits-eng's §7 (NOT YET LANDED)
 
@@ -157,10 +159,10 @@ Expected: branch `feat/v5arch-web`, working tree clean (or only with unrelated b
 - [ ] **Step 2: Confirm test baseline still green**
 
 ```bash
-pnpm --filter @qkb/sdk test
-pnpm --filter @qkb/web test
-pnpm --filter @qkb/sdk typecheck
-pnpm --filter @qkb/web typecheck
+pnpm --filter @zkqes/sdk test
+pnpm --filter @zkqes/web test
+pnpm --filter @zkqes/sdk typecheck
+pnpm --filter @zkqes/web typecheck
 ```
 
 Expected: all green. This is the V4 regression baseline; V5 work doesn't break it.
@@ -345,8 +347,8 @@ describe('publicSignalsToArray', () => {
 - [ ] **Step 4: Run test + typecheck**
 
 ```bash
-pnpm --filter @qkb/sdk exec vitest run src/registry/registryV5.test.ts
-pnpm --filter @qkb/sdk typecheck
+pnpm --filter @zkqes/sdk exec vitest run src/registry/registryV5.test.ts
+pnpm --filter @zkqes/sdk typecheck
 ```
 
 Expected: 2/2 pass, typecheck clean.
@@ -437,7 +439,7 @@ export function hiLoToBytes32(hi: bigint, lo: bigint): Uint8Array {
 - [ ] **Step 3: Run + commit**
 
 ```bash
-pnpm --filter @qkb/sdk exec vitest run src/core/bytes32ToHiLo.test.ts
+pnpm --filter @zkqes/sdk exec vitest run src/core/bytes32ToHiLo.test.ts
 git add packages/sdk/src/core/bytes32ToHiLo.ts packages/sdk/src/core/bytes32ToHiLo.test.ts
 git commit -m "feat(sdk): Bytes32ToHiLo helper matching V5 hi/lo convention"
 ```
@@ -869,7 +871,7 @@ git commit -m "feat(web): Step4 V5 register-flow wiring with mock-prover toggle"
 **Files:**
 - Modify: `packages/sdk/src/witness/v5.ts` (replace stub with real impl)
 
-GATED ON circuits-eng §7. When their witness-builder spec lands (probably in their `packages/circuits/test/integration/witness-builder.ts` or similar), port the witness-construction logic into `@qkb/sdk/witness/v5.ts`.
+GATED ON circuits-eng §7. When their witness-builder spec lands (probably in their `packages/circuits/test/integration/witness-builder.ts` or similar), port the witness-construction logic into `@zkqes/sdk/witness/v5.ts`.
 
 - [ ] **Step 1: Pull circuits-eng's witness builder code as reference**
 
@@ -877,7 +879,7 @@ GATED ON circuits-eng §7. When their witness-builder spec lands (probably in th
 cat /data/Develop/qkb-wt-v5/arch-circuits/packages/circuits/test/integration/witness-builder.ts
 ```
 
-Note all the helper functions they use to construct witnesses from QES bundles + cert chains. Port to TS-on-browser-friendly form (no node:crypto in @qkb/sdk runtime; use Web Crypto + circomlibjs already in deps).
+Note all the helper functions they use to construct witnesses from QES bundles + cert chains. Port to TS-on-browser-friendly form (no node:crypto in @zkqes/sdk runtime; use Web Crypto + circomlibjs already in deps).
 
 - [ ] **Step 2: Implement `buildV5Witness`**
 
@@ -1057,9 +1059,9 @@ git commit -m "test(web): V5 e2e happy path — mock prover, mock wallet, mock r
 You're done with the web side of A1 when:
 
 - [ ] **§9.1** All Task 1-11 commits land cleanly on `feat/v5arch-web`.
-- [ ] **§9.2** `pnpm --filter @qkb/sdk test` 100% pass (V4 + new V5 tests both green).
-- [ ] **§9.3** `pnpm --filter @qkb/web test` + `pnpm --filter @qkb/web typecheck` + `pnpm --filter @qkb/web build` clean.
-- [ ] **§9.4** `pnpm --filter @qkb/web exec playwright test --project=v5-flow` green (with mock prover).
+- [ ] **§9.2** `pnpm --filter @zkqes/sdk test` 100% pass (V4 + new V5 tests both green).
+- [ ] **§9.3** `pnpm --filter @zkqes/web test` + `pnpm --filter @zkqes/web typecheck` + `pnpm --filter @zkqes/web build` clean.
+- [ ] **§9.4** `pnpm --filter @zkqes/web exec playwright test --project=v5-flow` green (with mock prover).
 - [ ] **§9.5** No regressions in V4 tests — the V4 register flow + NFT mint flow continues to work on `main`.
 - [ ] **§9.6** Awaiting Phase 2 ceremony pump from lead → V5_PROVER_ARTIFACTS URLs landed → Tasks 6, 8 unblocked → real-prover Playwright project (`v5-flow-real`) green.
 - [ ] **§9.7** Awaiting Base Sepolia deploy from lead → V5_REGISTRY_ADDRESS landed → real-tx Playwright project green.
@@ -1087,11 +1089,11 @@ V4 files (`registryV4.ts`, `witnessV4.ts`, `uaProofPipelineV4.ts`, `/ua/index.ts
 
 ## §12 — Operational notes
 
-- **Worktree CWD**: `/data/Develop/qkb-wt-v5/arch-web`. Do not write to `/data/Develop/identityescroworg`.
+- **Worktree CWD**: `/data/Develop/qkb-wt-v5/arch-web`. Do not write to `/data/Develop/zkqes`.
 - **`pnpm-lock.yaml` is gitignored** on worker branches. Don't `git add` it.
-- **Vite dev server**: `pnpm --filter @qkb/web dev` for hot-reload during development.
-- **Playwright debug**: `pnpm --filter @qkb/web exec playwright test --debug` for step-through. `pnpm --filter @qkb/web exec playwright show-trace trace.zip` for trace exploration.
-- **Mock vs real prover**: `VITE_USE_MOCK_PROVER=1 pnpm --filter @qkb/web dev` for UI iteration without zkey. Defaults to real prover post-ceremony.
+- **Vite dev server**: `pnpm --filter @zkqes/web dev` for hot-reload during development.
+- **Playwright debug**: `pnpm --filter @zkqes/web exec playwright test --debug` for step-through. `pnpm --filter @zkqes/web exec playwright show-trace trace.zip` for trace exploration.
+- **Mock vs real prover**: `VITE_USE_MOCK_PROVER=1 pnpm --filter @zkqes/web dev` for UI iteration without zkey. Defaults to real prover post-ceremony.
 - **Wallet for testing**: existing arch-web setup includes Sepolia testnet RPC + a test private key in `.env`. For Base Sepolia, you may need to add `BASE_SEPOLIA_RPC_URL` — surface to lead if missing.
 - **Diia fixture for E2E**: real `.p7s` lives at `packages/lotl-flattener/fixtures/diia/654fa72c-71d8-4f8f-9730-2a3a8b8a80b3.p7s` — that's the V4 admin-ecdsa real Diia QES. For V5 E2E with the QKB/2.0 binding, the synthetic fixture circuits-eng built (binding.qkb2.json + signed by synthetic key) is the testing path. Real-Diia QKB/2.0 fixture is post-A1 (see lead's tracker task #49).
 

@@ -1,5 +1,7 @@
 # Trustless eIDAS Trust Root Updates — Design Spec
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 **Date:** 2026-04-27
 **Status:** approved (brainstorming complete, awaiting plan)
 **Scope:** UA-first on Sepolia; architecture covers ~33 ETSI-publishing countries

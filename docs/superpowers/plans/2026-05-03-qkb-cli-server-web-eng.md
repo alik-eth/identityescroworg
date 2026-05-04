@@ -1,4 +1,6 @@
-# QKB CLI-Server — web-eng Implementation Plan
+# zkqes CLI-Server — web-eng Implementation Plan
+
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -6,7 +8,7 @@
 
 **Architecture:** Three deliverables: (1) `proveViaCli()` SDK helper following the §1.6 contract, (2) Step4 + RotateWalletFlow integration that prefers CLI when available, (3) `/ua/cli` page rewrite. Fallback discipline is the load-bearing invariant — browser prove must remain a working path for users who don't install the CLI.
 
-**Tech Stack:** TanStack Router, viem, @qkb/sdk, existing `runV5_2Pipeline`, Playwright for E2E.
+**Tech Stack:** TanStack Router, viem, @zkqes/sdk, existing `runV5_2Pipeline`, Playwright for E2E.
 
 **Branch:** `feat/qkb-cli-server-web`. **Worktree:** `/data/Develop/qkb-wt-v5/qkb-cli-web/`.
 
@@ -261,13 +263,13 @@ async function generateProof(witness: WitnessV5_2, opts: PipelineOpts): Promise<
 - [ ] **Step 1: Read current `/ua/cli/index.tsx`** to understand what's there. Currently V4-deprecated; will be repurposed.
 
 - [ ] **Step 2: Write new copy** organized as:
-  - Hero: "Install QKB CLI for native proof generation"
+  - Hero: "Install zkqes CLI for native proof generation"
   - Why: 7× faster (13.86s vs 90s), 10× less memory (3.7 GiB vs 38 GiB), runs only when invoked
   - Install (3 platforms × 3 channels):
     - macOS / Linux / Windows columns
-    - npm: `npm install -g @qkb/cli`
+    - npm: `npm install -g @zkqes/cli`
     - Homebrew (macOS/Linux): `brew install identityescrow/qkb/qkb`
-    - Direct binary: `curl -fsSL https://identityescrow.org/install.sh | sh` (macOS/Linux); MSI installer (Windows)
+    - Direct binary: `curl -fsSL https://zkqes.org/install.sh | sh` (macOS/Linux); MSI installer (Windows)
   - Run: `qkb serve` in your terminal — leave it running while you generate proofs
   - Stop: Ctrl+C
   - Verify: visit `/v5/registerV5` — banner disappears when CLI is detected
@@ -353,11 +355,11 @@ test('CLI-served prove path produces valid proof', async ({ page }) => {
 
 Before declaring Phase 2 complete:
 
-- [ ] `pnpm -F @qkb/sdk test` — green, including new CLI tests
-- [ ] `pnpm -F @qkb/web test` — green
-- [ ] `pnpm -F @qkb/web typecheck` — clean
-- [ ] `pnpm -F @qkb/web build` — clean
-- [ ] `pnpm -F @qkb/web exec playwright test --grep cli-` — green (both happy + fallback)
+- [ ] `pnpm -F @zkqes/sdk test` — green, including new CLI tests
+- [ ] `pnpm -F @zkqes/web test` — green
+- [ ] `pnpm -F @zkqes/web typecheck` — clean
+- [ ] `pnpm -F @zkqes/web build` — clean
+- [ ] `pnpm -F @zkqes/web exec playwright test --grep cli-` — green (both happy + fallback)
 - [ ] Manual smoke test: `/ua/cli` page renders correctly EN + UK; install instructions copy-paste correctly
 - [ ] Manual smoke test: `/v5/registerV5` with CLI running shows no banner; without CLI shows banner that links to `/ua/cli`
 - [ ] Codex review on each commit; VERDICT PASS or annotated P2/P3 only

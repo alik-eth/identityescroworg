@@ -1,5 +1,7 @@
 # @qkb/circuits — Implementation Plan
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Circom 2 circuits that implement relation `R_QKB`, compiled with a documented Groth16 ceremony, exporting Solidity verifier + `verification_key.json` + `.zkey` + `.wasm` for browser proving.

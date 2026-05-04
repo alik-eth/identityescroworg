@@ -1,8 +1,10 @@
 # V5 Architecture — flattener-eng Implementation Plan
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **For agentic workers:** this plan is task-by-task TDD. Steps use checkbox (`- [ ]`) syntax. Commit per step where indicated.
 
-**Goal:** Migrate `@qkb/lotl-flattener` from V4's full-cert-DER Poseidon hash (`canonicalizeCertHash`) to V5's SpkiCommit-over-extracted-91-byte-SPKI Merkle leaves, byte-equivalent with circuits-eng's TS reference at `f1d7a79` and contracts-eng's Solidity port. Pass the §9.1 parity gate.
+**Goal:** Migrate `@zkqes/lotl-flattener` from V4's full-cert-DER Poseidon hash (`canonicalizeCertHash`) to V5's SpkiCommit-over-extracted-91-byte-SPKI Merkle leaves, byte-equivalent with circuits-eng's TS reference at `f1d7a79` and contracts-eng's Solidity port. Pass the §9.1 parity gate.
 
 **Architecture:** V4 hashed the full cert DER. V5 extracts the 91-byte ECDSA-P256 SubjectPublicKeyInfo (SPKI) from each CA's DER via `pkijs.Certificate`, then computes `Poseidon₂(Poseidon₆(X_limbs), Poseidon₆(Y_limbs))` over the 6×43-bit LE limb decomposition of the X and Y coordinates. The Merkle tree shape stays unchanged: binary, depth 16, `node = Poseidon(left, right)`. Only the leaf-derivation function changes.
 
@@ -181,7 +183,7 @@ NOTE: this test will need an ECDSA-P256 fixture. We use the synthetic intermedia
 - [ ] **Step 2: Run test to verify it fails**
 
 ```bash
-pnpm --filter @qkb/lotl-flattener exec vitest run tests/ca/extractIntSpki.test.ts
+pnpm --filter @zkqes/lotl-flattener exec vitest run tests/ca/extractIntSpki.test.ts
 ```
 
 Expected: FAIL — `extractIntSpki is not a function` or `Cannot find module`.
@@ -288,7 +290,7 @@ it('rejects RSA SPKI', async () => {
 - [ ] **Step 5: Run test to verify it passes**
 
 ```bash
-pnpm --filter @qkb/lotl-flattener exec vitest run tests/ca/extractIntSpki.test.ts
+pnpm --filter @zkqes/lotl-flattener exec vitest run tests/ca/extractIntSpki.test.ts
 ```
 
 Expected: PASS, 2/2.
@@ -323,7 +325,7 @@ git commit -m "feat(flattener): extractIntSpki via pkijs — 91-byte canonical E
 - Create: `packages/lotl-flattener/src/ca/spkiCommit.ts`
 - Test: `packages/lotl-flattener/tests/ca/spkiCommit.test.ts`
 
-Port circuits-eng's `spki-commit-ref.ts` (commit `f1d7a79` in their worktree) to live in this package. We don't import from `@qkb/circuits` because the script lives in their `scripts/` directory and isn't exported via package.json. Re-implementing using the same circomlibjs library + iden3 params guarantees byte-equivalence by construction.
+Port circuits-eng's `spki-commit-ref.ts` (commit `f1d7a79` in their worktree) to live in this package. We don't import from `@zkqes/circuits` because the script lives in their `scripts/` directory and isn't exported via package.json. Re-implementing using the same circomlibjs library + iden3 params guarantees byte-equivalence by construction.
 
 - [ ] **Step 1: Read circuits-eng's reference impl**
 
@@ -388,7 +390,7 @@ describe('spkiCommit (V5 §9.1 parity gate)', () => {
 - [ ] **Step 3: Run test to verify it fails**
 
 ```bash
-pnpm --filter @qkb/lotl-flattener exec vitest run tests/ca/spkiCommit.test.ts
+pnpm --filter @zkqes/lotl-flattener exec vitest run tests/ca/spkiCommit.test.ts
 ```
 
 Expected: FAIL — `spkiCommit is not a function`.
@@ -482,7 +484,7 @@ export async function spkiCommit(spki: Uint8Array): Promise<bigint> {
 - [ ] **Step 5: Run test to verify all three pass**
 
 ```bash
-pnpm --filter @qkb/lotl-flattener exec vitest run tests/ca/spkiCommit.test.ts
+pnpm --filter @zkqes/lotl-flattener exec vitest run tests/ca/spkiCommit.test.ts
 ```
 
 Expected: PASS, 3/3.
@@ -570,8 +572,8 @@ The `if (ca.poseidonHash && BigInt(ca.poseidonHash) !== poseidonHash)` check bel
 - [ ] **Step 3: Run typecheck + targeted unit tests**
 
 ```bash
-pnpm --filter @qkb/lotl-flattener typecheck
-pnpm --filter @qkb/lotl-flattener exec vitest run tests/ca/
+pnpm --filter @zkqes/lotl-flattener typecheck
+pnpm --filter @zkqes/lotl-flattener exec vitest run tests/ca/
 ```
 
 Expected: typecheck clean. ca/ tests pass (extractIntSpki + spkiCommit). The old canonicalize.test.ts still exists at this point; it'll continue to pass against the V4 hash function (we delete it in Task 8).
@@ -588,7 +590,7 @@ git commit -m "feat(flattener): rewire run() + readOutputCas() to V5 spkiCommit 
 ## Task 4 — Smoke test the rewired pipeline against synthetic fixtures
 
 **Files:**
-- Run: `pnpm --filter @qkb/lotl-flattener exec vitest run`
+- Run: `pnpm --filter @zkqes/lotl-flattener exec vitest run`
 
 The package's existing `tests/integration/` and `tests/smoke.test.ts` exercise the full pipeline. They embed `test-ca.der` (RSA) in `lotl-mini.xml`, which means after the rewire they'll hit the RSA-rejection path in `extractIntSpki`. We need to swap the synthetic fixtures' embedded certs to ECDSA-P256.
 
@@ -600,7 +602,7 @@ This is structural fixture work, not algorithmic — but it's where the V4-vs-V5
 openssl ecparam -name prime256v1 -genkey -noout -out /tmp/test-ca-ecdsa.key
 openssl req -x509 -new -key /tmp/test-ca-ecdsa.key \
   -days 3650 -nodes \
-  -subj "/CN=QKB Test CA P256/O=QKB/C=EE" \
+  -subj "/CN=zkqes Test CA P256/O=zkqes/C=EE" \
   -out /tmp/test-ca-ecdsa.pem
 openssl x509 -in /tmp/test-ca-ecdsa.pem -outform DER \
   -out fixtures/certs/test-ca-ecdsa.der
@@ -622,7 +624,7 @@ sed -i "s|<X509Certificate>[^<]*</X509Certificate>|<X509Certificate>$B64</X509Ce
 - [ ] **Step 3: Run the integration tests**
 
 ```bash
-pnpm --filter @qkb/lotl-flattener exec vitest run tests/integration/
+pnpm --filter @zkqes/lotl-flattener exec vitest run tests/integration/
 ```
 
 Expected: tests run end-to-end, but `tests/integration/e2e.test.ts` will FAIL on the pinned `expected/root.json` since the rTL value has shifted (V4 hash → V5 SpkiCommit). That's expected — Task 7 regenerates the fixture.
@@ -651,7 +653,7 @@ The `fixtures/diia/` directory contains real Ukrainian Diia QES material. After 
 - [ ] **Step 1: Run the diia integration suite**
 
 ```bash
-pnpm --filter @qkb/lotl-flattener exec vitest run tests/integration/ \
+pnpm --filter @zkqes/lotl-flattener exec vitest run tests/integration/ \
   -t 'diia|ua-msTl' --reporter verbose
 ```
 
@@ -668,7 +670,7 @@ node dist/index.js \
 cat /tmp/v5-diia-out/root.json
 ```
 
-(You'll need to `pnpm --filter @qkb/lotl-flattener build` first to populate `dist/`.)
+(You'll need to `pnpm --filter @zkqes/lotl-flattener build` first to populate `dist/`.)
 
 Note the new `rTL` value. This is one of the values that goes into the regenerated `root-pinned.json`.
 
@@ -686,7 +688,7 @@ Note the new `rTL` value. This is one of the values that goes into the regenerat
 - [ ] **Step 1: Run the existing combine integration test**
 
 ```bash
-pnpm --filter @qkb/lotl-flattener exec vitest run tests/integration/ \
+pnpm --filter @zkqes/lotl-flattener exec vitest run tests/integration/ \
   -t 'combineOutputs|combine-output'
 ```
 
@@ -740,7 +742,7 @@ jq '. + {builtAt: "1970-01-01T00:00:00.000Z"}' fixtures/expected/root-pinned.jso
 - [ ] **Step 3: Run all integration tests — should now pass**
 
 ```bash
-pnpm --filter @qkb/lotl-flattener exec vitest run
+pnpm --filter @zkqes/lotl-flattener exec vitest run
 ```
 
 Expected: 100% pass.
@@ -794,9 +796,9 @@ git rm tests/ca/__snapshots__/canonicalize.test.ts.snap 2>/dev/null || true
 - [ ] **Step 3: Run full test suite + typecheck**
 
 ```bash
-pnpm --filter @qkb/lotl-flattener typecheck
-pnpm --filter @qkb/lotl-flattener exec vitest run
-pnpm --filter @qkb/lotl-flattener build
+pnpm --filter @zkqes/lotl-flattener typecheck
+pnpm --filter @zkqes/lotl-flattener exec vitest run
+pnpm --filter @zkqes/lotl-flattener build
 ```
 
 Expected: clean across all three. If the build fails on a missing import, you missed an import site in Task 3 step 1.
@@ -886,8 +888,8 @@ git commit -m "docs(flattener): CLAUDE.md hard-locks updated for V5 spkiCommit"
 You're done with the flattener side of A1 when:
 
 - [ ] **§9.1** `tests/ca/spkiCommit.test.ts` passes for both parity cases (Task 2 step 5).
-- [ ] **§9.2** Full `pnpm --filter @qkb/lotl-flattener test` passes (after Task 7 fixture regen).
-- [ ] **§9.3** `pnpm --filter @qkb/lotl-flattener build` produces clean dist (Task 8 step 3).
+- [ ] **§9.2** Full `pnpm --filter @zkqes/lotl-flattener test` passes (after Task 7 fixture regen).
+- [ ] **§9.3** `pnpm --filter @zkqes/lotl-flattener build` produces clean dist (Task 8 step 3).
 - [ ] **§9.4** No reachable references to `canonicalizeCertHash` remain in src/ or tests/ (Task 8 step 1).
 - [ ] **§9.5** CLAUDE.md hard-locks section reflects spkiCommit (Task 9).
 

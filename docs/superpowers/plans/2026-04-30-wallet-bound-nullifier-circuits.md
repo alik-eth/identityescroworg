@@ -1,5 +1,7 @@
 # Wallet-Bound Nullifier — circuits-eng Implementation Plan
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **For circuits-eng:** Implement the spec at `docs/superpowers/specs/2026-04-30-wallet-bound-nullifier-amendment.md`. Follow superpowers:test-driven-development. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Extend `QKBPresentationV5.circom` to emit the V5.1 19-field public-signal layout, fold `rotation_mode` into the main circuit, ship updated witness builder + stub ceremony zkey for cross-package integration.
@@ -70,7 +72,7 @@ git commit -m "circuits(v51): add walletSecret + 5 new public signals + rotation
 - [ ] **Step 7: Run tests**
 
 ```bash
-pnpm -F @qkb/circuits test
+pnpm -F @zkqes/circuits test
 ```
 Expected: green.
 
@@ -98,7 +100,7 @@ git commit -m "circuits(v51): witness builder for 19-field publicSignals + rotat
 - [ ] **Step 4: Run full circuit test suite**
 
 ```bash
-pnpm -F @qkb/circuits test:real-diia
+pnpm -F @zkqes/circuits test:real-diia
 ```
 Expected: 4/4 (existing) + 2/2 (new) green.
 
@@ -160,9 +162,9 @@ git commit -m "circuits(v51): document new invariants + witness API in CLAUDE.md
 ## Verification (lead runs after each commit)
 
 ```bash
-pnpm -F @qkb/circuits test           # 70+ tests, all green
-pnpm -F @qkb/circuits typecheck      # clean
-pnpm -F @qkb/circuits build          # circuit recompiles + R1CS regenerates
+pnpm -F @zkqes/circuits test           # 70+ tests, all green
+pnpm -F @zkqes/circuits typecheck      # clean
+pnpm -F @zkqes/circuits build          # circuit recompiles + R1CS regenerates
 ```
 
 Lead inspects diff for:

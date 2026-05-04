@@ -1,10 +1,12 @@
-# QKB CLI-Server Orchestration Plan
+# zkqes CLI-Server Orchestration Plan
+
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Coordinate three-track delivery of QKB CLI-Server V1 — a `qkb serve` command that turns the V5.2 register flow's prove step from 90s / 38 GiB (in-browser snarkjs) into 13.86s / 3.70 GiB (native rapidsnark via terminal-launched localhost server), while keeping browser canonical for everything else.
+**Goal:** Coordinate three-track delivery of zkqes CLI-Server V1 — a `qkb serve` command that turns the V5.2 register flow's prove step from 90s / 38 GiB (in-browser snarkjs) into 13.86s / 3.70 GiB (native rapidsnark via terminal-launched localhost server), while keeping browser canonical for everything else.
 
-**Architecture:** Three independently-mergeable tracks — circuits-eng owns the `@qkb/cli` package, web-eng owns browser detection + `/ua/cli` page upgrade, lead owns npm publish + brew tap + GitHub releases binaries. All three converge on a single `feat/qkb-cli-server` integration branch for E2E.
+**Architecture:** Three independently-mergeable tracks — circuits-eng owns the `@zkqes/cli` package, web-eng owns browser detection + `/ua/cli` page upgrade, lead owns npm publish + brew tap + GitHub releases binaries. All three converge on a single `feat/qkb-cli-server` integration branch for E2E.
 
 **Tech Stack:** Node 20 LTS bundled via `pkg`, iden3 rapidsnark v0.0.8 (prebuilt sidecars for 4 platforms), TypeScript, React (existing web app), npm + Homebrew tap + GitHub releases.
 
@@ -22,7 +24,7 @@ These contracts are load-bearing across all three workers. Changes require expli
 
 Summary:
 - `GET http://127.0.0.1:9080/status` — returns `{ok, version, circuit, zkeyLoaded, busy, provesCompleted, uptimeSec, downloadProgress}`
-- `POST http://127.0.0.1:9080/prove` — body is witness JSON (22 public + 10518 private signals), returns `{proof, publicSignals, verifyOk, timings}`. Origin pin: `https://identityescrow.org` (403 otherwise).
+- `POST http://127.0.0.1:9080/prove` — body is witness JSON (22 public + 10518 private signals), returns `{proof, publicSignals, verifyOk, timings}`. Origin pin: `https://zkqes.org` (403 otherwise).
 - `OPTIONS http://127.0.0.1:9080/prove` — Chrome PNA preflight.
 
 Validated prototype lives at `packages/circuits/scripts/v5_2-prove-server.mjs` (250 LOC, 12.94s end-to-end measured). The CLI package lifts this directly with minimal changes.
@@ -50,7 +52,7 @@ V1 supports only `v5.2`. The `--circuit` flag and manifest-keyed circuits dict i
 
 ### §1.3 — Auto-update manifest
 
-URL: `https://identityescrow.org/qkb-cli-manifest.json` (CloudFront/CDN-cached, 5 min TTL).
+URL: `https://zkqes.org/qkb-cli-manifest.json` (CloudFront/CDN-cached, 5 min TTL).
 
 ```json
 {
@@ -60,11 +62,11 @@ URL: `https://identityescrow.org/qkb-cli-manifest.json` (CloudFront/CDN-cached, 
   "minSupportedVersion": "1.0.0",
   "circuits": {
     "v5.2": {
-      "zkeyUrl":      "https://r2.identityescrow.org/qkb-v5_2-stub.zkey",
+      "zkeyUrl":      "https://r2.zkqes.org/qkb-v5_2-stub.zkey",
       "zkeySha256":   "b66bad1d27f2e0b00f2db7437a0fab365433165dccb2f11d09ee3eb475debce2",
-      "wasmUrl":      "https://r2.identityescrow.org/qkb-v5_2.wasm",
+      "wasmUrl":      "https://r2.zkqes.org/qkb-v5_2.wasm",
       "wasmSha256":   "<from circuits-eng's vendor build>",
-      "vkeyUrl":      "https://r2.identityescrow.org/qkb-v5_2-vkey.json",
+      "vkeyUrl":      "https://r2.zkqes.org/qkb-v5_2-vkey.json",
       "vkeySha256":   "<from circuits-eng's vendor build>"
     }
   }
@@ -97,10 +99,10 @@ Subdirectories under cache root:
 
 | Channel | Artifact | Notes |
 |---|---|---|
-| npm | `@qkb/cli` (scoped package) | `npm install -g @qkb/cli` ships postinstall script that downloads the matching rapidsnark sidecar. Node 20+ required. |
+| npm | `@zkqes/cli` (scoped package) | `npm install -g @zkqes/cli` ships postinstall script that downloads the matching rapidsnark sidecar. Node 20+ required. |
 | Homebrew | `identityescrow/qkb/qkb` (custom tap) | `brew install identityescrow/qkb/qkb` installs prebuilt binary + bundled sidecar |
 | GitHub releases | `qkb-darwin-arm64`, `qkb-darwin-x86_64`, `qkb-linux-x86_64`, `qkb-linux-arm64`, `qkb-windows-x86_64.exe` | Single-file binaries via `pkg`. Sha256 sidecar `.sha256` published alongside each. |
-| curl install | `https://identityescrow.org/install.sh` | Detects platform, downloads matching binary, writes to `~/.local/bin/qkb` (Linux/macOS only). |
+| curl install | `https://zkqes.org/install.sh` | Detects platform, downloads matching binary, writes to `~/.local/bin/qkb` (Linux/macOS only). |
 
 **Code-signing for V1: optional, deferred.** Unsigned binaries ship with Gatekeeper / SmartScreen warnings. Tradeoff: warning UX vs cert procurement timeline. V1.1 adds signing if user-feedback warrants.
 
@@ -136,14 +138,14 @@ Failure modes (web-eng must handle all):
 DAY 1                       DAY 2-3                      DAY 4-5                      DAY 6-7
 ─────                       ────────                     ─────────                    ──────────
 [c-eng]   Phase 1 begins    [c-eng]  Phase 1 ships      [c-eng]  fixes from web-eng  [c-eng]  ship signed-manifest
-          @qkb/cli scaffold          unsigned binary             dev-fixture issues          path; release prep
+          @zkqes/cli scaffold          unsigned binary             dev-fixture issues          path; release prep
 
                             [w-eng]  Phase 2 begins     [w-eng]  Phase 2 ships
                                      against c-eng's            browser detection +
                                      dev binary                  /ua/cli page upgrade
 
 [lead]    npm scope claim   [lead]   brew tap setup     [lead]   GitHub releases     [lead]   v5.2.0-cli-rc1 cut
-          (@qkb/cli)                  (identityescrow/qkb)        binaries upload             then E2E test pass
+          (@zkqes/cli)                  (identityescrow/qkb)        binaries upload             then E2E test pass
                                                                   + R2 manifest publish
 ```
 
@@ -178,7 +180,7 @@ Before dispatching workers, lead runs:
 - [ ] **§4.4 — Verify rapidsnark sidecar binary present** — `ls /home/alikvovk/.cache/qkb-bin/rapidsnark-linux-x86_64-v0.0.8/bin/prover`
 - [ ] **§4.5 — Stage dev manifest** — drop `/tmp/dev-manifest.json` with the V5.2 stub artifacts at `file://...` URLs (see helper orchestration §4.5 for template)
 - [ ] **§4.6 — Generate dev signing keypair** — Ed25519 stub (see helper orchestration §4.6 for commands). Hand pubkey path to circuits-eng for embedding.
-- [ ] **§4.7 — Claim npm namespace** — `npm access ls-packages` to confirm `@qkb` scope ownership; reserve `@qkb/cli` if not taken.
+- [ ] **§4.7 — Claim npm namespace** — `npm access ls-packages` to confirm `@qkb` scope ownership; reserve `@zkqes/cli` if not taken.
 - [ ] **§4.8 — Set up GitHub releases automation** — workflow at `.github/workflows/qkb-cli-release.yml` that builds binaries on tag push; can scaffold pre-dispatch.
 - [ ] **§4.9 — Dispatch workers** — single message with two parallel SendMessage to circuits-eng + web-eng pointing at their plan paths.
 
@@ -189,7 +191,7 @@ Before dispatching workers, lead runs:
 | Unsigned dev CLI binary (Linux x86_64) | circuits-eng | web-eng | End of day 2 |
 | `proveViaCli` shape contract | (frozen in §1.6 above) | web-eng | day 1 |
 | HTTP API contract | (frozen in §1.1 above) | both | day 1 |
-| npm `@qkb/cli` namespace claim | lead | circuits-eng | End of day 1 |
+| npm `@zkqes/cli` namespace claim | lead | circuits-eng | End of day 1 |
 | Production manifest URL + signing pubkey embedding | lead | circuits-eng | End of day 4 (compile-time embed) |
 | GitHub releases pipeline | lead | circuits-eng | End of day 5 |
 
@@ -217,13 +219,13 @@ feat/qkb-cli-server-lead ───────┘
 
 Each branch merges via `git merge --no-ff` with a summary commit. After all three merge:
 ```bash
-git tag -a v5.2.0-cli-rc1 -m "QKB CLI V1 release candidate"
+git tag -a v5.2.0-cli-rc1 -m "zkqes CLI V1 release candidate"
 ```
 
 Final ship after E2E green across 3 OSes:
 ```bash
-git tag -a v5.2.0-cli -m "QKB CLI V1 production"
-npm publish --access public  # @qkb/cli
+git tag -a v5.2.0-cli -m "zkqes CLI V1 production"
+npm publish --access public  # @zkqes/cli
 brew bump-formula-pr ...      # identityescrow/qkb tap
 gh release create ...         # GitHub releases with all 5 platform binaries
 ```
@@ -234,9 +236,9 @@ After each worker commit, lead runs:
 
 | Worker | Commands |
 |---|---|
-| circuits-eng | `pnpm -F @qkb/cli test && pnpm -F @qkb/cli typecheck && pnpm -F @qkb/cli build` |
+| circuits-eng | `pnpm -F @zkqes/cli test && pnpm -F @zkqes/cli typecheck && pnpm -F @zkqes/cli build` |
 | circuits-eng (Phase 1 ship) | `node packages/qkb-cli/dist/qkb-linux-x86_64 serve --manifest-url file:///tmp/dev-manifest.json` then `curl -sf http://127.0.0.1:9080/status` |
-| web-eng | `pnpm -F @qkb/web test && pnpm -F @qkb/web typecheck && pnpm -F @qkb/web build && pnpm -F @qkb/web exec playwright test --grep cli-flow` |
+| web-eng | `pnpm -F @zkqes/web test && pnpm -F @zkqes/web typecheck && pnpm -F @zkqes/web build && pnpm -F @zkqes/web exec playwright test --grep cli-flow` |
 | lead | manifest signature roundtrip + brew formula syntax check (`brew audit`) |
 
 ## §9 — Risks & escalation triggers

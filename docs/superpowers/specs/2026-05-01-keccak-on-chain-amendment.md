@@ -1,5 +1,7 @@
 # Keccak-On-Chain — V5.2 Cross-Chain Portability Amendment
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **Status:** Draft v0.5 — incorporates pot22 size correction (4.83 GB empirical, NOT 600 MB as v0.1–v0.4 claimed) + sha256 pin from T3 implementation. Pending user-review gate, then T3 stub ceremony lands + Phase B planning.
 >
 > **Date:** 2026-05-01.
@@ -275,7 +277,7 @@ The above equivalence assumes the contract enforces `address(uint160(uint256(kec
 
 **Therefore the V5.2 cross-chain claim is**: the **Groth16 zkey is portable** (same verification key, same circuit). The **contract-side wallet-binding logic is NOT portable** — each non-EVM chain needs its own auth-shim that maps the circuit's `bindingPkX/Y` to the host's native caller identity.
 
-In practice, EVM-family chains (mainnet, all OP-stack rollups, Polygon zkEVM, zkSync, Linea, BSC, Avalanche C-chain, etc.) — many of which are exactly where Identity Escrow's target audience lives today — get V5.2 portability for free. Non-EVM chains require additional design work scoped per chain.
+In practice, EVM-family chains (mainnet, all OP-stack rollups, Polygon zkEVM, zkSync, Linea, BSC, Avalanche C-chain, etc.) — many of which are exactly where zkqes's target audience lives today — get V5.2 portability for free. Non-EVM chains require additional design work scoped per chain.
 
 **The only thing keccak-in-circuit gave that on-chain doesn't**: a malicious contract operator cannot bypass the wallet-pk binding. But the contract operator is what enforces `register()` semantics in V5 generally — they're the verifier, not the prover. If the operator is malicious, the entire registry is meaningless regardless of where the keccak fires. So this isn't a real loss of security.
 
@@ -314,7 +316,7 @@ The **immediate, free win** is "EVM-family with P256 support" — currently main
 |---|---|---|
 | circuits-eng | Drop §6.8 main primitives, retain SEC1 0x04 prefix check (~3 constraints), add 4-signal pkX/Y `signal input` packing with `Bits2Num` constraints, regenerate stub on pot22, re-run V5 §6.10 E2E suite | ~1.5 day |
 | contracts-eng | Add keccak gate to `register()`: reconstruct 64-byte uncompressed pk from 4 public-signal limbs, `address(uint160(uint256(keccak256(pk)))) == msg.sender`. Add register-mode no-op gate `rotationNewWallet == msg.sender` (V5.1 had this in-circuit; V5.2 moves on-chain). Add `rotateWallet()` defense-in-depth check: after computing `derivedAddr` from `bindingPkX/Y` limbs, assert `derivedAddr == identityWallets[fp]` — closes the regression where V5.1's in-circuit keccak implicitly tied binding pk to OLD wallet under rotate mode. ~150 gas, single line per contracts-eng v0.4 review. The auth sig from oldWallet (via the typed-message scheme) remains the load-bearing rotate-mode check; this is defense-in-depth. Update Groth16VerifierV5_2Stub.sol's public-input array (22-element). Forecast: Yul stack-pressure on the 22-element verifier follows V5.1's commit `04b4a71` fix pattern (verifier-side public-input array unpacking). Gas snapshot. | ~1 day |
-| web-eng | Drop keccak/pkBytes from witness builder; update `@qkb/sdk` v5_2 fixtures; update register() ABI | ~0.5 day |
+| web-eng | Drop keccak/pkBytes from witness builder; update `@zkqes/sdk` v5_2 fixtures; update register() ABI | ~0.5 day |
 | Integration | Cross-package E2E; new stub ceremony pump; update CI gates | ~1 day |
 | **Total** | | **~3-5 days** |
 
