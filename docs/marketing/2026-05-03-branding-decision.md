@@ -1,5 +1,7 @@
 # Branding Decision — V1 Ship Identity
 
+> **Superseded by 2026-05-03 zkqes structural rename** — see `docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`. This document is a historical record of the branding recommendation that was reversed by the founder on 2026-05-03. Content is preserved as-is for audit + decision-log readability.
+
 **Author:** marketer
 **Date:** 2026-05-03
 **Status:** Recommendation for founder. Not locked. Founder picks final.
