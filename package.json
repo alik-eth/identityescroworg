@@ -12,7 +12,7 @@
     "format": "biome format --write .",
     "test": "pnpm -r run test",
     "build": "pnpm -r run build",
-    "flatten": "pnpm --filter @qkb/lotl-flattener run cli",
+    "flatten": "pnpm --filter @zkqes/lotl-flattener run cli",
     "binding:admin": "node --import tsx packages/web/scripts/build-admin-binding.mjs",
     "verify:real-qes": "node --import tsx packages/web/scripts/verify-real-qes.mjs",
     "docs:dev": "vitepress dev docs",
