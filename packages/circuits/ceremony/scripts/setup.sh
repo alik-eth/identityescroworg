@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Groth16 setup + dev contribution on ZkqesPresentationEcdsaLeaf.
-# Produces qkb.zkey + vkey.json + QKBGroth16Verifier.sol.
+# Produces zkqes.zkey + vkey.json + ZkqesGroth16Verifier.sol.
 #
 # NOTE: memory-heavy. 7.6M-constraint circuit + ptau 2^23 pushes snarkjs to
 # ~30-40 GB. We run under a 28 G systemd cap; if it OOMs the ceremony machine
@@ -13,10 +13,10 @@ PTAU_DIR="$PKG_DIR/ceremony/ptau"
 POWER="${POWER:-23}"
 PTAU="$PTAU_DIR/powersOfTau28_hez_final_${POWER}.ptau"
 R1CS="$OUT/ZkqesPresentationEcdsaLeaf.r1cs"
-ZKEY0="$OUT/qkb_0000.zkey"
-ZKEY="$OUT/qkb.zkey"
+ZKEY0="$OUT/zkqes_0000.zkey"
+ZKEY="$OUT/zkqes.zkey"
 VKEY="$OUT/verification_key.json"
-VERIFIER="$OUT/QKBGroth16Verifier.sol"
+VERIFIER="$OUT/ZkqesGroth16Verifier.sol"
 
 [[ -f "$PTAU" ]] || { echo "Missing $PTAU — run fetch-ptau.sh first"; exit 1; }
 [[ -f "$R1CS" ]] || { echo "Missing $R1CS — run compile.sh first"; exit 1; }
@@ -35,7 +35,7 @@ if [[ ! -f "$ZKEY" ]]; then
   echo "[2/4] dev contribution (single-contributor entropy from urandom)"
   ENTROPY="$(head -c 64 /dev/urandom | base64 | tr -d '\n')"
   "${RUN[@]}" npx snarkjs zkey contribute "$ZKEY0" "$ZKEY" \
-    --name="qkb-dev-1" -v -e="$ENTROPY"
+    --name="zkqes-dev-1" -v -e="$ENTROPY"
 fi
 
 echo "[3/4] export verification key"

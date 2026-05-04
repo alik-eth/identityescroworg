@@ -5,7 +5,7 @@ set -euo pipefail
 PKG_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT="$PKG_DIR/build/zkqes-presentation"
 WASM="$OUT/ZkqesPresentationEcdsaLeaf_js/ZkqesPresentationEcdsaLeaf.wasm"
-ZKEY="$OUT/qkb.zkey"
+ZKEY="$OUT/zkqes.zkey"
 VKEY="$OUT/verification_key.json"
 WTNS="$OUT/witness.wtns"
 INPUT="$OUT/input.json"

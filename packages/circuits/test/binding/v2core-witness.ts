@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-// Shape of fixture-qkb2.json. Schema version pinned at "qkb2-binding-fixture-v1".
-export interface QKB2Fixture {
+// Shape of fixture-zkqes2.json. Schema version pinned at "zkqes2-binding-fixture-v1".
+export interface Zkqes2Fixture {
   schema: string;
   description: string;
   bytesLength: number;
@@ -72,20 +72,20 @@ function padTo(buf: Buffer, max: number): number[] {
 }
 
 /**
- * Build a V2Core circuit input from the deterministic QKB/2.0 fixture pair
- * (`binding.qkb2.json` raw bytes + `fixture-qkb2.json` offsets/lengths).
+ * Build a V2Core circuit input from the deterministic zkqes binding fixture pair (version "QKB/2.0" frozen)
+ * (`binding.zkqes2.json` raw bytes + `fixture-zkqes2.json` offsets/lengths).
  *
  * Designed to be hoisted into `scripts/build-witness-v5.ts` (§7) verbatim —
  * keep the input shape identical to the V5 main circuit's BindingParseV2Core
  * sub-component.
  */
 export function buildV2CoreWitnessFromFixture(fixtureDir: string): V2CoreWitnessInput {
-  const binding = readFileSync(resolve(fixtureDir, 'binding.qkb2.json'));
+  const binding = readFileSync(resolve(fixtureDir, 'binding.zkqes2.json'));
   const fix = JSON.parse(
-    readFileSync(resolve(fixtureDir, 'fixture-qkb2.json'), 'utf8'),
-  ) as QKB2Fixture;
+    readFileSync(resolve(fixtureDir, 'fixture-zkqes2.json'), 'utf8'),
+  ) as Zkqes2Fixture;
 
-  if (fix.schema !== 'qkb2-binding-fixture-v1') {
+  if (fix.schema !== 'zkqes2-binding-fixture-v1') {
     throw new Error(`unexpected fixture schema: ${fix.schema}`);
   }
   if (binding.length !== fix.bytesLength) {
@@ -124,8 +124,8 @@ export function buildV2CoreWitnessFromFixture(fixtureDir: string): V2CoreWitness
   };
 }
 
-export function loadFixture(fixtureDir: string): QKB2Fixture {
+export function loadFixture(fixtureDir: string): Zkqes2Fixture {
   return JSON.parse(
-    readFileSync(resolve(fixtureDir, 'fixture-qkb2.json'), 'utf8'),
-  ) as QKB2Fixture;
+    readFileSync(resolve(fixtureDir, 'fixture-zkqes2.json'), 'utf8'),
+  ) as Zkqes2Fixture;
 }

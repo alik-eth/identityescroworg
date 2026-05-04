@@ -1,6 +1,6 @@
 {
-  "schema": "qkb2-binding-fixture-v1",
-  "description": "Synthetic QKB/2.0 binding for V5 circuit testing — V2Core refactor parity, §6.x E2E. See packages/circuits/scripts/emit-qkb2-fixture.ts for provenance.",
+  "schema": "zkqes2-binding-fixture-v1",
+  "description": "Synthetic zkqes binding (version QKB/2.0 — frozen protocol byte string) for V5 circuit testing — V2Core refactor parity, §6.x E2E. See packages/circuits/scripts/emit-zkqes2-fixture.ts for provenance.",
   "bytesLength": 617,
   "offsets": {
     "pkValue": 204,

@@ -3,7 +3,7 @@
 // under the UA `trustedListRoot`, builds the 3-signal chain witness, and
 // runs rapidsnark against the V3-byte-identical chain zkey. Pairs with
 // `smoke-ua-leaf-v4-real-diia.mjs` so `submit-ua-register.mjs` can send a
-// real `register(cp, lp)` tx to the deployed UA QKBRegistryV4 on Sepolia.
+// real `register(cp, lp)` tx to the deployed UA ZkqesRegistryV4 on Sepolia.
 //
 // Inputs:
 //   --p7s     <path>   — user's Diia-signed binding `.p7s` (same one the
@@ -37,7 +37,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = resolve(__dirname, '..');
 const REPO_ROOT = resolve(PKG_ROOT, '../..');
 
-const CACHE_DIR = join(homedir(), '.cache/qkb');
+const CACHE_DIR = join(homedir(), '.cache/zkqes');
 const WASM_SHA = '6e3976792705939ad705d503099adc368738928c9f87776ef6954b663f512af6';
 const ZKEY_SHA = '8d1aed8e30a76770a8480e203a86c362f4421b6d800147d0ff4f960472ca9933';
 const WASM = join(CACHE_DIR, WASM_SHA);
@@ -46,7 +46,7 @@ const VKEY_URL = 'https://prove.identityescrow.org/ecdsa-chain/verification_key.
 
 const OUT_DIR = join(PKG_ROOT, 'fixtures/integration/ua-v4');
 
-// Must match circuit constants in QKBPresentationEcdsaChain.circom.
+// Must match circuit constants in ZkqesPresentationEcdsaChain.circom.
 const MAX_CERT = 1536;
 const MERKLE_DEPTH = 16;
 
@@ -58,18 +58,18 @@ function argVal(flag, fallbackEnv) {
   if (fallbackEnv && process.env[fallbackEnv]) return process.env[fallbackEnv];
   return null;
 }
-const P7S_PATH = argVal('--p7s', 'QKB_P7S');
+const P7S_PATH = argVal('--p7s', 'ZKQES_P7S');
 const INT_DER_PATH =
-  argVal('--int-der', 'QKB_INT_DER') ??
+  argVal('--int-der', 'ZKQES_INT_DER') ??
   resolve(
     REPO_ROOT,
     '../flattener/packages/lotl-flattener/fixtures/diia/certs/diia-qtsp-2311.der',
   );
 const TRUST_ROOT_PATH =
-  argVal('--trust-root', 'QKB_TRUST_ROOT') ??
+  argVal('--trust-root', 'ZKQES_TRUST_ROOT') ??
   resolve(REPO_ROOT, '../flattener/fixtures/trust/ua/root.json');
 const RS_BIN =
-  argVal('--rapidsnark-bin', 'QKB_RAPIDSNARK_BIN') ??
+  argVal('--rapidsnark-bin', 'ZKQES_RAPIDSNARK_BIN') ??
   '/tmp/rapidsnark-bin/rapidsnark-linux-x86_64-v0.0.8/bin/prover';
 
 if (!P7S_PATH) {
@@ -394,7 +394,7 @@ async function main() {
   };
 
   // Compute witness via snarkjs, then shell out to rapidsnark.
-  const tmp = mkdtempSync(join(tmpdir(), 'qkb-chain-smoke-'));
+  const tmp = mkdtempSync(join(tmpdir(), 'zkqes-chain-smoke-'));
   const wtnsPath = join(tmp, 'chain.wtns');
   const rsProofPath = join(tmp, 'proof.json');
   const rsPublicPath = join(tmp, 'public.json');
@@ -447,7 +447,7 @@ async function main() {
   writeFileSync(publicOut, JSON.stringify(publicSignals, null, 2));
 
   const bundle = {
-    schema: 'qkb-v4-chain-proof-bundle/v1',
+    schema: 'zkqes-v4-chain-proof-bundle/v1',
     trustedListRoot: rTLHex,
     algorithmTag: 1,
     leafSpkiCommit: leafSpkiCommit.toString(),

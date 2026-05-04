@@ -113,7 +113,7 @@ import { buildWitnessV5 } from '${PKG_DIR}/src/build-witness-v5';
 import { buildSynthCades } from '${PKG_DIR}/test/helpers/build-synth-cades';
 
 const dir = '$SAMPLE_DIR';
-const bindingBytes = readFileSync(resolve(dir, 'binding.qkb2.json'));
+const bindingBytes = readFileSync(resolve(dir, 'binding.zkqes2.json'));
 const leafCertDer  = readFileSync(resolve(dir, 'leaf.der'));
 const leafSpki     = readFileSync(resolve(dir, 'leaf-spki.bin'));
 const intSpki      = readFileSync(resolve(dir, 'intermediate-spki.bin'));
@@ -123,7 +123,7 @@ const cades = buildSynthCades({ contentDigest: bindingDigest, leafCertDer, intCe
 
 // V5.1 — deterministic stub walletSecret for fixture stability. Same byte
 // pattern (0x42 × 32) used in test/integration/build-witness-v5.test.ts +
-// qkb-presentation-v5.test.ts so stub-ceremony fixture maps to test-pinned
+// zkqes-presentation-v5.test.ts so stub-ceremony fixture maps to test-pinned
 // expected values. After mod-p reduction this lands well below the BN254
 // scalar field; in-circuit Num2Bits(254) trivially passes.
 const STUB_WALLET_SECRET = Buffer.alloc(32, 0x42);

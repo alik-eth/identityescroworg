@@ -22,11 +22,11 @@ set -euo pipefail
 
 PKG_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 WITNESS="$PKG_DIR/ceremony/v5_2/witness-input-sample.json"
-ZKEY="$PKG_DIR/ceremony/v5_2/qkb-v5_2-stub.zkey"
-WASM="$PKG_DIR/build/v5_2-stub/QKBPresentationV5_js/QKBPresentationV5.wasm"
+ZKEY="$PKG_DIR/ceremony/v5_2/zkqes-v5_2-stub.zkey"
+WASM="$PKG_DIR/build/v5_2-stub/ZkqesPresentationV5_js/ZkqesPresentationV5.wasm"
 VKEY="$PKG_DIR/ceremony/v5_2/verification_key.json"
 
-RAPIDSNARK_BIN="${RAPIDSNARK_BIN:-/home/alikvovk/.cache/qkb-bin/rapidsnark-linux-x86_64-v0.0.8/bin/prover}"
+RAPIDSNARK_BIN="${RAPIDSNARK_BIN:-/home/alikvovk/.cache/zkqes-bin/rapidsnark-linux-x86_64-v0.0.8/bin/prover}"
 
 OUT_BASE="${OUT_BASE:-/tmp/v5_2-prove-bench}"
 mkdir -p "$OUT_BASE"

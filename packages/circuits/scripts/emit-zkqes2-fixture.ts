@@ -1,19 +1,21 @@
-// Emits a DETERMINISTIC QKB/2.0 binding fixture for V5 circuit testing.
-// Different from gen-qkb-v2-core-binding.mjs (which generates ephemeral keys
+// Emits a DETERMINISTIC zkqes binding fixture for V5 circuit testing.
+// (The binding uses version "QKB/2.0" — frozen protocol byte string;
+// see specs/2026-05-03-zkqes-rename-design.md §3.)
+// Different from gen-zkqes-v2-core-binding.mjs (which generates ephemeral keys
 // per run for real-Diia signing flow) — this one pins every byte so test
 // outputs (offsets, hand-computed expected values) stay stable across runs.
 //
 // Output:
-//   packages/circuits/fixtures/integration/admin-ecdsa/binding.qkb2.json
-//   packages/circuits/fixtures/integration/admin-ecdsa/fixture-qkb2.json
+//   packages/circuits/fixtures/integration/admin-ecdsa/binding.zkqes2.json
+//   packages/circuits/fixtures/integration/admin-ecdsa/fixture-zkqes2.json
 //
-// fixture-qkb2.json carries the deterministic offsets + lengths a witness
+// fixture-zkqes2.json carries the deterministic offsets + lengths a witness
 // builder needs to feed into BindingParseV2Core's 17 input signals. The
 // generator computes these by deterministic byte-scanning of the JCS bytes;
 // the test layer just consumes them as data.
 //
 // Provenance: synthetic. Real-Diia replacement requires running
-// `gen-qkb-v2-core-binding.mjs` + signing the output with a Diia QES key.
+// `gen-zkqes-v2-core-binding.mjs` + signing the output with a Diia QES key.
 // That E2E path is out of scope for the V2Core refactor (this fixture is
 // for circuit-logic testing only; ECDSA verification is mocked elsewhere).
 
@@ -27,8 +29,8 @@ const FIXTURE_DIR = resolve(
     'integration',
     'admin-ecdsa',
 );
-const BINDING_PATH = resolve(FIXTURE_DIR, 'binding.qkb2.json');
-const FIXTURE_PATH = resolve(FIXTURE_DIR, 'fixture-qkb2.json');
+const BINDING_PATH = resolve(FIXTURE_DIR, 'binding.zkqes2.json');
+const FIXTURE_PATH = resolve(FIXTURE_DIR, 'fixture-zkqes2.json');
 
 // All-zero secp256k1 X/Y coordinates serve as a placeholder for circuit
 // testing — V2Core only checks the byte structure, not the curve point.
@@ -39,7 +41,7 @@ const PK_HEX =
 const NONCE_HEX = 'ab'.repeat(32);
 // Pinned timestamp: 2026-04-29T16:00:00Z UTC = 1777478400.
 const TIMESTAMP = 1777478400;
-// Same canonical policy leaf hash as gen-qkb-v2-core-binding.mjs uses.
+// Same canonical policy leaf hash as gen-zkqes-v2-core-binding.mjs uses.
 const POLICY_LEAF_HASH_HEX =
     '2d00e73da8dd4dc99f04371d3ce01ecbcf4ad8e476c9017a304c57873494f812';
 
@@ -54,6 +56,7 @@ const assertionsJson =
     '"keyControl":true,' +
     '"revocationRequired":true}';
 const policyJson =
+    // frozen protocol byte strings; see specs/2026-05-03-zkqes-rename-design.md §3
     '{"bindingSchema":"qkb-binding-core/v1",' +
     `"leafHash":"0x${POLICY_LEAF_HASH_HEX}",` +
     '"policyId":"qkb-default-ua",' +
@@ -65,6 +68,7 @@ const bindingJson =
     `"pk":"0x${PK_HEX}",` +
     `"policy":${policyJson},` +
     '"scheme":"secp256k1",' +
+    // frozen protocol byte strings; see specs/2026-05-03-zkqes-rename-design.md §3
     '"statementSchema":"qkb-binding-core/v1",' +
     `"timestamp":${TIMESTAMP},` +
     '"version":"QKB/2.0"}';
@@ -164,10 +168,10 @@ const tsDigitCount = lengthOfNumberValue(tsValueOffset);
 const policyVersionDigitCount = lengthOfNumberValue(policyVersionValueOffset);
 
 const fixture = {
-    schema: 'qkb2-binding-fixture-v1',
+    schema: 'zkqes2-binding-fixture-v1',
     description:
-        'Synthetic QKB/2.0 binding for V5 circuit testing — V2Core refactor parity, §6.x E2E. ' +
-        'See packages/circuits/scripts/emit-qkb2-fixture.ts for provenance.',
+        'Synthetic zkqes binding (version "QKB/2.0" — frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3) for V5 circuit testing — V2Core refactor parity, §6.x E2E. ' +
+        'See packages/circuits/scripts/emit-zkqes2-fixture.ts for provenance.',
     bytesLength: bindingBytes.length,
     offsets: {
         pkValue: pkValueOffset,
@@ -203,5 +207,5 @@ mkdirSync(dirname(BINDING_PATH), { recursive: true });
 writeFileSync(BINDING_PATH, bindingBytes);
 writeFileSync(FIXTURE_PATH, `${JSON.stringify(fixture, null, 2)}\n`);
 
-console.log(`Wrote QKB/2.0 binding (${bindingBytes.length} B) to ${BINDING_PATH}`);
+console.log(`Wrote zkqes binding (version "QKB/2.0" frozen — protocol byte string) (${bindingBytes.length} B) to ${BINDING_PATH}`);
 console.log(`Wrote fixture metadata (${Object.keys(fixture.offsets).length} offsets) to ${FIXTURE_PATH}`);

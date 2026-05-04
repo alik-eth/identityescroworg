@@ -1,10 +1,11 @@
-// Generate a core-only QKB/2.0 binding (no `display`, no `extensions`) for
-// real-Diia E2E testing. Core bytes are what the circuit will consume; the
-// `display` block is intentionally omitted per the QKB/2.0 spec § "Display-
-// only surface" — it keeps the signed bytes under MAX_BCANON = 1024.
+// Generate a core-only zkqes binding (no `display`, no `extensions`) for
+// real-Diia E2E testing. The binding version field is "QKB/2.0" (frozen
+// protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3).
+// Core bytes are what the circuit will consume; the `display` block is
+// intentionally omitted — it keeps the signed bytes under MAX_BCANON = 1024.
 //
 // Usage:
-//   node scripts/gen-qkb-v2-core-binding.mjs [--out <path>]
+//   node scripts/gen-zkqes-v2-core-binding.mjs [--out <path>]
 //
 // Output path default: /home/alikvovk/Downloads/binding-v2-core.json
 // Also emits /home/alikvovk/Downloads/binding-v2-core.keys.json with the
@@ -34,9 +35,9 @@ const KEYS_PATH = OUT_PATH.replace(/\.json$/, '.keys.json');
 
 // -- Committed UA policy leaf hash (from fixtures/trust/ua/policy-root.json) --
 //    buildPolicyLeafV1({
-//      policyId:       "qkb-default-ua",
+//      policyId:       "qkb-default-ua",       // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
 //      policyVersion:  1,
-//      bindingSchema:  "qkb-binding-core/v1",
+//      bindingSchema:  "qkb-binding-core/v1",  // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
 //      contentHash:    sha256(fixtures/declarations/uk.txt),
 //      metadataHash:   sha256(JCS({lang:"uk", template:"qkb-default-ua/v1"}))
 //    })
@@ -89,6 +90,7 @@ const assertions =
   '"keyControl":true,' +
   '"revocationRequired":true}';
 const policy =
+  // frozen protocol byte strings; see specs/2026-05-03-zkqes-rename-design.md §3
   '{"bindingSchema":"qkb-binding-core/v1",' +
   `"leafHash":"0x${POLICY_LEAF_HASH_HEX}",` +
   '"policyId":"qkb-default-ua",' +
@@ -100,6 +102,7 @@ const json =
   `"pk":"0x${pkHex}",` +
   `"policy":${policy},` +
   '"scheme":"secp256k1",' +
+  // frozen protocol byte strings; see specs/2026-05-03-zkqes-rename-design.md §3
   '"statementSchema":"qkb-binding-core/v1",' +
   `"timestamp":${timestamp},` +
   '"version":"QKB/2.0"}';
@@ -115,7 +118,7 @@ writeFileSync(
   KEYS_PATH,
   JSON.stringify(
     {
-      note: 'Ephemeral secp256k1 keys for QKB/2.0 real-Diia E2E. Test use only.',
+      note: 'Ephemeral secp256k1 keys for zkqes real-Diia E2E. Test use only.',
       privateKey: '0x' + Buffer.from(privBytes).toString('hex'),
       publicKey: '0x' + pkHex,
       timestamp,
@@ -127,7 +130,7 @@ writeFileSync(
   ),
 );
 
-console.log('--- core QKB/2.0 binding ready to sign with Diia ---');
+console.log('--- core zkqes binding (version "QKB/2.0" frozen) ready to sign with Diia ---');
 console.log('binding JSON:', OUT_PATH);
 console.log('  bytes      :', jsonBytes.length, '/ 1024 (MAX_BCANON)');
 console.log('keys (local!):', KEYS_PATH);

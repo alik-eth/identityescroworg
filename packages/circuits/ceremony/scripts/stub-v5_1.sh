@@ -108,7 +108,7 @@ echo "[ptau] $(du -h "$PTAU_PATH" | cut -f1)  $PTAU_PATH"
 # ---------- 2. Compile circuit (if R1CS not cached) ----------
 # CLAUDE.md V5.3 cold-compile pattern: direct circom CLI (NOT
 # `circom_tester.wasm()`) to keep peak RSS ~14 GB.  V5.1 is in-place on
-# QKBPresentationV5.circom; we output to build/v5_1-stub/ to keep the
+# ZkqesPresentationV5.circom; we output to build/v5_1-stub/ to keep the
 # V5 stub artifacts at build/v5-stub/ untouched.
 #
 # When R1CS is regenerated, every downstream artifact (zkey0, zkey, vkey,
@@ -216,7 +216,7 @@ import { buildWitnessV5 } from '${PKG_DIR}/src/build-witness-v5';
 import { buildSynthCades } from '${PKG_DIR}/test/helpers/build-synth-cades';
 
 const dir = '$SAMPLE_DIR';
-const bindingBytes = readFileSync(resolve(dir, 'binding.qkb2.json'));
+const bindingBytes = readFileSync(resolve(dir, 'binding.zkqes2.json'));
 const leafCertDer  = readFileSync(resolve(dir, 'leaf.der'));
 const leafSpki     = readFileSync(resolve(dir, 'leaf-spki.bin'));
 const intSpki      = readFileSync(resolve(dir, 'intermediate-spki.bin'));
@@ -225,7 +225,7 @@ const bindingDigest = createHash('sha256').update(bindingBytes).digest();
 const cades = buildSynthCades({ contentDigest: bindingDigest, leafCertDer, intCertDer });
 
 // V5.1 — deterministic stub walletSecret (0x42 × 32) shared with
-// test/integration/build-witness-v5.test.ts + qkb-presentation-v5.test.ts.
+// test/integration/build-witness-v5.test.ts + zkqes-presentation-v5.test.ts.
 // Fixture-stable. After mod-p reduction lands well below the BN254
 // scalar field; in-circuit Num2Bits(254) trivially passes.
 const STUB_WALLET_SECRET = Buffer.alloc(32, 0x42);

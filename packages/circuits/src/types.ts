@@ -4,7 +4,7 @@
 // `2026-05-01-keccak-on-chain-amendment.md` §"Public-signal layout V5.1
 // (19) → V5.2 (22)". Any change here is a cross-worker breaking change
 // (snarkjs's `[outputs..., public_inputs...]` emission order is bound to
-// these names). Keep this file in lockstep with QKBPresentationV5.circom's
+// these names). Keep this file in lockstep with ZkqesPresentationV5.circom's
 // `component main { public [...] }` declaration.
 //
 // V5.1 → V5.2 deltas (per V5.2 spec):
@@ -37,7 +37,7 @@
 import type { Buffer } from 'node:buffer';
 
 /**
- * Compile-time MAX bounds — MUST match QKBPresentationV5.circom's
+ * Compile-time MAX bounds — MUST match ZkqesPresentationV5.circom's
  * template-scope `var` declarations. Drift here ≡ drift in the witness
  * shape and will fail constraint verification.
  *
@@ -57,7 +57,7 @@ export const MAX_POLICY_ID = 128;
  * Offsets into the JCS-canonicalized binding bytes that
  * `BindingParseV2CoreFast` consumes. Every offset points to the FIRST
  * byte of the field's value (one past `"`/numeric leadIn). Same shape
- * the V4 / `emit-qkb2-fixture.ts` script emitted.
+ * the V4 / `emit-zkqes2-fixture.ts` script emitted.
  */
 export interface V2CoreBindingOffsets {
   pkValueOffset: number;

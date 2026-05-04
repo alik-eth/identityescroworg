@@ -20,7 +20,7 @@ const getPoseidon = (): Promise<Poseidon> => {
 };
 
 // Off-circuit reference: exact mirror of
-// @qkb/lotl-flattener src/ca/canonicalize.ts.
+// @zkqes/lotl-flattener src/ca/canonicalize.ts.
 async function canonicalHash(data: Uint8Array): Promise<bigint> {
   const p = await getPoseidon();
   const F = p.F;

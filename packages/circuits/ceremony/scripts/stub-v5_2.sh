@@ -205,7 +205,7 @@ if [[ ! -f "$INPUT_SAMPLE" ]]; then
       const { buildWitnessV5 } = require("'"$PKG_DIR"'/src/build-witness-v5");
       const { buildSynthCades } = require("'"$PKG_DIR"'/test/helpers/build-synth-cades");
       const fixtureDir = resolve("'"$PKG_DIR"'/fixtures/integration/admin-ecdsa");
-      const bindingBytes = readFileSync(resolve(fixtureDir, "binding.qkb2.json"));
+      const bindingBytes = readFileSync(resolve(fixtureDir, "binding.zkqes2.json"));
       const leafCertDer  = readFileSync(resolve(fixtureDir, "leaf.der"));
       const intCertDer   = readFileSync(resolve(fixtureDir, "synth-intermediate.der"));
       const leafSpki     = readFileSync(resolve(fixtureDir, "leaf-spki.bin"));
