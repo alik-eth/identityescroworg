@@ -36,6 +36,7 @@ import { IRegistryGate } from "./arbitrators/IRegistryGate.sol";
 contract ZkqesRegistryV3 is IRegistryGate {
     /// @dev Domain string for the `expire` signature digest. Must stay in
     ///      lock-step with `test/helpers/SignatureHelpers.sol::EXPIRE_DOMAIN`.
+    // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
     string private constant EXPIRE_DOMAIN = "QKB_EXPIRE_V1";
 
     uint8 internal constant ALG_RSA = 0;

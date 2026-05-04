@@ -293,6 +293,7 @@ contract ZkqesRegistryV4 {
         Binding storage b = bindings[id];
         if (b.pk == address(0)) revert BindingNotFound();
         if (b.revoked)          revert BindingRevoked();
+        // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
         bytes32 payload = keccak256(abi.encodePacked("qkb-self-revoke/v1", id));
         address recovered = _ecrecover(payload, signature);
         if (recovered != b.pk) revert SelfRevokeSigInvalid();

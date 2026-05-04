@@ -647,6 +647,7 @@ contract ZkqesRegistryV4Test is Test {
         Vm.Wallet memory w = vm.createWallet(uint256(keccak256("qkb-v4-self")));
         bytes32 id = _registerForWallet(r, w, uint256(0x5E1F));
 
+        // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
         bytes32 payload = keccak256(abi.encodePacked("qkb-self-revoke/v1", id));
         (uint8 v, bytes32 rr, bytes32 s) = vm.sign(w, payload);
         bytes memory sig = abi.encodePacked(rr, s, v);
@@ -665,6 +666,7 @@ contract ZkqesRegistryV4Test is Test {
         Vm.Wallet memory other = vm.createWallet(uint256(keccak256("qkb-v4-self-attacker")));
         bytes32 id = _registerForWallet(r, w, uint256(0x5E1F2));
 
+        // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
         bytes32 payload = keccak256(abi.encodePacked("qkb-self-revoke/v1", id));
         (uint8 v, bytes32 rr, bytes32 s) = vm.sign(other, payload);
         bytes memory sig = abi.encodePacked(rr, s, v);
@@ -685,6 +687,7 @@ contract ZkqesRegistryV4Test is Test {
         Vm.Wallet memory w = vm.createWallet(uint256(keccak256("qkb-v4-self-dbl")));
         bytes32 id = _registerForWallet(r, w, uint256(0x5E1F3));
 
+        // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
         bytes32 payload = keccak256(abi.encodePacked("qkb-self-revoke/v1", id));
         (uint8 v, bytes32 rr, bytes32 s) = vm.sign(w, payload);
         bytes memory sig = abi.encodePacked(rr, s, v);
