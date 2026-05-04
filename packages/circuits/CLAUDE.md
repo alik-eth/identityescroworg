@@ -1,8 +1,8 @@
-# `@qkb/circuits` — Maintainer Notes
+# `@zkqes/circuits` — Maintainer Notes
 
 ## Purpose
 
-Circom 2 circuits for the QKB presentation proof (relation `R_QKB`), plus the
+Circom 2 circuits for the zkqes presentation proof (relation `R_zkqes`), plus the
 Groth16 ceremony scripts that produce the runtime artifacts shipped to web +
 contracts. Phase 1 delivers the **ECDSA-leaf** variant wired against real Diia
 QES fixtures; the RSA variant is scaffolded but deferred until non-Diia QES
@@ -10,12 +10,12 @@ test material is available.
 
 Proof split (spec §5.4 fallback, forced by the 22 GB compile budget):
 
-- `QKBPresentationEcdsaLeaf.circom` — constraints 1, 2, 5, 6 (binding parse,
+- `ZkqesPresentationEcdsaLeaf.circom` — constraints 1, 2, 5, 6 (binding parse,
   pk/timestamp match, message-digest, ctx/decl, leaf ECDSA-P256 verify).
   Outputs `leafSpkiCommit = Poseidon(Poseidon(Xlimbs), Poseidon(Ylimbs))`.
-- `QKBPresentationEcdsaChain.circom` — constraints 3, 4 (intermediate signs
+- `ZkqesPresentationEcdsaChain.circom` — constraints 3, 4 (intermediate signs
   leaf TBS, intermediate in Merkle-rTL). Outputs the **same** `leafSpkiCommit`.
-  On-chain glue: `QKBRegistry` asserts the two commits are equal and that
+  On-chain glue: `ZkqesRegistry` asserts the two commits are equal and that
   `rTL` matches the current flattener root. **Not yet implemented** — Phase 1
   ships leaf-only with the chain constraint enforced off-circuit by the
   trusted-list admin (documented risk in §5.4 of the spec).
@@ -26,10 +26,10 @@ All commands assume repo root, pnpm 9.x, and Node 20.
 
 ```bash
 # Full test suite (~15 min — includes the heavy leaf E2E against real QES)
-pnpm --filter @qkb/circuits test
+pnpm --filter @zkqes/circuits test
 
 # Type-check (fast)
-pnpm --filter @qkb/circuits lint
+pnpm --filter @zkqes/circuits lint
 
 # Ceremony scripts (one-shot each, idempotent)
 bash packages/circuits/ceremony/scripts/compile.sh
@@ -93,12 +93,12 @@ accordingly when reproducing legacy artifacts.
    by declaration order. The Solidity verifier's `input[N]` array matches
    this (with the leading `1` from the witness stripped). If your on-chain
    verifier expects a specific public-signal index layout — and contracts-
-   eng's split-proof `QKBVerifier.verify` does (orchestration §2.1/§2.2
+   eng's split-proof `ZkqesVerifier.verify` does (orchestration §2.1/§2.2
    pin `leafSpkiCommit` at `leafArr[12]` and `chainArr[2]`, both LAST) —
    make ALL public signals `signal input` and add an internal equality
    constraint (`computedValue === publicInputSignal`) for any value that
    would otherwise be a `signal output`. This applies to
-   `QKBPresentationEcdsa{Leaf,Chain}.circom`: `leafSpkiCommit` is a
+   `ZkqesPresentationEcdsa{Leaf,Chain}.circom`: `leafSpkiCommit` is a
    `signal input` declared LAST in the `component main public [...]`
    list, constrained to equal
    `Poseidon2(Poseidon6(leafXLimbs), Poseidon6(leafYLimbs))`. Caught
@@ -109,18 +109,18 @@ accordingly when reproducing legacy artifacts.
 ## Ceremony artifact flow
 
 ```
-compile.sh      → build/qkb-presentation/QKBPresentationEcdsaLeaf.{r1cs,wasm,sym}
-setup.sh        → build/qkb-presentation/{qkb.zkey, verification_key.json,
-                                          QKBGroth16Verifier.sol, zkey.sha256}
-prove.sh        → build/qkb-presentation/{proof.json, public.json}
+compile.sh      → build/zkqes-presentation/ZkqesPresentationEcdsaLeaf.{r1cs,wasm,sym}
+setup.sh        → build/zkqes-presentation/{zkqes.zkey, verification_key.json,
+                                            ZkqesGroth16Verifier.sol, zkey.sha256}
+prove.sh        → build/zkqes-presentation/{proof.json, public.json}
                   (round-trip test against real Diia fixture)
 upload to R2    → ceremony/urls.json  (committed — URLs + sha256 + metadata)
 
-ceremony/QKBGroth16Verifier.sol   → committed (11 KB, drop-in for the stub)
+ceremony/ZkqesGroth16Verifier.sol   → committed (11 KB, drop-in for the stub)
 ceremony/verification_key.json    → committed (4.9 KB, public)
 ceremony/zkey.sha256              → committed (integrity reference)
-qkb.zkey (4.2 GB)                 → R2 at prove.identityescrow.org/qkb.zkey
-.wasm    (41 MB)                  → R2 at prove.identityescrow.org/QKBPresentationEcdsaLeaf.wasm
+zkqes.zkey (4.2 GB)               → R2 at prove.identityescrow.org/zkqes.zkey
+.wasm    (41 MB)                  → R2 at prove.identityescrow.org/ZkqesPresentationEcdsaLeaf.wasm
 ```
 
 Consumers (web + contracts) read `ceremony/urls.json` at build time. The
@@ -130,13 +130,13 @@ it with headroom for a Phase-2 re-ceremony.
 
 ## Stub vs real verifier
 
-- `circuits/QKBPresentationEcdsaLeafStub.circom` — trivial 1-constraint
+- `circuits/ZkqesPresentationEcdsaLeafStub.circom` — trivial 1-constraint
   circuit with identical public-signal layout (11 inputs + 1 output). Used
   by `stub-ceremony.sh` to produce a dev verifier that forge-compiles and
   contracts can integrate against while the real ceremony runs elsewhere.
-- `ceremony/QKBGroth16VerifierStub.sol` — NOT committed; build artifact
-  only. Real `ceremony/QKBGroth16Verifier.sol` IS committed (11 KB).
-- At deploy: contracts import `QKBGroth16Verifier.sol`. Swap between stub
+- `ceremony/ZkqesGroth16VerifierStub.sol` — NOT committed; build artifact
+  only. Real `ceremony/ZkqesGroth16Verifier.sol` IS committed (11 KB).
+- At deploy: contracts import `ZkqesGroth16Verifier.sol`. Swap between stub
   and real happens via this path — both contracts have identical
   `verifyProof(uint[2], uint[2][2], uint[2], uint[12]) → bool` ABI.
 
@@ -178,7 +178,7 @@ commit, or test suites in other packages will silently drift off it.
 ## V5 architecture (current)
 
 V5 collapses the V4 leaf+chain split into a **single ~3.88M-constraint
-circuit** (`circuits/QKBPresentationV5.circom`) that takes the QES
+circuit** (`circuits/ZkqesPresentationV5.circom`) that takes the QES
 verification on-chain via EIP-7212 P256Verify. **V5.1 amends V5 in-place
 on the same .circom file (wallet-bound nullifier); V5.2 amends in-place
 again (keccak-on-chain).** Empirical envelope is now ~3.876M constraints
@@ -233,12 +233,12 @@ Already applied to package.json's `test` and `test:v5` scripts.
 For ad-hoc constraint-count probes, run circom directly:
 
 ```bash
-circom circuits/QKBPresentationV5.circom --r1cs --wasm \
-  -l circuits -l node_modules -o build/qkb-presentation/
-pnpm exec snarkjs r1cs info build/qkb-presentation/QKBPresentationV5.r1cs
+circom circuits/ZkqesPresentationV5.circom --r1cs --wasm \
+  -l circuits -l node_modules -o build/zkqes-presentation/
+pnpm exec snarkjs r1cs info build/zkqes-presentation/ZkqesPresentationV5.r1cs
 ```
 
-(`pnpm -F @qkb/circuits compile:v5` packages the above.)
+(`pnpm -F @zkqes/circuits compile:v5` packages the above.)
 
 The mocha test path uses `circom_tester.wasm()` which is convenient
 but ~2× memory-heavier; it's fine for warm-cache replay (cheap) but
@@ -296,7 +296,7 @@ ceremony output. **Cross-check pending** against canonical Hermez
 sha256 manifest before §11 real ceremony.
 
 Disk usage: 9.1 GB ptau + ~1 GB R1CS + ~2.2 GB zkey ≈ 13 GB scratch
-during ceremony. Goes into `build/qkb-presentation/` (gitignored).
+during ceremony. Goes into `build/zkqes-presentation/` (gitignored).
 
 ### V5.8 — `build-witness-v5` public API
 
@@ -309,7 +309,7 @@ import {
   parseP7s,
   type BuildWitnessV5Input,
   type WitnessV5,
-} from '@qkb/circuits';
+} from '@zkqes/circuits';
 
 const cms = parseP7s(p7sBuffer);
 const witness = await buildWitnessV5({
@@ -322,7 +322,7 @@ const witness = await buildWitnessV5({
 // `witness` is plain JSON ready for snarkjs.wtns.calculate.
 ```
 
-CLI: `pnpm -F @qkb/circuits build-witness-v5 ...`. Two modes:
+CLI: `pnpm -F @zkqes/circuits exec build-witness-v5 ...`. Two modes:
 `--p7s <path>` (real Diia ingestion) OR
 `--signed-attrs/--md-offset/--leaf-cert` (pre-extracted artifacts).
 
@@ -454,7 +454,7 @@ stable across cert renewals **inside** the identifier namespace
 certs (different Member States) produces TWO distinct commitments
 + TWO distinct fingerprints. This is intentional — eIDAS does NOT
 require pan-EU identifier collapse; cross-namespace dedup belongs in
-a separate identity-escrow layer ABOVE QKB.
+a separate identity-escrow layer ABOVE zkqes.
 
 **Implication**: a single user can derive multiple `walletSecret`s
 from the SAME identity (e.g., HKDF from different EOA keys), each
@@ -520,11 +520,12 @@ derivation is:
 
 ```
 salt = SHA-256("qkb-walletsecret-v1" || chainId || smartWalletAddress)
+# frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
 walletSecret = Argon2id(passphrase, salt, m=64MiB, t=3, p=1, L=32)
 walletSecret_field = bytesToField(walletSecret) % p_bn254
 ```
 
-Web-eng owns the production derivation in `@qkb/sdk`; this package's
+Web-eng owns the production derivation in `@zkqes/sdk`; this package's
 `src/wallet-secret.ts` exports `reduceTo254()` + `packFieldToBytes32()`
 for circuit-level test fixtures only. **Both paths MUST produce
 byte-identical commitments** — cross-package fingerprint drift here
@@ -540,7 +541,7 @@ Task 4 of A6.1 produces V5.1-specific stub artifacts at
   contract; web-eng pins to this filename).
 - `proof-sample.json` + `public-sample.json` + `witness-input-sample.json` —
   the (witness, public, proof) triple for round-trip integration tests.
-- `qkb-v5_1-stub.zkey` — gitignored (~2.1 GB).
+- `zkqes-v5_1-stub.zkey` — gitignored (~2.1 GB).
 
 The V5 stub at `ceremony/v5-stub/` is left as an archive (different
 circuit, 14 public signals). Downstream consumers (contracts-eng's
@@ -692,7 +693,7 @@ T3 of A7.1 produces V5.2-specific stub artifacts at `ceremony/v5_2/`:
   contract; web-eng pins to this filename).
 - `proof-sample.json` + `public-sample.json` + `witness-input-sample.json`
   — the (witness, public, proof) triple for round-trip integration tests.
-- `qkb-v5_2-stub.zkey` — gitignored (~2.0 GB; pump via R2).
+- `zkqes-v5_2-stub.zkey` — gitignored (~2.0 GB; pump via R2).
 - `zkey.sha256` — atomic-write integrity manifest. Manifest invariant:
   `zkey.sha256 exists ⇔ ceremony script reached the last line`.
 
@@ -703,7 +704,7 @@ fixtures) consume `ceremony/v5_2/` exclusively after the T3 pump.
 The V5 stub at `ceremony/v5-stub/` (14 public signals, pre-A6.1)
 remains the older archive.
 
-Reproduce: `pnpm -F @qkb/circuits ceremony:v5_2:stub` (~25 min wall
+Reproduce: `pnpm -F @zkqes/circuits ceremony:v5_2:stub` (~25 min wall
 with pot22 cached + R1CS+wasm cached, ~30-50 GB peak RSS; ~60-120 min
 cold including pot22 fetch over EU broadband). The script is
 idempotent — re-runs short-circuit through cached artifacts and
@@ -723,7 +724,7 @@ an incoherent bundle.
 
 ## V5.3 — OID-anchor + rotationNewWallet range-check amendment (current)
 
-The V5.3 amendment adds three changes to `QKBPresentationV5.circom`
+The V5.3 amendment adds three changes to `ZkqesPresentationV5.circom`
 in-place: F1 OID-anchor (closes the V5.2 Sybil vector via
 "any 32-byte window in signed TBS"), F2 rotationNewWallet 160-bit
 range-check (defense-in-depth; circuit + contract on rotateWallet),
@@ -894,7 +895,7 @@ pass high-bit-set garbage, the contract-side check catches it.
 ### V5.33 — walletSecret ↔ msgSender doc (F3)
 
 V5.33 is **documentation-only** — a comment block at the walletSecret
-private input declaration in `QKBPresentationV5.circom` referencing the
+private input declaration in `ZkqesPresentationV5.circom` referencing the
 V5.1 wallet-bound nullifier amendment §"Wallet-uniqueness gate
 location" and stating that the wallet-uniqueness invariant is
 enforced contract-side at `identityWallets[fp]`, not circuit-side.
@@ -924,7 +925,7 @@ Pot22 reused; no jump to pot23. V5.3 ceremony is a fresh single-
 contributor stub (pre-Phase B) at `ceremony/v5_3/` produced by
 `ceremony/scripts/stub-v5_3.sh` (mirrors V5.2's stub script with
 `v5_2/` → `v5_3/` path renames + `Groth16VerifierV5_3Stub` contract
-name). Reproduce: `pnpm -F @qkb/circuits ceremony:v5_3:stub`. The V5.2
+name). Reproduce: `pnpm -F @zkqes/circuits ceremony:v5_3:stub`. The V5.2
 stub at `ceremony/v5_2/` becomes the V5.2 archive, matching the V5.1 →
 V5.2 supersession pattern.
 
