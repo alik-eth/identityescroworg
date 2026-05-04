@@ -6,7 +6,7 @@ A holder signs a canonical binding statement with their qualified signature. The
 
 ## Status
 
-- **V5 protocol** — shipped through V5.4, latest tag [`v0.5.5-pre-ceremony`](https://github.com/alik-eth/zkqes/releases/tag/v0.5.5-pre-ceremony) (rolls up V5.1 wallet-bound nullifier, V5.2 keccak-on-chain, V5.3 OID-anchor + rotationNewWallet 160-bit guard, V5.4 native CLI prover).
+- **Latest release** — [`v0.6.0-zkqes-rename`](https://github.com/alik-eth/zkqes/releases/tag/v0.6.0-zkqes-rename) (2026-05-04). Single-noun structural rename across the repo; protocol unchanged. The V5 train (V5.1 wallet-bound nullifier + V5.2 keccak-on-chain + V5.3 OID-anchor + rotationNewWallet 160-bit guard + V5.4 native CLI prover) shipped at [`v0.5.5-pre-ceremony`](https://github.com/alik-eth/zkqes/releases/tag/v0.5.5-pre-ceremony) and is now the protocol baseline.
 - **Real-QES validation** — passes end-to-end against Ukrainian Diia QES (P-256 ECDSA + CAdES-BES).
 - **Phase B trusted setup ceremony** — recruiting now. See [Help with the ceremony](#help-with-the-ceremony).
 - **Base Sepolia deploy** — gated on ceremony.
@@ -92,7 +92,7 @@ Per-package:
 
 ```bash
 pnpm -F @zkqes/web typecheck && pnpm -F @zkqes/web test
-cd packages/contracts && forge test -vv  # 376 tests, ~1 min
+cd packages/contracts && forge test -vv  # 412 tests, ~1 min
 pnpm -F @zkqes/circuits test             # circuit + integration suite, ~10 min
 ```
 
