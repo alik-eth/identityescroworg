@@ -1,5 +1,7 @@
 # Wallet-Bound Nullifier — V5 Privacy Amendment
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **Status:** Draft v0.6 — renamed from "Issuer-Blind Nullifier" per user directive 2026-04-30; pending team-lead final read + user-review gate.
 >
 > **Title rationale**: the amendment binds the nullifier to a wallet-derived secret (`nullifier = Poseidon₂(walletSecret, ctxHash)`) — the title now describes the construction rather than asserting an adversary-relative privacy claim. Concrete privacy properties are detailed in §"What different observers learn" and §"Privacy linkability — explicit limitation". Prior name "Issuer-Blind Nullifier" overclaimed; an adversarial issuer with cert access can still enumerate registrations via the public `usedCtx` mapping (the amendment hides nullifier *values* from the issuer, not registration *occurrence*).
@@ -25,7 +27,7 @@
 >   (5) **Stale-bind invariant** added explicitly to §Soundness: `identityWallets[fp] == msg.sender` MUST be checked before `usedCtx[fp][ctxKey]` on the repeat-claim path.
 >   (6) **Privacy linkability sub-property** clarified: nullifier-value privacy ≠ unlinkability across user's own registrations — fingerprint persists in `usedCtx[fp][*]` and is observable; correlatable across an attacker who already has the fingerprint. V6 Pedersen-set-membership candidate.
 >   (7) **Codex Finding 2 fix — `IdentityEscrowNFT` is NOT non-transferable** (factual correction). The actual contract at `packages/contracts/src/IdentityEscrowNFT.sol` extends OpenZeppelin's `ERC721` without overriding `_update`, so transfers work via standard `transferFrom`/`safeTransferFrom`. The "no regression because NFT is non-transferable" argument was therefore unsound as written. Reframed: V5 already binds verified-status to wallet privkey via `nullifierOf[wallet]`; lose wallet privkey ⇒ can't re-prove verified-status; that V5 invariant survives V5.1 unchanged. NFT artifact transferability is orthogonal.
->   (8) **NFT decoupling** [user directive 2026-04-30]: the QKB layer does NOT manage NFT state. `rotateWallet()` migrates `identityWallets[fp]`, `identityCommitments[fp]`, and `nullifierOf[wallet]` only. If a user has minted an `IdentityEscrowNFT`, they are responsible for transferring it to the new wallet via standard ERC-721 (currently transferable). No `adminTransfer` cross-contract call; no `nonReentrant` modifier needed (no external calls in `rotateWallet`). Supersedes lead's Q4 `adminTransfer` design — user clarification: "nft is optional. if this works without nft its fine."
+>   (8) **NFT decoupling** [user directive 2026-04-30]: the zkqes layer does NOT manage NFT state. `rotateWallet()` migrates `identityWallets[fp]`, `identityCommitments[fp]`, and `nullifierOf[wallet]` only. If a user has minted an `IdentityEscrowNFT`, they are responsible for transferring it to the new wallet via standard ERC-721 (currently transferable). No `adminTransfer` cross-contract call; no `nonReentrant` modifier needed (no external calls in `rotateWallet`). Supersedes lead's Q4 `adminTransfer` design — user clarification: "nft is optional. if this works without nft its fine."
 >   Plus: α option documented as "consider for V6 if redesigned".
 > - v0.6 (2026-04-30 ~19:00 UTC): renamed amendment per user directive — "Issuer-Blind Nullifier" → **"Wallet-Bound Nullifier"**. The new name describes the construction (`nullifier = Poseidon₂(walletSecret, ctxHash)`); the old name implied a privacy property against the issuer that the amendment does not actually achieve. File renamed via `git mv` to `2026-04-30-wallet-bound-nullifier-amendment.md`. Body sweep updated: prose references to "issuer-blind" / "issuer-blindness" reframed where they were claims (now use "nullifier-value privacy" or "wallet-bound nullifier" as appropriate); historical references in commit messages and the contracts-eng review filename preserved (cross-package filename change deferred to lead).
 > - v0.5 (2026-04-30 ~18:30 UTC): Codex review pass 3 caught two real spec bugs in v0.4. Fixed:
@@ -54,7 +56,7 @@ This is *known* and was accepted as out-of-scope by the 2026-04-18 amendment ("O
 
 A construction that satisfies BOTH:
 
-1. **Issuer cannot compute the nullifier** for a given (user, ctx) pair, even with full cert-DB knowledge and on-chain visibility. Reduces issuer-deanon attack surface from O(linkable-per-ctx) to "knows user is in QKB globally" — same level of leak as V4's `nullifierOf` aggregate set.
+1. **Issuer cannot compute the nullifier** for a given (user, ctx) pair, even with full cert-DB knowledge and on-chain visibility. Reduces issuer-deanon attack surface from O(linkable-per-ctx) to "knows user is in zkqes globally" — same level of leak as V4's `nullifierOf` aggregate set.
 2. **Anti-Sybil global**: "one registration per (identity, ctx)" enforced regardless of which wallet, device, or cert generation. Same property as today.
 
 The two goals are in tension: deterministic-from-identity gives (2) for free but breaks (1); deterministic-from-wallet hides from issuer but lets a user re-register from fresh wallets, breaking (2). The fix is to **decouple the secret source from the nullifier-uniqueness gate**: derive the nullifier from a wallet-anchored secret, and enforce uniqueness at the contract layer using a separately-emitted identity fingerprint.
@@ -80,7 +82,7 @@ The two goals are in tension: deterministic-from-identity gives (2) for free but
 
 **Trade-offs the user accepts:**
 
-1. **EOA path** (default): user trusts their EOA wallet vendor's signing implementation to be RFC-6979 deterministic. Wallet loss is identity loss unless `rotateWallet()` was called pre-loss — i.e. verified-status (per `nullifierOf[wallet]`) cannot be re-proved without the wallet privkey, and V5 has no QKB-layer recovery primitive for that case. This trade-off is unchanged from V5. The `IdentityEscrowNFT` artifact is a separate, optional layer (decoupled from this amendment) and is currently a transferable ERC-721 — users can move it to a backup wallet via standard `transferFrom` independently of QKB.
+1. **EOA path** (default): user trusts their EOA wallet vendor's signing implementation to be RFC-6979 deterministic. Wallet loss is identity loss unless `rotateWallet()` was called pre-loss — i.e. verified-status (per `nullifierOf[wallet]`) cannot be re-proved without the wallet privkey, and V5 has no zkqes-layer recovery primitive for that case. This trade-off is unchanged from V5. The `IdentityEscrowNFT` artifact is a separate, optional layer (decoupled from this amendment) and is currently a transferable ERC-721 — users can move it to a backup wallet via standard `transferFrom` independently of zkqes.
 2. **SCW path**: user accepts a memory burden — the chosen passphrase is the *only* secret that protects the identity-commitment on-chain. **Losing the passphrase is unrecoverable in V5: even possessing a valid QES does not let you recompute `walletSecret`.** This is fundamentally weaker UX than the EOA path and the spec recommends EOA for the V5 alpha.
 
 ## Construction
@@ -229,7 +231,7 @@ Properties:
 Compatibility caveats — **critical user-facing warnings**:
 
 - 🚨 **Lost passphrase = lost identity, permanently, in V5.** No `identityReset()` ships in V5 (see §"identityReset() — V5 decision"). A valid QES does not recover access — the QES proves identity ownership but the *passphrase* protects the commitment escrow. The two are decoupled by design (this is what makes the nullifier value uncomputable to anyone other than the user — including the issuer).
-- 🚨 **Lost passphrase = lost verified-status.** With `walletSecret` unrecoverable, the user cannot produce a register-mode proof that opens the on-chain `identityCommitments[fp]` — they're locked out of their own QKB identity. `IdentityEscrowNFT` is a separate optional artifact and remains transferable independently of QKB; if minted before the loss, the user can still transfer the NFT via standard ERC-721, but the `Verified` modifier and any `IQKBRegistry.isVerified()` consumer will return false against any new wallet (since `nullifierOf[newWallet] == 0`).
+- 🚨 **Lost passphrase = lost verified-status.** With `walletSecret` unrecoverable, the user cannot produce a register-mode proof that opens the on-chain `identityCommitments[fp]` — they're locked out of their own zkqes identity. `IdentityEscrowNFT` is a separate optional artifact and remains transferable independently of zkqes; if minted before the loss, the user can still transfer the NFT via standard ERC-721, but the `Verified` modifier and any `IQKBRegistry.isVerified()` consumer will return false against any new wallet (since `nullifierOf[newWallet] == 0`).
 - Some users will pick weak passphrases despite warnings — Argon2id parameters (m=64MiB, t=3, p=1) tuned to make brute-force expensive but not impossible against publicly-visible commitments. Web SDK enforces a minimum entropy threshold (≥80 bits estimated by zxcvbn) and refuses weaker.
 - Recommend hardware-key derivation (e.g., signing a fixed message with a YubiKey or Ledger) as an alternative entropy source for sophisticated users — the protocol accepts any 32-byte input as `walletSecret`, so the SDK can offer multiple derivation modes.
 
@@ -483,7 +485,7 @@ function rotateWallet(
 }
 ```
 
-**NFT decoupling note** [v0.4, user directive]: `rotateWallet()` does NOT touch `IdentityEscrowNFT`. The NFT is an optional, decoupled artifact — currently a standard transferable ERC-721 (per `packages/contracts/src/IdentityEscrowNFT.sol`, no `_update` override). If the user has minted an NFT to their old wallet and wants to keep it associated with the new wallet, they call `transferFrom(oldWallet, newWallet, tokenId)` directly on the NFT contract — independently of QKB. The QKB protocol layer is concerned only with the verified-status escrow (`identityCommitments`, `identityWallets`, `usedCtx`, `nullifierOf`); NFT artifact lifecycle is the user's responsibility.
+**NFT decoupling note** [v0.4, user directive]: `rotateWallet()` does NOT touch `IdentityEscrowNFT`. The NFT is an optional, decoupled artifact — currently a standard transferable ERC-721 (per `packages/contracts/src/IdentityEscrowNFT.sol`, no `_update` override). If the user has minted an NFT to their old wallet and wants to keep it associated with the new wallet, they call `transferFrom(oldWallet, newWallet, tokenId)` directly on the NFT contract — independently of zkqes. The zkqes protocol layer is concerned only with the verified-status escrow (`identityCommitments`, `identityWallets`, `usedCtx`, `nullifierOf`); NFT artifact lifecycle is the user's responsibility.
 
 This explicitly supersedes earlier drafts that proposed a registry-driven `IdentityEscrowNFT.adminTransfer()` cross-contract call. Per user directive 2026-04-30: *"nft is optional. if this works without nft its fine."*
 
@@ -581,12 +583,12 @@ Comprehensive matrix of QES-rotation × wallet-state × user-action outcomes. **
 | 4 | Valid, **renewed** (same `subjectSerial`) | Same wallet, working | `register(ctxC)` from new cert | ✅ `subjectSerial` unchanged → same fp → same commit (walletSecret unchanged) → mint OK. The whole point of the design. |
 | 5 | Valid, current | Wallet **rotated** pre-action | `register(ctxC)` from new wallet (no `rotateWallet` called) | ❌ Reverts "wallet mismatch — use rotateWallet()". |
 | 6 | Valid, current | User runs `rotateWallet(W_old → W_new)` while both wallets accessible | Then `register(ctxC)` from W_new | ✅ Both commitment and identityWallets[fp] updated atomically; nullifierOf migrated; new ctx claim succeeds. |
-| 7 | Valid, current | **Wallet lost, no prior rotateWallet** | Cannot register | ❌ QKB identity locked (no QKB-layer recovery in V5). The `IdentityEscrowNFT` artifact (if minted) was a transferable ERC-721 and may have been moved to a backup wallet pre-loss; that's a user-managed concern decoupled from QKB. User must wait for V6 reset path to recover QKB verified-status. |
+| 7 | Valid, current | **Wallet lost, no prior rotateWallet** | Cannot register | ❌ zkqes identity locked (no zkqes-layer recovery in V5). The `IdentityEscrowNFT` artifact (if minted) was a transferable ERC-721 and may have been moved to a backup wallet pre-loss; that's a user-managed concern decoupled from zkqes. User must wait for V6 reset path to recover zkqes verified-status. |
 | 8 | Valid, current | EOA path; wallet vendor changed firmware to non-deterministic ECDSA | `register(any)` | ❌ HKDF input changes → walletSecret changes → commitment mismatch → reverts. Web SDK should detect and warn pre-tx. |
 | 9 | Valid, current | SCW path; user **forgot passphrase** | `register(any)` | ❌ Cannot derive walletSecret → cannot prove commitment opening → reverts. Even with valid QES, no recovery in V5. (See §SCW-path threat-model.) |
 | 10 | **QES expired, not renewed** | Working wallet | `register(any)` | ❌ EIP-7212 leaf-sig verify fails on chain (cert chain check). User must obtain a new QES (issuer issues fresh cert with same `subjectSerial`). |
 | 11 | **QES revoked** by issuer | Working wallet | `register(any)` | ❌ EIP-7212 still verifies (revocation isn't on-chain in V5), BUT the spec recommends issuer-driven revocation be propagated via trustedListRoot updates. Out of scope for this amendment. |
-| 12 | Valid, current | Attacker briefly compromises wallet, signs `rotateWallet` to attacker-controlled addr | Tx submitted | ⚠️ If attacker also obtained the user's `personal_sign` of the HKDF input (separate sig), they can produce a valid `oldWalletSecret` → ZK proof passes → identity stolen. Without that separate sig, ZK proof fails. UX takeaway: never sign multiple `personal_sign` requests for the QKB domain in a session you don't trust. |
+| 12 | Valid, current | Attacker briefly compromises wallet, signs `rotateWallet` to attacker-controlled addr | Tx submitted | ⚠️ If attacker also obtained the user's `personal_sign` of the HKDF input (separate sig), they can produce a valid `oldWalletSecret` → ZK proof passes → identity stolen. Without that separate sig, ZK proof fails. UX takeaway: never sign multiple `personal_sign` requests for the zkqes domain in a session you don't trust. |
 | 13 | Valid, current | Attacker has long-term wallet privkey access | Any | ❌ Game-over by definition (out of scope; persistent compromise breaks any wallet-bound system). |
 | 14 | Valid, current | User has TWO QES (e.g. PNOUA-… + PASUA-… same person, different cert) | `register(ctxA)` with QES1 from wallet A, then `register(ctxA)` with QES2 from wallet A | ❌ Second register reverts with "wallet already has identity" [v0.5 invariant 5]. To register both identities, user MUST use two distinct wallets — register QES1 from wallet A, register QES2 from wallet B. The two identities then have separate `nullifierOf[A]` and `nullifierOf[B]` entries, separate IdentityEscrowNFTs (if minted), and independent `usedCtx[fp1][*]` / `usedCtx[fp2][*]` tracks. Per 2026-04-23 namespace clarification, the two identities remain distinct (cross-eIDAS dedup out of scope). |
 | 15 | Valid, current | User changes from EOA to SCW | `rotateWallet(EOA → SCW)` | ✅ Possible IF user sets up SCW passphrase pre-rotation. Web SDK guides through new derivation path. Caveat — see #9 for forgotten-passphrase risk. |
@@ -607,11 +609,11 @@ Rationale:
 2. **Bad recovery is worse than no recovery.** A naive reset opens DoS via stolen-QES ping-pong; a sophisticated reset (social recovery, time-locked) is significant additional design and contract work that we don't have time for in V5. The leading two-phase-commit-with-cancellation alternative has the wrong threat model — it assumes users monitor on-chain events for their own identity, which they won't.
 3. **`rotateWallet()` covers the most common legitimate case.** As long as the user has BOTH wallets at the time of rotation, no reset is needed. The "hard" case is total wallet loss + no rotation pre-arranged.
 4. **`usedCtx` flags persist forever — load-bearing invariant.** Even with a future reset added in V6, anti-Sybil is preserved. **V6 reset implementations MUST NOT clear `usedCtx[fp][*]`**; this is an explicit contract-level invariant carried forward.
-5. **No regression vs current V5 wallet-loss semantics.** [Reframed in v0.4 — Codex Finding 2 corrected the prior "non-transferability" claim.] The actual `IdentityEscrowNFT` is a standard transferable ERC-721, but that's *orthogonal* to QKB verified-status. V5 today already binds `Verified`-modifier eligibility to wallet privkey via `nullifierOf[wallet]` — a user who loses their wallet privkey cannot re-prove verified-status in V5 without re-registering against a new wallet. V5.1 preserves that invariant. The NFT artifact lifecycle is independent and user-managed (transferable to backup wallets via standard ERC-721 if the user planned for loss). So "no reset → losing wallet privkey = losing QKB verified-status" is *no regression* against the existing V5 model — it's the same trade-off, made explicit.
+5. **No regression vs current V5 wallet-loss semantics.** [Reframed in v0.4 — Codex Finding 2 corrected the prior "non-transferability" claim.] The actual `IdentityEscrowNFT` is a standard transferable ERC-721, but that's *orthogonal* to zkqes verified-status. V5 today already binds `Verified`-modifier eligibility to wallet privkey via `nullifierOf[wallet]` — a user who loses their wallet privkey cannot re-prove verified-status in V5 without re-registering against a new wallet. V5.1 preserves that invariant. The NFT artifact lifecycle is independent and user-managed (transferable to backup wallets via standard ERC-721 if the user planned for loss). So "no reset → losing wallet privkey = losing zkqes verified-status" is *no regression* against the existing V5 model — it's the same trade-off, made explicit.
 
 User-facing copy (web onboarding, registration confirmation page):
 
-> *Your QKB verified-status is bound to this wallet. **Back it up.** If you lose this wallet without first calling `rotateWallet()` to delegate to a backup wallet, your QKB verified-status is permanently lost in V5 — even if you still have your QES. (The optional `IdentityEscrowNFT` artifact is a standard transferable ERC-721; if you've minted one, transfer it to a backup wallet now using your wallet's standard transfer flow.) V6 (planned for later 2026) will add a social-recovery option for users who want stronger recoverability.*
+> *Your zkqes verified-status is bound to this wallet. **Back it up.** If you lose this wallet without first calling `rotateWallet()` to delegate to a backup wallet, your zkqes verified-status is permanently lost in V5 — even if you still have your QES. (The optional `IdentityEscrowNFT` artifact is a standard transferable ERC-721; if you've minted one, transfer it to a backup wallet now using your wallet's standard transfer flow.) V6 (planned for later 2026) will add a social-recovery option for users who want stronger recoverability.*
 
 User-facing copy (rotateWallet UI):
 
@@ -665,13 +667,13 @@ The amendment's name was changed from "issuer-blind nullifier" to **"wallet-boun
 
 | Query | V5 (current) | V5.1 (this amendment) | Privacy delta |
 |---|---|---|---|
-| "Is user X registered with QKB at all?" — by **issuer** (has cert) | Yes — compute V5 nullifier for any plausible ctx, check `registrantOf` | Yes — compute `identityFingerprint` from cert, check `identityCommitments` | **No change** |
-| "Is user X registered with QKB at all?" — by **observer without cert** | Yes — `registrantOf` mapping is publicly readable; can correlate (nullifier → msg.sender) without needing the cert | **No** — `identityCommitments[fp]` is publicly readable but `fp` is computable only from the cert; observer without cert cannot enumerate identities | ✅ **Improved** |
+| "Is user X registered with zkqes at all?" — by **issuer** (has cert) | Yes — compute V5 nullifier for any plausible ctx, check `registrantOf` | Yes — compute `identityFingerprint` from cert, check `identityCommitments` | **No change** |
+| "Is user X registered with zkqes at all?" — by **observer without cert** | Yes — `registrantOf` mapping is publicly readable; can correlate (nullifier → msg.sender) without needing the cert | **No** — `identityCommitments[fp]` is publicly readable but `fp` is computable only from the cert; observer without cert cannot enumerate identities | ✅ **Improved** |
 | "Which ctxs has user X registered against?" — by **issuer** | Yes — enumerate ctx guesses, recompute nullifier, check `registrantOf` | Yes — enumerate ctx guesses, recompute `ctxKey`, check `usedCtx[fp][ctxKey]` (the issuer already has `fp`) | **No change** — see §Privacy linkability |
 | "Which ctxs has user X registered against?" — by **observer without cert** | Yes — same path as above; `registrantOf` is keyed on nullifier (which any-with-cert-+-ctx can compute) | **No** — `usedCtx[fp][ctxKey]` requires `fp`, which requires the cert | ✅ **Improved** |
 | "What's the nullifier value of user X for ctx Y?" — by **anyone** | Computable with cert + ctx (even without walletSecret in V5) | **Not computable without walletSecret** | ✅ **Improved** (mainly off-chain utility — cross-system tracing harder) |
 | "Which wallet did user X use?" | Yes — `registrantOf[nullifier]` returns msg.sender (with cert + ctx guess) | Yes — `identityWallets[fp]` returns wallet directly (with cert) | **No change** |
-| "What's the size of the QKB user base?" | Yes — count on-chain registrations | Yes — count `identityCommitments` entries | **No change** (intentional — aggregate metric) |
+| "What's the size of the zkqes user base?" | Yes — count on-chain registrations | Yes — count `identityCommitments` entries | **No change** (intentional — aggregate metric) |
 
 **Bottom line**: V5.1 strictly improves privacy against observers without cert access (most third parties, mass-surveillance crawlers, indexers without cert DBs). It does **not** improve privacy against an adversarial issuer who has a user's cert. **Hiding registration occurrence from cert-holding adversaries requires V6 Pedersen-set-membership** (mentioned at the end of §Privacy linkability) — out of scope for this amendment.
 
@@ -689,7 +691,7 @@ The amendment's name was changed from "issuer-blind nullifier" to **"wallet-boun
 
 **Attack 3: Correlate registration-tx times with cert-issuance flow timing.**
 - Probabilistic, not deterministic. Same level as today (msg.sender already on-chain per registration).
-- Mitigated via Tornado-style mixers if a user wants stronger anonymity (independent of QKB).
+- Mitigated via Tornado-style mixers if a user wants stronger anonymity (independent of zkqes).
 - Out of scope for this amendment. ✓ (no regression)
 
 **Attack 4: Sybil — re-register from a fresh wallet.**
@@ -705,7 +707,7 @@ The amendment hides the *issuer's ability to compute nullifiers* for a target us
 
 - `usedCtx[fp][ctxKey]` is publicly readable. An observer who knows a user's fingerprint can enumerate all ctxs that user has registered against by checking the mapping.
 - An observer who has the user's QES cert can compute `identityFingerprint = Poseidon₂(subjectSerialPacked, FINGERPRINT_DOMAIN)` directly (no secret needed). The issuer falls into this category by definition. Anyone who scrapes the user's QES (e.g. via a Diia API integration where the user authenticates) also does.
-- Once the fingerprint is known, the observer can correlate ALL of the user's QKB registrations — observing the *count* of contexts and the *specific* on-chain ctxKeys (which are SHA-256 of ctxBytes; an observer who can guess plausible ctxBytes can identify them).
+- Once the fingerprint is known, the observer can correlate ALL of the user's zkqes registrations — observing the *count* of contexts and the *specific* on-chain ctxKeys (which are SHA-256 of ctxBytes; an observer who can guess plausible ctxBytes can identify them).
 
 **This is a real privacy leak that the amendment does NOT close.** It is materially smaller than the V5 baseline leak (where the issuer could enumerate registrations even *without* possessing the user's fingerprint, just by computing nullifier candidates), but it's not zero.
 
@@ -734,7 +736,7 @@ The amendment introduces five new invariants the contract + circuit jointly enfo
 
 These five supersede the V5 invariant "(NUL-1) `nullifierOf[msg.sender] == 0`" as the primary anti-Sybil mechanism. `nullifierOf` is retained as a write-once view for `IdentityEscrowNFT.sol` and `Verified`-modifier consumers; per-ctx uniqueness moves to `usedCtx`; per-wallet uniqueness is enforced by invariant 5. `registrantOf` is **dropped entirely** (no callers post-amendment).
 
-## Witness-builder API impact (`@qkb/circuits` src/build-witness-v5.ts)
+## Witness-builder API impact (`@zkqes/circuits` src/build-witness-v5.ts)
 
 New input to `buildWitnessV5`:
 
@@ -774,7 +776,7 @@ For register-mode witness building, the SDK populates `rotationMode = 0n`, `rota
 
 `build-witness-v5.ts` adds a `derivePackedSubjectSerial()` helper that computes `Poseidon₅(serialLimbs[0..3], serialLen)` off-circuit, used to compute the two new public signals locally for sanity checks before proving.
 
-A new top-level helper `deriveWalletSecret(wallet: WalletProvider): Promise<Uint8Array>` lives in `@qkb/circuits/src/wallet-secret.ts`, with two implementations (EOA + SCW). The web SDK imports it directly.
+A new top-level helper `deriveWalletSecret(wallet: WalletProvider): Promise<Uint8Array>` lives in `@zkqes/circuits/src/wallet-secret.ts`, with two implementations (EOA + SCW). The web SDK imports it directly.
 
 ## Migration / backwards compat
 
@@ -813,7 +815,7 @@ Spec **lands as yes for `nullifierOf` migration** (single-slot write-once view; 
 
 `registrantOf` is **dropped entirely** in v0.4; no migration needed (no callers post-amendment).
 
-**`IdentityEscrowNFT` adminTransfer cross-coupling is DROPPED** [user directive 2026-04-30: *"nft is optional. if this works without nft its fine."*]. The QKB layer does not manage NFT state. If a user wants to keep their NFT associated with the new wallet post-rotation, they call standard ERC-721 `transferFrom` independently. Saves ~36-38K gas per rotation; eliminates `nonReentrant` modifier requirement; eliminates audit surface from cross-contract coupling. Lead's earlier Q4 proposal (`adminTransfer` single-call + `nonReentrant`) is superseded.
+**`IdentityEscrowNFT` adminTransfer cross-coupling is DROPPED** [user directive 2026-04-30: *"nft is optional. if this works without nft its fine."*]. The zkqes layer does not manage NFT state. If a user wants to keep their NFT associated with the new wallet post-rotation, they call standard ERC-721 `transferFrom` independently. Saves ~36-38K gas per rotation; eliminates `nonReentrant` modifier requirement; eliminates audit surface from cross-contract coupling. Lead's earlier Q4 proposal (`adminTransfer` single-call + `nonReentrant`) is superseded.
 
 ### Q5: `WalletRotated` event privacy
 

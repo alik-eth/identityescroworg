@@ -1,5 +1,7 @@
 # V5 Architecture Design
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 **Status:** Brainstorming complete · Spec review pass 5 applied (envelope reconcile + mobile-feasibility update + frontend hosting lean) · Awaiting user spec review
 **Date:** 2026-04-29
 **Predecessor:** [V4 Sepolia deployment](../../../fixtures/contracts/sepolia.json) — to be deprecated.
@@ -16,7 +18,7 @@
 
 ## Summary
 
-Shrink the QKB ZK proof from 6.54M constraints to ~1M by moving ECDSA-P256 verification from inside the circuit to a contract-side EIP-7212 precompile call. Collapse the existing two-circuit split (`QKBPresentationEcdsaLeaf` + `QKBPresentationEcdsaChain`) into a single circuit. Drop RSA scaffolding. Target Base mainnet exclusively. The result: ~250-350 MB zkey, sub-30s mobile prove time, browser-feasible proving without a native app.
+Shrink the zkqes ZK proof from 6.54M constraints to ~1M by moving ECDSA-P256 verification from inside the circuit to a contract-side EIP-7212 precompile call. Collapse the existing two-circuit split (`QKBPresentationEcdsaLeaf` + `QKBPresentationEcdsaChain`) into a single circuit. Drop RSA scaffolding. Target Base mainnet exclusively. The result: ~250-350 MB zkey, sub-30s mobile prove time, browser-feasible proving without a native app.
 
 This is **A1** in the broader Path A delivery: A1 (this spec) → A2 (mobile/browser frontend) → A3 (audit + Base mainnet deploy) → A4 (operational launch).
 
@@ -72,11 +74,11 @@ Three-layer trust composition. Each layer has independent verification; all thre
 
 ### Retained (existing, edits)
 
-- `IQKBRegistry.sol` — ABI-stable interface across V4 and V5. Third-party SDK consumers (the `Verified` modifier in `@qkb/contracts-sdk`, etc.) work unchanged.
+- `IQKBRegistry.sol` — ABI-stable interface across V4 and V5. Third-party SDK consumers (the `Verified` modifier in `@zkqes/contracts-sdk`, etc.) work unchanged.
 - `IdentityEscrowNFT.sol` — unchanged. Reads `nullifierOf` via `IQKBRegistry`. New deploy points at V5 instead of V4.
-- `@qkb/contracts-sdk` — unchanged interface.
-- `@qkb/sdk` (browser/CLI prover) — significant rewrite for V5 ABI and prove flow, but same overall purpose.
-- `@qkb/cli` — updated to V5 prove + register flow.
+- `@zkqes/contracts-sdk` — unchanged interface.
+- `@zkqes/sdk` (browser/CLI prover) — significant rewrite for V5 ABI and prove flow, but same overall purpose.
+- `@zkqes/cli` — updated to V5 prove + register flow.
 
 ### New
 
@@ -496,7 +498,7 @@ Deploy:
 
 ### Frontend hosting
 
-**GitHub Pages.** Rationale: source-of-truth already lives on GitHub, deploy is `actions/deploy-pages` integrated with CI, custom domain (`identityescrow.org`) supported with auto-issued Let's Encrypt cert, no separate hosting account / dashboard / billing. Pure static SPA — fits the Pages model exactly. 100 GB/month soft bandwidth cap covers expected V1 traffic with significant headroom.
+**GitHub Pages.** Rationale: source-of-truth already lives on GitHub, deploy is `actions/deploy-pages` integrated with CI, custom domain (`zkqes.org`) supported with auto-issued Let's Encrypt cert, no separate hosting account / dashboard / billing. Pure static SPA — fits the Pages model exactly. 100 GB/month soft bandwidth cap covers expected V1 traffic with significant headroom.
 
 **One technical caveat — Cross-Origin Isolation for multithreaded proving.** snarkjs's WASM prover uses `SharedArrayBuffer` for parallel MSM, which requires the page to be cross-origin-isolated via `Cross-Origin-Opener-Policy: same-origin` + `Cross-Origin-Embedder-Policy: require-corp` HTTP headers. GitHub Pages does **not** let users configure custom response headers. Two paths forward:
 
@@ -593,7 +595,7 @@ These resolve in the implementation plan, not here:
 
 1. Exact public-signal ordering (snarkjs ABI conventions may force a specific layout).
 2. PoseidonMerkle library: vendor iden3's `PoseidonT3.sol` or roll our own? (Vendoring is faster, more battle-tested.)
-3. Witness builder rewrite: how much of existing `@qkb/sdk` witness code reuses vs. rewrites for V5?
+3. Witness builder rewrite: how much of existing `@zkqes/sdk` witness code reuses vs. rewrites for V5?
 4. SDK API for new register flow: keep `qkbRegistry.encodeRegisterCalldata(witness)` as today, or expose a higher-level `qkbRegistry.register(witness, signer)` that handles the whole tx?
 
 ## Acceptance criteria

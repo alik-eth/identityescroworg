@@ -1,4 +1,6 @@
-# QKB Helper — V5.2 Native Prove Acceleration via On-Demand Local Helper
+# zkqes Helper — V5.2 Native Prove Acceleration via On-Demand Local Helper
+
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
 
 > **Status:** Draft v0.1 — pending user-review gate.
 >
@@ -16,7 +18,7 @@
 
 ## TL;DR
 
-Ship a small Node-based **QKB Helper** binary, signed and notarized for macOS / Windows / Linux, that runs **on demand** via a `qkb://` URL scheme deep-link. When invoked, the helper binds `127.0.0.1:9080`, accepts a single witness JSON via origin-pinned HTTPS POST, runs the iden3 rapidsnark prover natively, returns the proof, and auto-quits after 5 minutes idle. Browser at `/v5/registerV5` detects the helper before the prove step; if reachable, offloads to it (13 s vs 90 s, 3.7 GiB vs 38 GiB); if not, falls back to in-browser snarkjs (current behavior, unchanged).
+Ship a small Node-based **zkqes Helper** binary, signed and notarized for macOS / Windows / Linux, that runs **on demand** via a `qkb://` URL scheme deep-link. When invoked, the helper binds `127.0.0.1:9080`, accepts a single witness JSON via origin-pinned HTTPS POST, runs the iden3 rapidsnark prover natively, returns the proof, and auto-quits after 5 minutes idle. Browser at `/v5/registerV5` detects the helper before the prove step; if reachable, offloads to it (13 s vs 90 s, 3.7 GiB vs 38 GiB); if not, falls back to in-browser snarkjs (current behavior, unchanged).
 
 Browser remains the canonical UI, wallet host, and on-chain submitter. Helper is a single-purpose accelerator for one step.
 
@@ -48,9 +50,9 @@ A WASM port of rapidsnark does not exist (iden3 has not built one; the asm speed
 
 ```
                        ┌─────────────────────────────────────┐
-                       │ identityescrow.org/v5/registerV5    │
+                       │ zkqes.org/v5/registerV5    │
                        │  • wallet (wagmi)                   │
-                       │  • witness build (@qkb/sdk)         │
+                       │  • witness build (@zkqes/sdk)         │
                        │  • on-chain submit (wagmi)          │
                        └─────────────────────────────────────┘
                                        │
@@ -61,7 +63,7 @@ A WASM port of rapidsnark does not exist (iden3 has not built one; the asm speed
                        ┌─────────────────────────────────────┐
                        │ qkb-helper (Node, on-demand)        │
                        │  • HTTP listener on 127.0.0.1:9080  │
-                       │  • Origin pin: identityescrow.org   │
+                       │  • Origin pin: zkqes.org   │
                        │  • Idle timeout: 300 s              │
                        │                                     │
                        │  ┌──────────────────────────────┐   │
@@ -171,7 +173,7 @@ Used by browser to detect helper presence and zkey readiness. Returns 200 even i
 ```
 Request:
   Content-Type: application/json
-  Origin: https://identityescrow.org   (load-bearing; 403 otherwise)
+  Origin: https://zkqes.org   (load-bearing; 403 otherwise)
   Body: { ...witness JSON from buildWitnessV5(...) ... }
 
 Response 200 {
@@ -229,7 +231,7 @@ async function detectHelper(): Promise<HelperStatus> {
 Result:
 - `ok: true, zkeyLoaded: true` → render "🟢 Fast prover available (~14 s)" badge.
 - `ok: true, zkeyLoaded: false` → render "Fast prover initializing… (downloading proving key)" with progress polling.
-- `ok: false` → render normal browser-prove UX with an "Install QKB Helper for ~14 s prove" CTA next to the prove button.
+- `ok: false` → render normal browser-prove UX with an "Install zkqes Helper for ~14 s prove" CTA next to the prove button.
 
 ### Prove call (replaces current `SnarkjsProver` worker invocation)
 
@@ -276,7 +278,7 @@ If the helper is unreachable AFTER the deep-link launch attempt, browser falls b
 |---|---|
 | Helper detected, zkey ready | Green badge "Fast prover available (~14 s)". Prove button labeled "Generate proof". |
 | Helper detected, zkey downloading | Yellow badge "Initializing fast prover… <progress>". Prove button labeled "Generate proof (using browser prover)" with subtle "Will switch to fast prover when ready" tooltip. |
-| Helper not installed | Gray badge "Slower browser prover (~90 s, Firefox 64-bit / 32 GB only)". Inline CTA "Install QKB Helper" linking to `/download`. |
+| Helper not installed | Gray badge "Slower browser prover (~90 s, Firefox 64-bit / 32 GB only)". Inline CTA "Install zkqes Helper" linking to `/download`. |
 | Helper installed but not running | Same as detected; deep-link fires automatically on prove click. |
 | Deep-link failed (browser blocked / no handler) | Surface "Could not reach helper. Install or restart it from <link>." |
 | Helper crashed mid-prove | 5xx response → fall back to browser prove with a "Helper failed; using browser prover" toast. |
@@ -289,15 +291,15 @@ Helper binds `127.0.0.1:9080`, never `0.0.0.0`. LAN devices cannot reach it. Ver
 
 ### Origin pinning
 
-Helper inspects the `Origin` header on every request. If `Origin !== https://identityescrow.org`, returns `403 Forbidden` with body `{ "error": "origin not allowed" }`. This prevents arbitrary websites from co-opting a user's local helper.
+Helper inspects the `Origin` header on every request. If `Origin !== https://zkqes.org`, returns `403 Forbidden` with body `{ "error": "origin not allowed" }`. This prevents arbitrary websites from co-opting a user's local helper.
 
-For dev/staging (`https://staging.identityescrow.org`, `http://localhost:5173`), the helper accepts an `--allowed-origin` CLI flag. Production builds hard-code production origin only; dev builds expose the flag.
+For dev/staging (`https://staging.zkqes.org`, `http://localhost:5173`), the helper accepts an `--allowed-origin` CLI flag. Production builds hard-code production origin only; dev builds expose the flag.
 
 Validated end-to-end in `scripts/v5_2-prove-server.mjs` prototype.
 
 ### Chrome Private Network Access
 
-Helper emits `Access-Control-Allow-Private-Network: true` on every response. Required for Chrome 117+ to permit a public-origin (`https://identityescrow.org`) → private-network (`http://127.0.0.1:9080`) request. Validated end-to-end via `OPTIONS` preflight returning 204.
+Helper emits `Access-Control-Allow-Private-Network: true` on every response. Required for Chrome 117+ to permit a public-origin (`https://zkqes.org`) → private-network (`http://127.0.0.1:9080`) request. Validated end-to-end via `OPTIONS` preflight returning 204.
 
 ### No auth tokens
 
@@ -333,11 +335,11 @@ Code-signing is the longest-tail item (Apple notarization can take hours per bui
 
 | OS | Primary | Secondary |
 |---|---|---|
-| macOS | `identityescrow.org/download` → `QKBHelper-{version}-arm64.pkg` and `QKBHelper-{version}-x86_64.pkg` | `brew install qkb-eth/qkb/qkb-helper` (already-aliased tap; documented in `/ua/cli`) |
-| Windows | `identityescrow.org/download` → `QKBHelper-{version}.msi` | `winget install qkb-eth.qkb-helper` |
-| Linux | `identityescrow.org/download` → `qkb-helper-{version}.AppImage` and `qkb-helper-{version}.deb` | apt repo at `apt.identityescrow.org` |
+| macOS | `zkqes.org/download` → `QKBHelper-{version}-arm64.pkg` and `QKBHelper-{version}-x86_64.pkg` | `brew install qkb-eth/qkb/qkb-helper` (already-aliased tap; documented in `/ua/cli`) |
+| Windows | `zkqes.org/download` → `QKBHelper-{version}.msi` | `winget install qkb-eth.qkb-helper` |
+| Linux | `zkqes.org/download` → `qkb-helper-{version}.AppImage` and `qkb-helper-{version}.deb` | apt repo at `apt.zkqes.org` |
 
-App Store and Microsoft Store are explicitly **out** for V1. Direct distribution preserves the "user trusts identityescrow.org" trust chain.
+App Store and Microsoft Store are explicitly **out** for V1. Direct distribution preserves the "user trusts zkqes.org" trust chain.
 
 ### Landing page
 
@@ -353,8 +355,8 @@ Web-eng adds `/download` with:
 
 | Step | macOS | Windows | Linux (.deb) |
 |---|---|---|---|
-| Place binary | `/Applications/QKB Helper.app/Contents/MacOS/qkb-helper` | `C:\Program Files\QKB Helper\qkb-helper.exe` | `/usr/local/bin/qkb-helper` |
-| Register URL scheme | `CFBundleURLTypes` in `Info.plist`, scheme `qkb` | Registry: `HKEY_CLASSES_ROOT\qkb` with `URL Protocol`, command `"%ProgramFiles%\QKB Helper\qkb-helper.exe" "%1"` | `.desktop` file with `MimeType=x-scheme-handler/qkb;`, `xdg-mime default qkb-helper.desktop x-scheme-handler/qkb` post-install |
+| Place binary | `/Applications/zkqes Helper.app/Contents/MacOS/qkb-helper` | `C:\Program Files\zkqes Helper\qkb-helper.exe` | `/usr/local/bin/qkb-helper` |
+| Register URL scheme | `CFBundleURLTypes` in `Info.plist`, scheme `qkb` | Registry: `HKEY_CLASSES_ROOT\qkb` with `URL Protocol`, command `"%ProgramFiles%\zkqes Helper\qkb-helper.exe" "%1"` | `.desktop` file with `MimeType=x-scheme-handler/qkb;`, `xdg-mime default qkb-helper.desktop x-scheme-handler/qkb` post-install |
 | First-launch zkey download | First `qkb://launch` triggers download with progress UI | Same | Same |
 
 No login items, no services, no daemons registered. **The installer's only persistent side-effect is the URL scheme handler.**
@@ -363,7 +365,7 @@ No login items, no services, no daemons registered. **The installer's only persi
 
 | OS | Mechanism |
 |---|---|
-| macOS | Drag `QKB Helper.app` to Trash. Helper offers a "Reset and uninstall" command (`qkb-helper --uninstall`) that also removes the cached zkey (~2.16 GB). |
+| macOS | Drag `zkqes Helper.app` to Trash. Helper offers a "Reset and uninstall" command (`qkb-helper --uninstall`) that also removes the cached zkey (~2.16 GB). |
 | Windows | Add/Remove Programs. Same `--uninstall` command available. |
 | Linux | `apt remove qkb-helper` or remove the AppImage. Cached zkey at `~/.local/share/qkb-helper/circuits/` lingers; documented in README. |
 
@@ -375,9 +377,9 @@ Uninstall does NOT auto-remove the cached zkey by default (avoid surprising user
 
 Helper checks for updates at most once per 24 hours, **only when invoked** (no background polling). On first launch within a 24-hour window:
 
-1. Fetch `https://identityescrow.org/helper-manifest.json` (signed by lead's release key).
+1. Fetch `https://zkqes.org/helper-manifest.json` (signed by lead's release key).
 2. Compare embedded version to current binary.
-3. If update available, surface a one-time toast in the helper's stdout / system notification: "QKB Helper update available: {version}. Download from identityescrow.org/download".
+3. If update available, surface a one-time toast in the helper's stdout / system notification: "zkqes Helper update available: {version}. Download from zkqes.org/download".
 
 V1 does **not** auto-install updates. Manual update only — user re-downloads from the website. This avoids the "background process modifies itself" trust footgun and the cross-OS auto-update tooling complexity. Future versions may add Tauri-style differential updates if user friction warrants.
 
@@ -390,11 +392,11 @@ V1 does **not** auto-install updates. Manual update only — user re-downloads f
   "changelog": "Initial V5.2 release",
   "circuits": {
     "v5.2": {
-      "zkeyUrl":      "https://r2.identityescrow.org/qkb-v5_2-stub.zkey",
+      "zkeyUrl":      "https://r2.zkqes.org/qkb-v5_2-stub.zkey",
       "zkeySha256":   "b66bad1d27f2e0b00f2db7437a0fab365433165dccb2f11d09ee3eb475debce2",
-      "wasmUrl":      "https://r2.identityescrow.org/qkb-v5_2.wasm",
+      "wasmUrl":      "https://r2.zkqes.org/qkb-v5_2.wasm",
       "wasmSha256":   "<hash>",
-      "vkeyUrl":      "https://r2.identityescrow.org/qkb-v5_2-vkey.json",
+      "vkeyUrl":      "https://r2.zkqes.org/qkb-v5_2-vkey.json",
       "vkeySha256":   "<hash>"
     }
   }
@@ -411,8 +413,8 @@ When V5.2 production ceremony swaps the stub zkey for the real one (Phase B outp
 
 | OS | Path |
 |---|---|
-| macOS | `~/Library/Application Support/QKB Helper/circuits/qkb-v5_2.zkey` |
-| Windows | `%APPDATA%\QKB Helper\circuits\qkb-v5_2.zkey` |
+| macOS | `~/Library/Application Support/zkqes Helper/circuits/qkb-v5_2.zkey` |
+| Windows | `%APPDATA%\zkqes Helper\circuits\qkb-v5_2.zkey` |
 | Linux | `~/.local/share/qkb-helper/circuits/qkb-v5_2.zkey` |
 
 ### Download flow
@@ -443,7 +445,7 @@ When the real V5.2 production ceremony lands (Phase B, separate plan), lead pump
 
 | State | Browser UI | Helper state |
 |---|---|---|
-| Helper not installed, has not been launched | "Slower browser prover (~90 s, Firefox 64-bit only)" badge + "Install QKB Helper" CTA | Not running, no install |
+| Helper not installed, has not been launched | "Slower browser prover (~90 s, Firefox 64-bit only)" badge + "Install zkqes Helper" CTA | Not running, no install |
 | Helper installed, never launched, zkey not downloaded | "Install detected. First prove will download proving key (~3 min)" CTA | Not running |
 | Helper installed, launched once, zkey download in progress | "Initializing fast prover: 47% (downloading proving key, ~2 min remaining)" | Running, zkeyLoaded: false, downloadProgress |
 | Helper running, zkey ready, no prove in flight | "🟢 Fast prover available (~14 s)" | Running, zkeyLoaded: true, busy: false |
@@ -464,8 +466,8 @@ When the real V5.2 production ceremony lands (Phase B, separate plan), lead pump
 | Browser-side: helper detection + deep-link launch + retry-with-backoff + UI states | web-eng | 2-3 |
 | Auto-update manifest + signature verification | circuits-eng | 1-2 |
 | brew tap update (qkb-eth/qkb/qkb-helper) + winget config | lead | 1 |
-| `/download` landing page on `identityescrow.org` | web-eng | 1 |
-| Apt repo setup at `apt.identityescrow.org` | lead | 0.5-1 |
+| `/download` landing page on `zkqes.org` | web-eng | 1 |
+| Apt repo setup at `apt.zkqes.org` | lead | 0.5-1 |
 | E2E test on all 3 OSes | circuits-eng | 1-2 |
 | PRIVACY.md updates (browser side; helper-side bundled in installer) | web-eng + lead | 0.5 |
 | **Total** | — | **~15-22 days** |
@@ -512,7 +514,7 @@ For each of macOS arm64 / macOS x86_64 / Windows x86_64 / Linux x86_64:
 |---|---|---|
 | Apple notarization rejects the Node-bundled binary (e.g., for "uses unstable APIs") | High — blocks macOS ship | Use `pkg`'s `--public-packages` flag, validate notarization on a test build day 1; fallback to building Node from source with hardened flags. |
 | Chrome's PNA gate evolves and breaks our preflight | Medium | Pin to current spec; monitor Chrome release notes. Helper's CORS+PNA headers are explicit, easy to update. |
-| Browser blocks `qkb://` deep-link without user prompt | Medium | First-launch UX doc includes "click 'Open with QKB Helper' in browser prompt"; this is a one-time confirmation per browser per OS. |
+| Browser blocks `qkb://` deep-link without user prompt | Medium | First-launch UX doc includes "click 'Open with zkqes Helper' in browser prompt"; this is a one-time confirmation per browser per OS. |
 | 2 GB zkey download fails / partials on slow links | Medium | Atomic write + sha256 verify + clear retry UX. Browser shows progress; helper supports HTTP Range resume in V1.1. |
 | User runs multiple browsers simultaneously, both detect helper, race | Low | Concurrency guard (429 on busy); browsers handle 429 by queuing and retrying. |
 | Phase B production ceremony zkey is materially larger than stub | Low | Spec-amendment checked: production zkey is bytewise the same size as stub (~2.0 GB; pot22 capacity dominates, contributor count is irrelevant to size). |
@@ -522,7 +524,7 @@ For each of macOS arm64 / macOS x86_64 / Windows x86_64 / Linux x86_64:
 
 ## Open questions
 
-1. **`Sec-Fetch-Site` and `Sec-Fetch-Mode` enforcement?** Should helper additionally check `Sec-Fetch-Site: cross-site` to defend against a same-origin compromise on `identityescrow.org`? Lean: yes for defense-in-depth, but Origin pin already covers the threat model. Defer to V1.1.
+1. **`Sec-Fetch-Site` and `Sec-Fetch-Mode` enforcement?** Should helper additionally check `Sec-Fetch-Site: cross-site` to defend against a same-origin compromise on `zkqes.org`? Lean: yes for defense-in-depth, but Origin pin already covers the threat model. Defer to V1.1.
 2. **Multi-circuit support.** When V5.3 lands, do we ship a new helper version that supports both V5.2 and V5.3 (auto-selects per request), or one helper per circuit version? Lean: same helper, multiple zkeys cached, manifest declares which is current. Defer until V5.3 design.
 3. **Helper logging policy.** Helper's stderr logs include witness field counts and prove timings. Should there be a `--quiet` flag? A logs-to-disk option? Lean: stderr only, no disk by default; user can pipe with `qkb-helper >helper.log 2>&1` if they want diagnostics. Defer.
 4. **Brew vs. official direct download as primary.** Marketing copy needs to pick one. Lean: direct download as primary CTA, brew/winget mentioned in `/ua/cli`-style power-user disclosure. Defer to web-eng during landing-page work.
