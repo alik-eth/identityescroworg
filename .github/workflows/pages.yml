@@ -59,9 +59,7 @@ jobs:
 
       - name: Build dependency packages
         run: |
-          pnpm -F @qkb/qie-core build
-          pnpm -F @qkb/qie-agent build
-          pnpm -F @qkb/sdk build
+          pnpm -F @zkqes/sdk build
 
       - name: Build SPA (landing target → zkqes.org root)
         env:
@@ -83,7 +81,7 @@ jobs:
           # WalletConnect project ID — repo variable (public-bundle
           # token, not a secret). Same parity reasoning as VITE_CHAIN.
           VITE_WALLETCONNECT_PROJECT_ID: ${{ vars.VITE_WALLETCONNECT_PROJECT_ID }}
-        run: pnpm -F @qkb/web build
+        run: pnpm -F @zkqes/web build
 
       - name: Write CNAME (zkqes.org)
         run: echo "zkqes.org" > packages/web/dist/CNAME

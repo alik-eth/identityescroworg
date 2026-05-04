@@ -2,7 +2,7 @@ name: release-cli
 
 # Triggered when a `cli-v*` tag is pushed (e.g. `cli-v0.1.0`).
 # Builds five signed binaries via bun cross-compile, attaches them to the
-# GitHub release, publishes @qkb/cli to npm, then bumps the Homebrew tap
+# GitHub release, publishes @zkqes/cli to npm, then bumps the Homebrew tap
 # formula. macOS notarization + Windows Authenticode signing are gated on
 # secrets; without them those matrix legs fail (see docs/cli-release.md).
 
@@ -48,11 +48,11 @@ jobs:
       - name: Cross-compile via bun
         shell: bash
         run: |
-          mkdir -p packages/qkb-cli/dist-binaries
-          bun build packages/qkb-cli/src/cli.ts \
+          mkdir -p packages/zkqes-cli/dist-binaries
+          bun build packages/zkqes-cli/src/cli.ts \
             --compile \
             --target=${{ matrix.bun }} \
-            --outfile packages/qkb-cli/dist-binaries/qkb-${{ matrix.target }}${{ matrix.ext }}
+            --outfile packages/zkqes-cli/dist-binaries/zkqes-${{ matrix.target }}${{ matrix.ext }}
 
       - name: Sign + notarize macOS binary
         if: matrix.os == 'macos-14' || matrix.os == 'macos-13'
@@ -62,7 +62,7 @@ jobs:
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           APPLE_TEAM_ID:      ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          BIN="packages/qkb-cli/dist-binaries/qkb-${{ matrix.target }}"
+          BIN="packages/zkqes-cli/dist-binaries/zkqes-${{ matrix.target }}"
           codesign --sign "$APPLE_DEVELOPER_ID" --options runtime --timestamp "$BIN"
           xcrun notarytool submit "$BIN" \
             --apple-id "$APPLE_ID" --password "$APPLE_APP_PASSWORD" \
@@ -74,7 +74,7 @@ jobs:
         run: |
           $cert = "${{ secrets.WIN_PFX_BASE64 }}"
           [IO.File]::WriteAllBytes("cert.pfx", [Convert]::FromBase64String($cert))
-          $bin = "packages/qkb-cli/dist-binaries/qkb-${{ matrix.target }}.exe"
+          $bin = "packages/zkqes-cli/dist-binaries/zkqes-${{ matrix.target }}.exe"
           $signtool = "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22000.0\x64\signtool.exe"
           & $signtool sign `
             /f cert.pfx /p "${{ secrets.WIN_PFX_PASSWORD }}" `
@@ -85,14 +85,14 @@ jobs:
         shell: bash
         run: |
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            ./packages/qkb-cli/dist-binaries/qkb-${{ matrix.target }}.exe version
+            ./packages/zkqes-cli/dist-binaries/zkqes-${{ matrix.target }}.exe version
           else
-            ./packages/qkb-cli/dist-binaries/qkb-${{ matrix.target }} version
+            ./packages/zkqes-cli/dist-binaries/zkqes-${{ matrix.target }} version
           fi
 
       - uses: softprops/action-gh-release@v2
         with:
-          files: packages/qkb-cli/dist-binaries/qkb-${{ matrix.target }}${{ matrix.ext }}
+          files: packages/zkqes-cli/dist-binaries/zkqes-${{ matrix.target }}${{ matrix.ext }}
 
   publish-npm:
     needs: build
@@ -106,8 +106,8 @@ jobs:
           node-version: 20
           registry-url: 'https://registry.npmjs.org'
       - run: pnpm install --frozen-lockfile
-      - run: pnpm -F @qkb/cli build
-      - run: pnpm -F @qkb/cli publish --access public --no-git-checks
+      - run: pnpm -F @zkqes/cli build
+      - run: pnpm -F @zkqes/cli publish --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -117,21 +117,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: qkb-eth/homebrew-qkb
+          repository: alik-eth/homebrew-zkqes
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
       - name: Bump formula
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           TAG=${GITHUB_REF#refs/tags/cli-v}
-          gh release download "cli-v$TAG" -R qkb-eth/identityescroworg -p "qkb-*"
-          for f in qkb-darwin-arm64 qkb-darwin-x64 qkb-linux-x64 qkb-linux-arm64; do
+          gh release download "cli-v$TAG" -R alik-eth/zkqes -p "zkqes-*"
+          for f in zkqes-darwin-arm64 zkqes-darwin-x64 zkqes-linux-x64 zkqes-linux-arm64; do
             sha=$(sha256sum "$f" | awk '{print $1}')
             # Replace the sha256 line that follows the matching url line.
             python3 - "$f" "$sha" <<'PY'
           import re, sys
           fname, sha = sys.argv[1], sys.argv[2]
-          path = "Formula/qkb.rb"
+          path = "Formula/zkqes.rb"
           src = open(path).read()
           pattern = re.compile(
               r'(url\s+"[^"]*' + re.escape(fname) + r'"\s*\n\s*sha256\s+")[^"]*(")',
@@ -142,12 +142,12 @@ jobs:
           PY
           done
           # Bump version
-          sed -i.bak -E "s|version \".*\"|version \"$TAG\"|" Formula/qkb.rb
-          rm -f Formula/qkb.rb.bak
+          sed -i.bak -E "s|version \".*\"|version \"$TAG\"|" Formula/zkqes.rb
+          rm -f Formula/zkqes.rb.bak
       - name: Commit + push tap update
         run: |
-          git config user.name  "qkb-bot"
-          git config user.email "bot@identityescrow.org"
-          git add Formula/qkb.rb
-          git commit -m "qkb $GITHUB_REF_NAME"
+          git config user.name  "zkqes-bot"
+          git config user.email "bot@zkqes.org"
+          git add Formula/zkqes.rb
+          git commit -m "zkqes $GITHUB_REF_NAME"
           git push
