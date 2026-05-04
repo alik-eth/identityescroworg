@@ -21,7 +21,7 @@ function loadFixture(path, country = 'UA') {
   }
   return {
     registry: c.registry,
-    identityEscrowNft: c.identityEscrowNft,
+    zkqesCertificate: c.zkqesCertificate,
     leaf: c.leafVerifier,
     chain: c.chainVerifier,
     age: c.ageVerifier,
@@ -39,8 +39,8 @@ function swap(network, fx) {
   const swaps = [
     [new RegExp(`(\\b${network}:[\\s\\S]*?registry:\\s*)'0x[0-9a-fA-F]+'`),
       `$1'${fx.registry}'`],
-    [new RegExp(`(\\b${network}:[\\s\\S]*?identityEscrowNft:\\s*)'0x[0-9a-fA-F]+'`),
-      `$1'${fx.identityEscrowNft}'`],
+    [new RegExp(`(\\b${network}:[\\s\\S]*?zkqesCertificate:\\s*)'0x[0-9a-fA-F]+'`),
+      `$1'${fx.zkqesCertificate}'`],
     [new RegExp(`(\\b${network}:[\\s\\S]*?verifiers:\\s*\\{[\\s\\S]*?leaf:\\s*)'0x[0-9a-fA-F]+'`),
       `$1'${fx.leaf}'`],
     [new RegExp(`(\\b${network}:[\\s\\S]*?verifiers:\\s*\\{[\\s\\S]*?chain:\\s*)'0x[0-9a-fA-F]+'`),
