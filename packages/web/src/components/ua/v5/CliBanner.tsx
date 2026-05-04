@@ -1,5 +1,5 @@
 // CliBanner — civic-monumental info-level banner that nudges users to
-// install the QKB CLI for native proof generation. Renders only when
+// install the zkqes CLI for native proof generation. Renders only when
 // `useCliPresence` reports CLI absent AND the user has not dismissed
 // the banner this browser profile.
 //
@@ -22,7 +22,7 @@ import { useCliPresence } from '../../../hooks/useCliPresence';
 
 /** localStorage key for the dismiss flag. Namespaced so future banner
  *  additions can re-use the same prefix. */
-export const CLI_BANNER_DISMISSED_KEY = 'qkb.cliBanner.dismissed';
+export const CLI_BANNER_DISMISSED_KEY = 'zkqes.cliBanner.dismissed';
 
 function readDismissed(): boolean {
   try {

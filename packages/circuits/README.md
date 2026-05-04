@@ -1,6 +1,6 @@
-# @qkb/circuits
+# @zkqes/circuits
 
-Circom 2 circuits implementing relation `R_QKB` for the QKB Phase 1 design.
+Circom 2 circuits implementing relation `R_zkqes` for the zkqes Phase 1 design.
 
 See `docs/superpowers/specs/2026-04-17-qkb-phase1-design.md` and
 `docs/superpowers/plans/2026-04-17-qkb-circuits.md`.
@@ -15,7 +15,7 @@ See `docs/superpowers/specs/2026-04-17-qkb-phase1-design.md` and
 
 ```bash
 pnpm install              # from repo root
-pnpm --filter @qkb/circuits test
+pnpm --filter @zkqes/circuits test
 ```
 
 ## Layout

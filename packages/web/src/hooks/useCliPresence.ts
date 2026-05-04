@@ -20,7 +20,7 @@
 //   'absent'    — every other outcome (network err, wrong circuit,
 //                 not-ready, malformed body — all same actionable state)
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { detectCli, type CliStatus } from '@qkb/sdk';
+import { detectCli, type CliStatus } from '@zkqes/sdk';
 
 export type CliPresenceStatus = 'detecting' | 'present' | 'absent';
 

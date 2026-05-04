@@ -18,19 +18,14 @@ WORKDIR /app
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* tsconfig.base.json ./
 COPY packages/web ./packages/web
 COPY packages/sdk ./packages/sdk
-COPY packages/qie-core ./packages/qie-core
-COPY packages/qie-agent ./packages/qie-agent
 COPY fixtures ./fixtures
 
-# Install @qkb/web + workspace siblings it now consumes (@qkb/qie-core,
-# @qkb/qie-agent/browser).
-RUN pnpm install --frozen-lockfile=false --filter @qkb/web...
+# Install @zkqes/web + workspace siblings it consumes (@zkqes/sdk).
+RUN pnpm install --frozen-lockfile=false --filter @zkqes/web...
 
 # Dependency packages must be built first — web imports them via "./dist".
-RUN pnpm -F @qkb/qie-core build \
- && pnpm -F @qkb/qie-agent build \
- && pnpm -F @qkb/sdk build \
- && pnpm -F @qkb/web build
+RUN pnpm -F @zkqes/sdk build \
+ && pnpm -F @zkqes/web build
 
 # ---- Runtime ----------------------------------------------------------------
 # Caddy serves the static dist on :8080 (Fly proxy in front handles 80/443).

@@ -1,5 +1,7 @@
 # Keccak-On-Chain (V5.2) — Independent Contract-Side Review
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 **Date:** 2026-05-01
 **Reviewer:** contracts-eng on `feat/v5_2arch-contracts` (cut from `main` @ `024b62b`)
 **Reviews:** circuits-eng's V5.2 spec v0.3 at `docs/superpowers/specs/2026-05-01-keccak-on-chain-amendment.md` (commit `5ba064e` on `feat/v5_2arch-circuits`).
@@ -379,7 +381,7 @@ V5.2 does NOT touch leafSpki, intSpki, signedAttrs, or any of V5's P-256 ECDSA v
 
 ## §4 — ABI propagation across packages
 
-### §4.1 — `@qkb/contracts` (this package)
+### §4.1 — `@zkqes/contracts` (this package)
 
 | Component | Change |
 |-----------|--------|
@@ -401,7 +403,7 @@ V5.2 does NOT touch leafSpki, intSpki, signedAttrs, or any of V5's P-256 ECDSA v
 | Direction | Artifact | Notes |
 |-----------|----------|-------|
 | circuits-eng → contracts-eng | `Groth16VerifierV5_2Stub.sol` + V5.2 sample fixtures | Same pump pattern as V5.1 commit `04b4a71`. |
-| contracts-eng → web-eng | New `QKBRegistryV5_2.ts` ABI | Bump `@qkb/sdk` 0.5.1-pre → 0.5.2-pre; bump `@qkb/contracts-sdk`. |
+| contracts-eng → web-eng | New `QKBRegistryV5_2.ts` ABI | Bump `@zkqes/sdk` 0.5.1-pre → 0.5.2-pre; bump `@zkqes/contracts-sdk`. |
 | circuits-eng → web-eng | V5.2 zkey + verification_key.json (post stub ceremony) | Witness builder drops `msgSender` input, adds bindingPkX/Y limbs. |
 
 ### §4.3 — Yul stack pressure forecast
@@ -497,7 +499,7 @@ Estimating ~1 day implementation:
 Cross-worker pumps:
 - **Receive (T2)**: `Groth16VerifierV5_2Stub.sol` from circuits-eng (post stub ceremony).
 - **Receive (T5)**: V5.2 sample fixtures `fixtures/v52/groth16-real/{proof,public,witness-input}-sample.json` from circuits-eng.
-- **Produce (T2)**: New `QKBRegistryV5_2.ts` ABI for `@qkb/sdk`. Bump sdk version to 0.5.2-pre.
+- **Produce (T2)**: New `QKBRegistryV5_2.ts` ABI for `@zkqes/sdk`. Bump sdk version to 0.5.2-pre.
 
 ---
 

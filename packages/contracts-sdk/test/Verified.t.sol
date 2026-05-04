@@ -2,12 +2,12 @@
 pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
-import { Verified, IQKBRegistry } from "../src/Verified.sol";
+import { Verified, IZkqesRegistry } from "../src/Verified.sol";
 import { MockRegistry } from "./mocks/MockRegistry.sol";
 
 contract Gated is Verified {
     uint256 public counter;
-    constructor(IQKBRegistry r) Verified(r) {}
+    constructor(IZkqesRegistry r) Verified(r) {}
     function bump() external onlyVerifiedUkrainian { counter++; }
 }
 
@@ -18,7 +18,7 @@ contract VerifiedTest is Test {
 
     function setUp() public {
         r = new MockRegistry();
-        g = new Gated(IQKBRegistry(address(r)));
+        g = new Gated(IZkqesRegistry(address(r)));
     }
 
     function test_modifier_passesForVerifiedCaller() public {
@@ -34,7 +34,7 @@ contract VerifiedTest is Test {
         g.bump();
     }
 
-    function test_qkbRegistry_publicGetterReturnsAddress() public view {
-        assertEq(address(g.qkbRegistry()), address(r));
+    function test_zkqesRegistry_publicGetterReturnsAddress() public view {
+        assertEq(address(g.zkqesRegistry()), address(r));
     }
 }

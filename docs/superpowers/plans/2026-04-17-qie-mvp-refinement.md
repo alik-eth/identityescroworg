@@ -1,5 +1,7 @@
 # QIE MVP Refinement Implementation Plan
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Amend in-flight Phase 2 to match the Tier 1 MVP wedge: add escrow state machine + evidence envelope + notary-assisted heir path; defer `TimelockArbitrator` and standalone recipient UX.

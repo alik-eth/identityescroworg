@@ -1,8 +1,10 @@
-# QKB CLI-Server — circuits-eng Implementation Plan
+# zkqes CLI-Server — circuits-eng Implementation Plan
+
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the `@qkb/cli` package — a single-file binary that runs `qkb serve` to host a localhost HTTP server bridging the browser's prove call to the native rapidsnark binary at 13.86s / 3.70 GiB.
+**Goal:** Build the `@zkqes/cli` package — a single-file binary that runs `qkb serve` to host a localhost HTTP server bridging the browser's prove call to the native rapidsnark binary at 13.86s / 3.70 GiB.
 
 **Architecture:** Lift the validated prototype at `packages/circuits/scripts/v5_2-prove-server.mjs` into a proper TypeScript package with subcommands, manifest verification, zkey caching, and cross-platform builds. Three subcommands ship in V1: `serve`, `status`, `cache`. Distribution covered by lead (npm + brew + GitHub releases).
 
@@ -64,7 +66,7 @@ packages/qkb-cli/
 
 ## Tasks
 
-### Task 1: Scaffold `@qkb/cli` package
+### Task 1: Scaffold `@zkqes/cli` package
 
 **Files:**
 - Create: `packages/qkb-cli/package.json`
@@ -91,14 +93,14 @@ describe('qkb version', () => {
 });
 ```
 
-- [ ] **Step 2: Run test, verify it fails** (`pnpm -F @qkb/cli test` — fails because dist binary doesn't exist).
+- [ ] **Step 2: Run test, verify it fails** (`pnpm -F @zkqes/cli test` — fails because dist binary doesn't exist).
 
 - [ ] **Step 3: Write package.json + tsconfig.json + index.ts skeleton**
 
 ```json
 // packages/qkb-cli/package.json
 {
-  "name": "@qkb/cli",
+  "name": "@zkqes/cli",
   "version": "0.5.2-pre",
   "type": "module",
   "bin": { "qkb": "./dist/qkb.cjs" },
@@ -127,7 +129,7 @@ import { Command } from 'commander';
 import { versionCommand } from './commands/version.js';
 
 const program = new Command();
-program.name('qkb').description('QKB CLI server for native rapidsnark proving');
+program.name('qkb').description('zkqes CLI server for native rapidsnark proving');
 versionCommand(program);
 program.parseAsync();
 ```
@@ -145,15 +147,15 @@ export function versionCommand(program: Command): void {
 }
 ```
 
-- [ ] **Step 4: Build and run** (`pnpm -F @qkb/cli build`, manually run `./dist/qkb-linux-x86_64 version`).
+- [ ] **Step 4: Build and run** (`pnpm -F @zkqes/cli build`, manually run `./dist/qkb-linux-x86_64 version`).
 
-- [ ] **Step 5: Verify test passes** (`pnpm -F @qkb/cli test`).
+- [ ] **Step 5: Verify test passes** (`pnpm -F @zkqes/cli test`).
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add packages/qkb-cli pnpm-workspace.yaml
-git commit -m "cli(v52): T1 — scaffold @qkb/cli package with qkb version"
+git commit -m "cli(v52): T1 — scaffold @zkqes/cli package with qkb version"
 ```
 
 ### Task 2: Lift prototype HTTP server into `qkb serve`
@@ -268,7 +270,7 @@ git commit -m "cli(v52): T1 — scaffold @qkb/cli package with qkb version"
 - Verify: `packages/qkb-cli/package.json` `pkg` field has correct `targets` + `assets` (rapidsnark sidecar embedded)
 - Create: `packages/qkb-cli/.pkgignore` (exclude test files)
 
-- [ ] **Step 1: Run `pnpm -F @qkb/cli build`** — should produce `dist/qkb-linux-x86_64` (~50 MB).
+- [ ] **Step 1: Run `pnpm -F @zkqes/cli build`** — should produce `dist/qkb-linux-x86_64` (~50 MB).
 
 - [ ] **Step 2: Smoke-test** — `./dist/qkb-linux-x86_64 version` prints expected; `./dist/qkb-linux-x86_64 serve --manifest-url file:///tmp/dev-manifest.json` boots the server.
 
@@ -279,7 +281,7 @@ git commit -m "cli(v52): T1 — scaffold @qkb/cli package with qkb version"
 ### Task 8: Cross-platform builds (darwin x64+arm64, linux arm64, windows x64)
 
 - [ ] **Step 1: Verify pkg targets in package.json** include all 5 platforms.
-- [ ] **Step 2: Run `pnpm -F @qkb/cli build`** — produces 5 binaries in `dist/`.
+- [ ] **Step 2: Run `pnpm -F @zkqes/cli build`** — produces 5 binaries in `dist/`.
 - [ ] **Step 3: Document per-platform sidecar requirement** — postinstall handles user-side; pkg build embeds same-platform sidecar in dev binary.
 - [ ] **Step 4: Commit** — `cli(v52): T8 — cross-platform pkg builds (5 targets)`.
 
@@ -310,7 +312,7 @@ git commit -m "cli(v52): T1 — scaffold @qkb/cli package with qkb version"
 
 - [ ] **Step 2: Write CLAUDE.md invariants:**
   - V5.23: `qkb serve` is ON-DEMAND, not a daemon. SIGINT exits cleanly. No PID file, no systemd unit, no LaunchAgent.
-  - V5.24: Origin pin is `https://identityescrow.org` exclusively. Localhost-served browser apps cannot consume the API.
+  - V5.24: Origin pin is `https://zkqes.org` exclusively. Localhost-served browser apps cannot consume the API.
   - V5.25: Manifest signature verification is REQUIRED for production builds. `--no-verify` bypass logs a stderr warning every prove.
   - V5.26: Cache is per-user, never per-system. No shared state across users.
   - V5.27: Rapidsnark sidecar is bundled into pkg binary; fallback to `~/.cache/qkb-bin/...` in dev only.
@@ -323,9 +325,9 @@ git commit -m "cli(v52): T1 — scaffold @qkb/cli package with qkb version"
 
 Before declaring Phase 1 complete:
 
-- [ ] `pnpm -F @qkb/cli test` — all green (unit + integration)
-- [ ] `pnpm -F @qkb/cli typecheck` — clean
-- [ ] `pnpm -F @qkb/cli build` — produces 5 binaries in `dist/`, each ~45-55 MB
+- [ ] `pnpm -F @zkqes/cli test` — all green (unit + integration)
+- [ ] `pnpm -F @zkqes/cli typecheck` — clean
+- [ ] `pnpm -F @zkqes/cli build` — produces 5 binaries in `dist/`, each ~45-55 MB
 - [ ] Linux x86_64 binary smoke test: `qkb version`, `qkb serve --manifest-url file:///tmp/dev-manifest.json`, then `curl -sf http://127.0.0.1:9080/status` returns ok
 - [ ] End-to-end: web-eng's local dev (Phase 2 in flight) successfully proves against the dev binary
 - [ ] Codex review on each commit; VERDICT PASS or annotated P2/P3 only

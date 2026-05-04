@@ -3,15 +3,15 @@ pragma solidity 0.8.24;
 
 import {Script, console2} from "forge-std/Script.sol";
 import {Groth16VerifierV5_2Placeholder} from "../src/Groth16VerifierV5_2Placeholder.sol";
-import {QKBRegistryV5_2, IGroth16VerifierV5_2} from "../src/QKBRegistryV5_2.sol";
-import {IdentityEscrowNFT} from "../src/IdentityEscrowNFT.sol";
+import {ZkqesRegistryV5_2, IGroth16VerifierV5_2} from "../src/ZkqesRegistryV5_2.sol";
+import {ZkqesCertificate} from "../src/ZkqesCertificate.sol";
 
 /// @notice V5.2 deploy script for Base Sepolia + Base mainnet.
 /// @dev    V5.2 keccak-on-chain amendment: identical scaffold to
 ///         `DeployV5.s.sol` (the V5.1 deploy script) except for the
 ///         verifier and registry types. The constructor signatures are
 ///         unchanged — V5.1 → V5.2 swaps the public-signal layout
-///         (19 → 22, see `QKBRegistryV5_2.sol` header) and the
+///         (19 → 22, see `ZkqesRegistryV5_2.sol` header) and the
 ///         contract-side keccak gate, but does NOT alter the
 ///         (verifier, admin, trustedListRoot, policyRoot) tuple.
 ///
@@ -30,9 +30,9 @@ import {IdentityEscrowNFT} from "../src/IdentityEscrowNFT.sol";
 ///             pattern).
 ///
 /// @dev    Deploys, in order: Groth16VerifierV5_2 (or reuses an existing
-///         deployed verifier), QKBRegistryV5_2 (which CREATE-deploys
+///         deployed verifier), ZkqesRegistryV5_2 (which CREATE-deploys
 ///         PoseidonT3 + PoseidonT7 in its constructor), and
-///         IdentityEscrowNFT bound to the V5.2 registry. Logs all three
+///         ZkqesCertificate bound to the V5.2 registry. Logs all three
 ///         addresses to stdout for downstream consumption.
 ///
 /// Required env:
@@ -103,25 +103,25 @@ contract DeployV5_2 is Script {
         }
         console2.log("Groth16VerifierV5_2:", address(verifier));
 
-        QKBRegistryV5_2 registry = new QKBRegistryV5_2(
+        ZkqesRegistryV5_2 registry = new ZkqesRegistryV5_2(
             verifier,
             admin,
             initialTrustRoot,
             initialPolicyRoot
         );
-        console2.log("QKBRegistryV5_2:  ", address(registry));
+        console2.log("ZkqesRegistryV5_2:  ", address(registry));
         console2.log("  PoseidonT3:     ", registry.poseidonT3());
         console2.log("  PoseidonT7:     ", registry.poseidonT7());
         console2.log("  admin:          ", registry.admin());
         console2.log("  trustedListRoot:", uint256(registry.trustedListRoot()));
         console2.log("  policyRoot:     ", uint256(registry.policyRoot()));
 
-        IdentityEscrowNFT nft = new IdentityEscrowNFT(
+        ZkqesCertificate nft = new ZkqesCertificate(
             registry,
             mintDeadline,
             chainLabel
         );
-        console2.log("IdentityEscrowNFT:", address(nft));
+        console2.log("ZkqesCertificate:", address(nft));
         console2.log("  mintDeadline:   ", mintDeadline);
         console2.log("  chainLabel:     ", chainLabel);
 

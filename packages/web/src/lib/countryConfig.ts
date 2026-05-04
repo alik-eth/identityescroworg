@@ -1,4 +1,4 @@
-// Thin re-export façade over @qkb/sdk's country module.
+// Thin re-export façade over @zkqes/sdk's country module.
 export {
   SUPPORTED_COUNTRIES,
   getCountryConfig,
@@ -6,4 +6,4 @@ export {
   type CountryCeremonyPins,
   type CountryConfig,
   type SupportedCountry,
-} from '@qkb/sdk';
+} from '@zkqes/sdk';

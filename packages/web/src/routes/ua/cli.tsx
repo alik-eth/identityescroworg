@@ -1,13 +1,12 @@
-// `/ua/cli` — V5.4 install instructions for the QKB CLI server.
+// `/ua/cli` — V5.4 install instructions for the zkqes CLI server.
 //
-// Replaces the V4-deprecated copy-paste flow (qkb prove → proof.json →
-// /ua/submit). V5.2 makes the browser canonical; the CLI is OPTIONAL
+// V5.2 makes the browser canonical; the CLI is OPTIONAL
 // and used only as a faster prove path. From this page, users learn
-// how to install + run `qkb serve`, then go back to /v5/registerV5
+// how to install + run `zkqes serve`, then go back to /v5/registerV5
 // where useCliPresence detects the running server and the prove
 // pipeline branches to it (with browser fallback).
 //
-// V1 ships **npm-only** (npm install -g @qkb/cli) per circuits-eng's
+// V1 ships **npm-only** (npm install -g @zkqes/cli) per circuits-eng's
 // packaging path. brew + GitHub release single-file binaries are
 // deferred to V1.1 — sections below say so explicitly so users on
 // brew/winget aren't left wondering when their channel will work.
@@ -33,7 +32,7 @@ export function CliInstall() {
   // but-empty install instructions." So we show ONE working command
   // (npm) + a single deferred-channels note rather than three code
   // blocks where two literally don't run in V1.
-  const NPM_INSTALL = 'npm install -g @qkb/cli';
+  const NPM_INSTALL = 'npm install -g @zkqes/cli';
 
   return (
     <main className="relative min-h-screen">
@@ -50,7 +49,7 @@ export function CliInstall() {
               className="text-4xl sm:text-5xl md:text-6xl leading-none mb-8"
               style={{ color: 'var(--ink)' }}
             >
-              {t('cli.title', 'Install QKB CLI for native proof generation.')}
+              {t('cli.title', 'Install zkqes CLI for native proof generation.')}
             </h1>
             <p className="text-xl max-w-2xl" style={{ color: 'var(--ink)' }}>
               {t(
@@ -96,7 +95,7 @@ export function CliInstall() {
                 <strong>{t('cli.whyOnlyOnInvokeTitle', 'Runs only when invoked.')}</strong>{' '}
                 {t(
                   'cli.whyOnlyOnInvoke',
-                  "Not a daemon. You start it with `qkb serve`, leave it running while you generate proofs, then Ctrl+C when done.",
+                  "Not a daemon. You start it with `zkqes serve`, leave it running while you generate proofs, then Ctrl+C when done.",
                 )}
               </li>
               <li>
@@ -104,7 +103,7 @@ export function CliInstall() {
                 <strong>{t('cli.whyPrivateTitle', 'Keys never leave your machine.')}</strong>{' '}
                 {t(
                   'cli.whyPrivate',
-                  'The CLI binds to localhost:9080. The browser fetches it via the same-origin pin (https://identityescrow.org); no other origin can talk to it.',
+                  'The CLI binds to localhost:9080. The browser fetches it via the same-origin pin (https://app.zkqes.org); no other origin can talk to it.',
                 )}
               </li>
             </ul>
@@ -174,7 +173,7 @@ export function CliInstall() {
             >
               {t(
                 'cli.deferredChannels',
-                'Homebrew formula and a one-line curl installer (`brew install identityescrow/qkb/qkb` and `curl -fsSL https://identityescrow.org/install.sh | sh`) are coming in V1.1. For V1, npm is the supported channel.',
+                'Homebrew formula (`brew install alik-eth/homebrew-zkqes/zkqes`) and a one-line curl installer are coming in V1.1. For V1, npm is the supported channel.',
               )}
             </p>
           </section>
@@ -196,7 +195,7 @@ export function CliInstall() {
             <p className="text-base max-w-prose" style={{ color: 'var(--ink)' }}>
               {t(
                 'cli.runBody',
-                'Open a terminal and start the server. Leave it running while you generate proofs — it binds to localhost:9080 and accepts /prove POSTs from https://identityescrow.org only.',
+                'Open a terminal and start the server. Leave it running while you generate proofs — it binds to localhost:9080 and accepts /prove POSTs from https://app.zkqes.org only.',
               )}
             </p>
             <pre
@@ -204,10 +203,10 @@ export function CliInstall() {
               data-testid="cli-cmd-serve"
               style={{ background: 'var(--ink)', color: 'var(--bone)' }}
             >
-qkb serve
+zkqes serve
             </pre>
             <div>
-              <CopyButton text="qkb serve" testId="cli-copy-serve" />
+              <CopyButton text="zkqes serve" testId="cli-copy-serve" />
             </div>
             <p className="text-sm" style={{ color: 'var(--ink)', opacity: 0.7 }}>
               {t(
@@ -234,7 +233,7 @@ qkb serve
             <p className="text-base max-w-prose" style={{ color: 'var(--ink)' }}>
               {t(
                 'cli.verifyBody',
-                'With qkb serve running, go back to the register flow. The "Install qkb" banner disappears when the browser detects the running server, and your prove step shows "proved via: cli" instead of "browser".',
+                'With zkqes serve running, go back to the register flow. The "Install zkqes" banner disappears when the browser detects the running server, and your prove step shows "proved via: cli" instead of "browser".',
               )}
             </p>
             <Link
@@ -276,7 +275,7 @@ qkb serve
                 <dd className="text-base max-w-prose" style={{ color: 'var(--ink)' }}>
                   {t(
                     'cli.troublePortBody',
-                    'Another process is bound to :9080. Either stop it (`lsof -i :9080`, then kill the PID) or pass `qkb serve --port <other>`. The browser only auto-detects :9080 in V1; alternate ports work but the banner won\'t auto-disappear.',
+                    'Another process is bound to :9080. Either stop it (`lsof -i :9080`, then kill the PID) or pass `zkqes serve --port <other>`. The browser only auto-detects :9080 in V1; alternate ports work but the banner won\'t auto-disappear.',
                   )}
                 </dd>
               </div>
@@ -294,7 +293,7 @@ qkb serve
                 <dd className="text-base max-w-prose" style={{ color: 'var(--ink)' }}>
                   {t(
                     'cli.troubleSidecarBody',
-                    'If postinstall couldn\'t download the sidecar (offline machine, restricted CI, or native Windows where iden3 v0.0.8 ships no prebuilt), pass `qkb serve --rapidsnark-bin <path>` with a binary you built yourself. Run `qkb cache rebuild` while online to retry the postinstall download on platforms that have a prebuilt.',
+                    'If postinstall couldn\'t download the sidecar (offline machine, restricted CI, or native Windows where iden3 v0.0.8 ships no prebuilt), pass `zkqes serve --rapidsnark-bin <path>` with a binary you built yourself. Run `zkqes cache rebuild` while online to retry the postinstall download on platforms that have a prebuilt.',
                   )}
                 </dd>
               </div>
@@ -312,7 +311,7 @@ qkb serve
                 <dd className="text-base max-w-prose" style={{ color: 'var(--ink)' }}>
                   {t(
                     'cli.troubleManifestBody',
-                    'On first run the CLI fetches the V5.2 zkey manifest from identityescrow.org. If your network blocks it, pass `--manifest-url file:///path/to/local-manifest.json` with a vendored copy. The CLI verifies the manifest signature against the embedded public key in either case.',
+                    'On first run the CLI fetches the V5.2 zkey manifest from zkqes.org. If your network blocks it, pass `--manifest-url file:///path/to/local-manifest.json` with a vendored copy. The CLI verifies the manifest signature against the embedded public key in either case.',
                   )}
                 </dd>
               </div>

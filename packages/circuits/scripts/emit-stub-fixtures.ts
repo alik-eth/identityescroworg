@@ -1,8 +1,8 @@
 // Emit Phase-2 split-proof STUB Groth16 fixtures for contracts integration.
 //
 // Runs a minimal Groth16 round-trip against
-//   circuits/QKBPresentationEcdsaLeafStub.circom  (13-signal)
-//   circuits/QKBPresentationEcdsaChainStub.circom (5-signal)
+//   circuits/ZkqesPresentationEcdsaLeafStub.circom  (13-signal)
+//   circuits/ZkqesPresentationEcdsaChainStub.circom (5-signal)
 // with witness values drawn from the real Diia admin fixture (so the public
 // signals hold meaningful bigints: real pkX/pkY/ctxHash/declHash/timestamp/
 // nullifier/rTL + a single leafSpkiCommit derived by Poseidon over the same
@@ -14,16 +14,16 @@
 //     proof.json
 //     public.json           — 13 bigints, [pkX..pkY..ctxHash..leafSpkiCommit@12]
 //     verification_key.json
-//     QKBGroth16VerifierStubEcdsaLeaf.sol
+//     ZkqesGroth16VerifierStubEcdsaLeaf.sol
 //   ecdsa-chain/
 //     proof.json
 //     public.json           — 3 bigints, [rTL, algorithmTag=1, leafSpkiCommit@2]
 //     verification_key.json
-//     QKBGroth16VerifierStubEcdsaChain.sol
+//     ZkqesGroth16VerifierStubEcdsaChain.sol
 //
 // Cross-consistency invariant — leaf public.json[12] MUST equal chain
 // public.json[2]. The emitter asserts this and aborts if violated; the
-// on-chain `QKBVerifier.verify` equality check depends on it.
+// on-chain `ZkqesVerifier.verify` equality check depends on it.
 //
 // Scope: DEV-ONLY. Stub circuits assert nothing meaningful (quadratic
 // binding only). Real ceremony proofs arrive via C5/C6 from a local
@@ -232,16 +232,16 @@ async function main(): Promise<void> {
   };
 
   const leafPublic = await runStub({
-    basename: 'QKBPresentationEcdsaLeafStub',
+    basename: 'ZkqesPresentationEcdsaLeafStub',
     fixtureSubdir: 'ecdsa-leaf',
-    solidityContract: 'QKBGroth16VerifierStubEcdsaLeaf',
+    solidityContract: 'ZkqesGroth16VerifierStubEcdsaLeaf',
     input: leafStubInput,
   });
 
   const chainPublic = await runStub({
-    basename: 'QKBPresentationEcdsaChainStub',
+    basename: 'ZkqesPresentationEcdsaChainStub',
     fixtureSubdir: 'ecdsa-chain',
-    solidityContract: 'QKBGroth16VerifierStubEcdsaChain',
+    solidityContract: 'ZkqesGroth16VerifierStubEcdsaChain',
     input: chainStubInput,
   });
 
@@ -267,7 +267,7 @@ async function main(): Promise<void> {
   console.log('  - proof.json');
   console.log('  - public.json');
   console.log('  - verification_key.json');
-  console.log('  - QKBGroth16VerifierStubEcdsa{Leaf,Chain}.sol');
+  console.log('  - ZkqesGroth16VerifierStubEcdsa{Leaf,Chain}.sol');
 }
 
 main().catch((e) => {

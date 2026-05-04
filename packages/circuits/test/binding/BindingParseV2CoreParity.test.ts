@@ -35,7 +35,7 @@ describe('BindingParseV2Core legacy ↔ fast parity', function () {
     fast = await compile('binding/BindingParseV2CoreFastTest.circom');
   });
 
-  it('produces byte-identical outputs on the QKB/2.0 fixture', async () => {
+  it('produces byte-identical outputs on the zkqes binding fixture (version "QKB/2.0" frozen)', async () => {
     const input = buildV2CoreWitnessFromFixture(FIXTURE_DIR);
 
     const legacyWitness = await legacy.calculateWitness(input, true);

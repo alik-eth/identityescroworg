@@ -8,8 +8,8 @@
 //
 // Why we don't just `import { Buffer } from 'buffer'` here: that shim
 // rewrites the import path to `vite-plugin-node-polyfills/shims/buffer`,
-// which under strict pnpm fails to resolve from @qkb/sdk's compiled JS
-// (the plugin is a dep of @qkb/web, not @qkb/sdk).
+// which under strict pnpm fails to resolve from @zkqes/sdk's compiled JS
+// (the plugin is a dep of @qkb/web, not @zkqes/sdk).
 
 import type * as BufferNamespace from 'buffer';
 

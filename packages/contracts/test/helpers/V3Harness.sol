@@ -2,24 +2,24 @@
 pragma solidity 0.8.24;
 
 import { Test } from "forge-std/Test.sol";
-import { QKBRegistryV3 } from "../../src/QKBRegistryV3.sol";
+import { ZkqesRegistryV3 } from "../../src/ZkqesRegistryV3.sol";
 import {
-    QKBVerifier,
+    ZkqesVerifier,
     IGroth16LeafVerifier,
     IGroth16ChainVerifier
-} from "../../src/QKBVerifier.sol";
+} from "../../src/ZkqesVerifier.sol";
 import { DeclarationHashes } from "../../src/constants/DeclarationHashes.sol";
 import {
     StubGroth16LeafVerifier,
     StubGroth16ChainVerifier
 } from "../../src/verifiers/dev/StubSplitVerifiers.sol";
 
-/// @notice Shared base for the QKBRegistryV3 test suites. Encapsulates the
+/// @notice Shared base for the ZkqesRegistryV3 test suites. Encapsulates the
 ///         four-slot stub verifier deploy, the registry deploy, and the
 ///         standard split-proof input builders. Each concrete test file
 ///         inherits this and adds its behaviour-specific tests.
 abstract contract V3Harness is Test {
-    QKBRegistryV3 internal registry;
+    ZkqesRegistryV3 internal registry;
 
     StubGroth16LeafVerifier  internal rsaLeaf;
     StubGroth16ChainVerifier internal rsaChain;
@@ -45,7 +45,7 @@ abstract contract V3Harness is Test {
         rsaChain   = new StubGroth16ChainVerifier();
         ecdsaLeaf  = new StubGroth16LeafVerifier();
         ecdsaChain = new StubGroth16ChainVerifier();
-        registry   = new QKBRegistryV3(
+        registry   = new ZkqesRegistryV3(
             IGroth16LeafVerifier(address(rsaLeaf)),
             IGroth16ChainVerifier(address(rsaChain)),
             IGroth16LeafVerifier(address(ecdsaLeaf)),
@@ -66,7 +66,7 @@ abstract contract V3Harness is Test {
     /// @dev Default leaf inputs — priv=1 (G), EN declaration, default
     ///      nullifier, commit = SPKI_COMMIT. Callers mutate fields as
     ///      needed for specific revert cases.
-    function _leafInputs(bytes32 nullifier) internal view returns (QKBVerifier.LeafInputs memory i) {
+    function _leafInputs(bytes32 nullifier) internal view returns (ZkqesVerifier.LeafInputs memory i) {
         i.pkX            = _splitToLimbsLE(GX);
         i.pkY            = _splitToLimbsLE(GY);
         i.ctxHash        = CTX_HASH;
@@ -78,12 +78,12 @@ abstract contract V3Harness is Test {
 
     /// @dev Default chain inputs — rTL = initial, algorithmTag = ECDSA,
     ///      commit = SPKI_COMMIT (must equal the leaf's).
-    function _chainInputs(uint8 algorithmTag) internal pure returns (QKBVerifier.ChainInputs memory i) {
+    function _chainInputs(uint8 algorithmTag) internal pure returns (ZkqesVerifier.ChainInputs memory i) {
         i.rTL            = INITIAL_ROOT;
         i.algorithmTag   = algorithmTag;
         i.leafSpkiCommit = SPKI_COMMIT;
     }
 
     /// @dev All-zero proof struct. Stubs ignore proof contents entirely.
-    function _zeroProof() internal pure returns (QKBVerifier.Proof memory p) {}
+    function _zeroProof() internal pure returns (ZkqesVerifier.Proof memory p) {}
 }

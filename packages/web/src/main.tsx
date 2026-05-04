@@ -8,7 +8,7 @@ import './lib/i18n';
 import './styles.css';
 
 // Pin the polyfilled Buffer onto globalThis BEFORE any SDK code runs.
-// @qkb/sdk's compiled JS (under `witness/v5/`) reads `globalThis.Buffer`
+// @zkqes/sdk's compiled JS (under `witness/v5/`) reads `globalThis.Buffer`
 // rather than importing 'buffer' directly, since cross-package imports of
 // 'buffer' don't resolve through vite-plugin-node-polyfills' shim under
 // strict pnpm. Setting it here at app entry fixes module-evaluation-time

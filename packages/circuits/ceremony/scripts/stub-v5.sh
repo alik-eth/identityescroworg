@@ -3,7 +3,7 @@
 # V5 main circuit (~4.02M constraints) + pot23. Produces:
 #
 #   ceremony/v5-stub/Groth16VerifierV5Stub.sol
-#   ceremony/v5-stub/qkb-v5-stub.zkey
+#   ceremony/v5-stub/zkqes-v5-stub.zkey
 #   ceremony/v5-stub/verification_key-stub.json
 #   ceremony/v5-stub/zkey.sha256
 #   ceremony/v5-stub/proof-sample.json     # sample proof for sanity
@@ -26,20 +26,20 @@
 set -euo pipefail
 
 PKG_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-PTAU_PATH="$PKG_DIR/build/qkb-presentation/powersOfTau28_hez_final_23.ptau"
+PTAU_PATH="$PKG_DIR/build/zkqes-presentation/powersOfTau28_hez_final_23.ptau"
 PTAU_URL="https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_23.ptau"
 CIRCOMLIB="$PKG_DIR/node_modules"
 
-CIRCUIT_SRC="$PKG_DIR/circuits/QKBPresentationV5.circom"
+CIRCUIT_SRC="$PKG_DIR/circuits/ZkqesPresentationV5.circom"
 BUILD_DIR="$PKG_DIR/build/v5-stub"
 OUT_DIR="$PKG_DIR/ceremony/v5-stub"
 
-R1CS="$BUILD_DIR/QKBPresentationV5.r1cs"
-WASM_DIR="$BUILD_DIR/QKBPresentationV5_js"
-WASM="$WASM_DIR/QKBPresentationV5.wasm"
+R1CS="$BUILD_DIR/ZkqesPresentationV5.r1cs"
+WASM_DIR="$BUILD_DIR/ZkqesPresentationV5_js"
+WASM="$WASM_DIR/ZkqesPresentationV5.wasm"
 
-ZKEY0="$BUILD_DIR/qkb-v5-stub_0000.zkey"
-ZKEY="$OUT_DIR/qkb-v5-stub.zkey"
+ZKEY0="$BUILD_DIR/zkqes-v5-stub_0000.zkey"
+ZKEY="$OUT_DIR/zkqes-v5-stub.zkey"
 VKEY="$OUT_DIR/verification_key-stub.json"
 VERIFIER="$OUT_DIR/Groth16VerifierV5Stub.sol"
 HASH_FILE="$OUT_DIR/zkey.sha256"
@@ -85,7 +85,7 @@ echo "=== snarkjs zkey contribute (single contributor — DEV ONLY) ==="
 ENTROPY="$(head -c 64 /dev/urandom | base64 | tr -d '\n')"
 NODE_OPTIONS='--max-old-space-size=49152' \
   pnpm exec snarkjs zkey contribute "$ZKEY0" "$ZKEY" \
-    --name="qkb-v5-stub-dev-1" -v -e="$ENTROPY"
+    --name="zkqes-v5-stub-dev-1" -v -e="$ENTROPY"
 
 # ---------- 5. Export verification key + Solidity verifier ----------
 echo "=== export verification key + Solidity verifier ==="
@@ -113,7 +113,7 @@ import { buildWitnessV5 } from '${PKG_DIR}/src/build-witness-v5';
 import { buildSynthCades } from '${PKG_DIR}/test/helpers/build-synth-cades';
 
 const dir = '$SAMPLE_DIR';
-const bindingBytes = readFileSync(resolve(dir, 'binding.qkb2.json'));
+const bindingBytes = readFileSync(resolve(dir, 'binding.zkqes2.json'));
 const leafCertDer  = readFileSync(resolve(dir, 'leaf.der'));
 const leafSpki     = readFileSync(resolve(dir, 'leaf-spki.bin'));
 const intSpki      = readFileSync(resolve(dir, 'intermediate-spki.bin'));
@@ -123,7 +123,7 @@ const cades = buildSynthCades({ contentDigest: bindingDigest, leafCertDer, intCe
 
 // V5.1 — deterministic stub walletSecret for fixture stability. Same byte
 // pattern (0x42 × 32) used in test/integration/build-witness-v5.test.ts +
-// qkb-presentation-v5.test.ts so stub-ceremony fixture maps to test-pinned
+// zkqes-presentation-v5.test.ts so stub-ceremony fixture maps to test-pinned
 // expected values. After mod-p reduction this lands well below the BN254
 // scalar field; in-circuit Num2Bits(254) trivially passes.
 const STUB_WALLET_SECRET = Buffer.alloc(32, 0x42);

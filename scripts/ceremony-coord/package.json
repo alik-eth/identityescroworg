@@ -1,5 +1,5 @@
 {
-  "name": "@qkb/ceremony-coord",
+  "name": "@zkqes/ceremony-coord",
   "version": "0.1.0",
   "private": true,
   "description": "Lead-side V5 Phase 2 ceremony coordination scripts (R2 + status feed).",

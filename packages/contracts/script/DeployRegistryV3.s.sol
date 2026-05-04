@@ -3,17 +3,17 @@ pragma solidity 0.8.24;
 
 import { Script } from "forge-std/Script.sol";
 import { console2 } from "forge-std/console2.sol";
-import { QKBRegistryV3 } from "../src/QKBRegistryV3.sol";
+import { ZkqesRegistryV3 } from "../src/ZkqesRegistryV3.sol";
 import {
     IGroth16LeafVerifier,
     IGroth16ChainVerifier
-} from "../src/QKBVerifier.sol";
+} from "../src/ZkqesVerifier.sol";
 import {
     StubGroth16LeafVerifier,
     StubGroth16ChainVerifier
 } from "../src/verifiers/dev/StubSplitVerifiers.sol";
 
-/// @notice Fresh deploy of `QKBRegistryV3` for the split-proof pivot.
+/// @notice Fresh deploy of `ZkqesRegistryV3` for the split-proof pivot.
 ///
 ///         V3 is a NON-UPGRADE — storage layout changes (four verifier
 ///         slots instead of two, plus all the Phase-2 state) so we cannot
@@ -110,7 +110,7 @@ contract DeployRegistryV3 is Script {
             console2.log("Deployed StubGroth16ChainVerifier (ECDSA chain slot, CI only):", ecdsaChainAddr);
         }
 
-        registry = address(new QKBRegistryV3(
+        registry = address(new ZkqesRegistryV3(
             IGroth16LeafVerifier(rsaLeafAddr),
             IGroth16ChainVerifier(rsaChainAddr),
             IGroth16LeafVerifier(ecdsaLeafAddr),
@@ -121,7 +121,7 @@ contract DeployRegistryV3 is Script {
 
         vm.stopBroadcast();
 
-        console2.log("QKBRegistryV3:", registry);
+        console2.log("ZkqesRegistryV3:", registry);
         console2.log("  rsaLeafVerifier   :", rsaLeafAddr);
         console2.log("  rsaChainVerifier  :", rsaChainAddr);
         console2.log("  ecdsaLeafVerifier :", ecdsaLeafAddr);

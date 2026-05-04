@@ -1,5 +1,7 @@
 # Scoped Credential Nullifier — Spec Amendment
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > Amends §14.4 of `2026-04-17-qie-phase2-design.md` and §13.4 of `packages/contracts/CLAUDE.md`. Date: 2026-04-18. Clarified 2026-04-23. Status: authoritative.
 
 ## 2026-04-23 clarification

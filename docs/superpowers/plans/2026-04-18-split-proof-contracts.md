@@ -1,5 +1,7 @@
 # Split-Proof Pivot — `contracts-eng` Plan
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans. Steps use checkbox syntax.
 
 **Goal:** Rewrite `QKBVerifier.sol` and deploy `QKBRegistryV3` to accept a split leaf+chain proof pair instead of one unified 14-signal proof. Keep the rest of the Phase-2 surface (arbitrators, escrow, nullifier maps, declHash whitelist) intact.

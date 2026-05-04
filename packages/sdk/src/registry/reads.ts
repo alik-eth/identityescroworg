@@ -2,7 +2,7 @@
 // encoder in `index.ts`. The two surfaces are orthogonal: writes go through
 // encodeV4RegisterCalldata; reads go through these.
 import type { Address, Hex, PublicClient } from 'viem';
-import { qkbRegistryV4Abi } from '../abi/QKBRegistryV4.js';
+import { zkqesRegistryV4Abi } from '../abi/ZkqesRegistryV4.js';
 
 export async function isVerified(
   client: PublicClient,
@@ -11,7 +11,7 @@ export async function isVerified(
 ): Promise<boolean> {
   return client.readContract({
     address: registry,
-    abi: qkbRegistryV4Abi,
+    abi: zkqesRegistryV4Abi,
     functionName: 'isVerified',
     args: [holder],
   }) as Promise<boolean>;
@@ -24,7 +24,7 @@ export async function nullifierOf(
 ): Promise<Hex> {
   return client.readContract({
     address: registry,
-    abi: qkbRegistryV4Abi,
+    abi: zkqesRegistryV4Abi,
     functionName: 'nullifierOf',
     args: [holder],
   }) as Promise<Hex>;
@@ -36,7 +36,7 @@ export async function trustedListRoot(
 ): Promise<Hex> {
   return client.readContract({
     address: registry,
-    abi: qkbRegistryV4Abi,
+    abi: zkqesRegistryV4Abi,
     functionName: 'trustedListRoot',
   }) as Promise<Hex>;
 }

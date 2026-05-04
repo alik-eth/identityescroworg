@@ -1,5 +1,5 @@
 {
-  "note": "Minimal binding for nullifier-KAT generation. Not a real QKB binding — no QES signature, no declaration, no pk.",
+  "note": "Minimal binding for nullifier-KAT generation. Not a real zkqes binding — no QES signature, no declaration, no pk.",
   "ctxHash": "0x4242424242424242424242424242424242424242424242424242424242424242",
   "locale": "en"
 }

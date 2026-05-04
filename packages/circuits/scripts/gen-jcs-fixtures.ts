@@ -146,7 +146,7 @@ emit('en-with-context', {
   pkX: x,
   pkY: y,
   timestamp: 1781000000,
-  version: 'QKB/1.0',
+  version: 'QKB/1.0', // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
 });
 
 emit('en-no-context', {
@@ -156,7 +156,7 @@ emit('en-no-context', {
   pkX: x,
   pkY: y,
   timestamp: 1781000001,
-  version: 'QKB/1.0',
+  version: 'QKB/1.0', // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
 });
 
 emit('uk-with-context', {
@@ -166,5 +166,5 @@ emit('uk-with-context', {
   pkX: x,
   pkY: y,
   timestamp: 1781000002,
-  version: 'QKB/1.0',
+  version: 'QKB/1.0', // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
 });

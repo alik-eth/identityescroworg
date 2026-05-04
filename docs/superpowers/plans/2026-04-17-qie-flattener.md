@@ -1,5 +1,7 @@
 # QIE Phase 2 — flattener-eng Plan
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **For agentic workers:** long-lived agent in worktree `/data/Develop/qie-wt/flattener`, branch `feat/qie-flattener`. Commit per task.
 
 **Goal:** Extend `packages/lotl-flattener` to emit `qie-agents.json` — a Merkle-rooted, Poseidon-hashed set of QIE-capable QTSPs — alongside the existing Phase 1 `trusted-cas.json`.

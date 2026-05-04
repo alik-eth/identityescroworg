@@ -25,7 +25,7 @@ pragma circom 2.1.9;
 // `result` signal (1 = valid, 0 = invalid). This wrapper enforces
 // `result === 1`, so invalid signatures fail witness calculation and
 // are caught at proving time — matching the failure mode of
-// `RsaPkcs1V15Verify` and the rest of the QKB sub-circuits.
+// `RsaPkcs1V15Verify` and the rest of the zkqes sub-circuits.
 
 include "./vendor/circom-ecdsa-p256/p256/ecdsa.circom";
 

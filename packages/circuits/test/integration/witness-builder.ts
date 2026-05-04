@@ -1,16 +1,16 @@
 // Witness builders for the Phase-2 split-proof ECDSA circuits
-// (QKBPresentationEcdsaLeaf + QKBPresentationEcdsaChain). Loads a fixture
+// (ZkqesPresentationEcdsaLeaf + ZkqesPresentationEcdsaChain). Loads a fixture
 // emitted by scripts/build-admin-ecdsa-fixture.ts and produces two witness
 // records, one per circuit, with every shared derivation (Bcanon offsets,
 // subject-serial RDN parse, leaf-SPKI offsets, leafSpkiCommit, intermediate
 // cert location) computed once in buildSharedInputs and threaded into both
 // builders.
 //
-// Why split: the unified QKBPresentationEcdsa.circom couldn't be Groth16-
+// Why split: the unified ZkqesPresentationEcdsa.circom couldn't be Groth16-
 // setup by snarkjs at 10.85 M constraints (§14 spec pivot). The leaf proof
-// carries R_QKB constraints 1, 2, 5, 6 + the scoped credential nullifier; the chain
+// carries constraints 1, 2, 5, 6 + the scoped credential nullifier; the chain
 // proof carries constraints 3, 4. On-chain the two are glued by asserting
-// their leafSpkiCommit outputs are equal (QKBVerifier §2.5).
+// their leafSpkiCommit outputs are equal (ZkqesVerifier §2.5).
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -188,7 +188,7 @@ export function zeroPadTo(data: Uint8Array, max: number): number[] {
 }
 
 // Pack 32 big-endian bytes into 6 × 43-bit LE limbs. Matches
-// `Bytes32ToLimbs643` in QKBPresentationEcdsa{Leaf,Chain}.circom verbatim.
+// `Bytes32ToLimbs643` in ZkqesPresentationEcdsa{Leaf,Chain}.circom verbatim.
 export function bytes32ToLimbs643(bytes: Uint8Array): bigint[] {
   if (bytes.length !== 32) throw new Error('expected 32 bytes');
   let v = 0n;
@@ -362,7 +362,7 @@ export async function buildSharedInputs(fixtureDir: string): Promise<SharedInput
   const fix = JSON.parse(
     readFileSync(resolve(fixtureDir, 'fixture.json'), 'utf8'),
   ) as AdminEcdsaFixture;
-  const binding = readFileSync(resolve(fixtureDir, 'binding.qkb.json'));
+  const binding = readFileSync(resolve(fixtureDir, 'binding.zkqes.json'));
   const leafDer = readFileSync(resolve(fixtureDir, 'leaf.der'));
   const intDer = readFileSync(resolve(fixtureDir, fix.synthIntermediate.derPath));
   const signedAttrs = Buffer.from(fix.cms.signedAttrsHex, 'hex');

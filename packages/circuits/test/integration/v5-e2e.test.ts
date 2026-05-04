@@ -46,8 +46,8 @@ describe('V5 §6.10 — real-Diia E2E round-trip via .p7s', function () {
   let intSpki: Buffer;
 
   before(async () => {
-    circuit = await compile('QKBPresentationV5.circom');
-    bindingBytes = readFileSync(resolve(FIXTURE_DIR, 'binding.qkb2.json'));
+    circuit = await compile('ZkqesPresentationV5.circom');
+    bindingBytes = readFileSync(resolve(FIXTURE_DIR, 'binding.zkqes2.json'));
     leafCertDer = readFileSync(resolve(FIXTURE_DIR, 'leaf.der'));
     intCertDer = readFileSync(resolve(FIXTURE_DIR, 'synth-intermediate.der'));
     leafSpki = readFileSync(resolve(FIXTURE_DIR, 'leaf-spki.bin'));

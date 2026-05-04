@@ -1,31 +1,31 @@
-# @qkb/contracts-sdk
+# @zkqes/contracts-sdk
 
-Solidity SDK for gating contracts on QKB-verified Ukrainian identity.
+Solidity SDK for gating contracts on zkqes-verified Ukrainian identity.
 
 ## Install
 
 **Foundry:**
 ```bash
-forge install qkb-eth/contracts-sdk
+forge install alik-eth/zkqes
 ```
 
 Then add to `remappings.txt`:
 ```
-@qkb/contracts-sdk/=lib/contracts-sdk/src/
+@zkqes/contracts-sdk/=lib/contracts-sdk/src/
 ```
 
 **npm (for Hardhat):**
 ```bash
-npm install @qkb/contracts-sdk
+npm install @zkqes/contracts-sdk
 ```
 
 ## Usage
 
 ```solidity
-import { Verified, IQKBRegistry } from "@qkb/contracts-sdk/Verified.sol";
+import { Verified, IZkqesRegistry } from "@zkqes/contracts-sdk/Verified.sol";
 
 contract UkrainianDAO is Verified {
-    constructor(IQKBRegistry registry) Verified(registry) {}
+    constructor(IZkqesRegistry registry) Verified(registry) {}
 
     function castVote(uint256 proposalId) external onlyVerifiedUkrainian {
         // Only verified Ukrainian holders may call.
@@ -38,7 +38,7 @@ contract UkrainianDAO is Verified {
 | Network | Address |
 |---|---|
 | Base mainnet (chainId 8453) | (TBD on launch) |
-| Sepolia (chainId 11155111)  | see `fixtures/contracts/sepolia.json` in the QKB repo |
+| Sepolia (chainId 11155111)  | see `fixtures/contracts/sepolia.json` in the zkqes repo |
 
 ## License
 

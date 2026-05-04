@@ -17,6 +17,7 @@ import { Buffer } from './_buffer-global';
 // FINGERPRINT_DOMAIN — fixed compile-time constant for identity-fingerprint
 // domain separation. Big-endian-pack of ASCII "qkb-id-fingerprint-v1" (21 bytes,
 // 168 bits, well below the BN254 scalar field ~254 bits).
+// frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
 //
 // MUST byte-equal the constant in QKBPresentationV5.circom:
 //   var FINGERPRINT_DOMAIN = 0x716b622d69642d66696e6765727072696e742d7631;

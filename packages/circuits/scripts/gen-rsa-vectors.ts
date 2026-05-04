@@ -51,7 +51,7 @@ const jwk = publicKey.export({ format: 'jwk' }) as { n: string };
 const modulusBE = Buffer.from(jwk.n, 'base64url');
 const modulusInt = bytesToBigInt(modulusBE);
 
-const message = Buffer.from('QKB Phase 1 RSA test vector', 'utf8');
+const message = Buffer.from('zkqes Phase 1 RSA test vector', 'utf8');
 const messageDigest = createHash('sha256').update(message).digest();
 const messageInt = bytesToBigInt(messageDigest);
 

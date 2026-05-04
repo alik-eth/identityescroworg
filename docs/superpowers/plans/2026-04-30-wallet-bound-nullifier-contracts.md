@@ -1,10 +1,12 @@
 # Wallet-Bound Nullifier — contracts-eng Implementation Plan
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **For contracts-eng:** Implement the spec at `docs/superpowers/specs/2026-04-30-wallet-bound-nullifier-amendment.md` and your own contract review at `docs/superpowers/specs/2026-04-30-issuer-blind-nullifier-contract-review.md` (filename retained from earlier draft). Follow superpowers:test-driven-development.
 
 **Goal:** Extend `QKBRegistryV5.sol` to V5.1: new mappings, new register flow with first-claim/repeat-claim/wallet-uniqueness gates, new `rotateWallet()` function, drop `registrantOf`, preserve `nullifierOf` write-once. NFT contract is NOT modified.
 
-**Architecture:** 3 new mappings + drop 1 + rotateWallet entry point + `Groth16VerifierV5_1Stub` integration + ABI bump propagation to `@qkb/contracts-sdk`. NFT cross-coupling is OUT (per user directive 2026-04-30 NFT-decoupling).
+**Architecture:** 3 new mappings + drop 1 + rotateWallet entry point + `Groth16VerifierV5_1Stub` integration + ABI bump propagation to `@zkqes/contracts-sdk`. NFT cross-coupling is OUT (per user directive 2026-04-30 NFT-decoupling).
 
 **Tech Stack:** Solidity ^0.8.20, foundry, EIP-7212 P-256 precompile (Base mainnet/Sepolia native).
 
@@ -185,14 +187,14 @@ git commit -m "contracts(v51): rotateWallet() with old-wallet sig + commitment +
 
 - [ ] **Step 2: Regenerate ABI** via `forge inspect QKBRegistryV5 abi > packages/contracts-sdk/src/abis/QKBRegistryV5.json`.
 
-- [ ] **Step 3: Re-run TypeScript codegen** for `@qkb/contracts-sdk` types. (Use existing pipeline; if none, manually update.)
+- [ ] **Step 3: Re-run TypeScript codegen** for `@zkqes/contracts-sdk` types. (Use existing pipeline; if none, manually update.)
 
 - [ ] **Step 4: Bump version** in package.json and CHANGELOG.
 
 - [ ] **Step 5: Run sdk tests**:
 ```bash
-pnpm -F @qkb/contracts-sdk test
-pnpm -F @qkb/contracts-sdk build
+pnpm -F @zkqes/contracts-sdk test
+pnpm -F @zkqes/contracts-sdk build
 ```
 
 - [ ] **Step 6: Commit**
@@ -243,14 +245,14 @@ git commit -m "contracts(v51): refactor 28 register tests for 19-field publicSig
 
 ```bash
 cd packages/contracts && forge test -vv
-pnpm -F @qkb/contracts-sdk test
-pnpm -F @qkb/contracts-sdk typecheck
+pnpm -F @zkqes/contracts-sdk test
+pnpm -F @zkqes/contracts-sdk typecheck
 ```
 
 Lead inspects diff for:
 - No changes to `IdentityEscrowNFT.sol` (NFT decoupling per user directive)
 - Gas snapshot delta documented
-- ABI bump propagated cleanly to @qkb/contracts-sdk
+- ABI bump propagated cleanly to @zkqes/contracts-sdk
 
 ## Artifact pump (lead, after Task 4 lands)
 

@@ -15,7 +15,7 @@ import { buildWitnessV5, parseP7s } from '../../src/build-witness-v5';
 
 const FIXTURE_DIR = resolve(__dirname, '..', '..', 'fixtures', 'integration', 'admin-ecdsa');
 const STUB_DIR = resolve(__dirname, '..', '..', 'ceremony', 'v5_2');
-const ZKEY_PATH = resolve(STUB_DIR, 'qkb-v5_2-stub.zkey');
+const ZKEY_PATH = resolve(STUB_DIR, 'zkqes-v5_2-stub.zkey');
 const VKEY_PATH = resolve(STUB_DIR, 'verification_key.json');
 const WASM_PATH = resolve(
   __dirname,
@@ -23,8 +23,8 @@ const WASM_PATH = resolve(
   '..',
   'build',
   'v5_2-stub',
-  'QKBPresentationV5_js',
-  'QKBPresentationV5.wasm',
+  'ZkqesPresentationV5_js',
+  'ZkqesPresentationV5.wasm',
 );
 
 const PROOF_SAMPLE_PATH = resolve(STUB_DIR, 'proof-sample.json');
@@ -46,7 +46,7 @@ const haveLightArtifacts = existsSync(VKEY_PATH) && existsSync(PROOF_SAMPLE_PATH
     this.timeout(600000);
 
     it('round-trips: synth CAdES → buildWitness → groth16.prove → groth16.verify', async () => {
-      const bindingBytes = readFileSync(resolve(FIXTURE_DIR, 'binding.qkb2.json'));
+      const bindingBytes = readFileSync(resolve(FIXTURE_DIR, 'binding.zkqes2.json'));
       const leafCertDer = readFileSync(resolve(FIXTURE_DIR, 'leaf.der'));
       const intCertDer = readFileSync(resolve(FIXTURE_DIR, 'synth-intermediate.der'));
       const leafSpki = readFileSync(resolve(FIXTURE_DIR, 'leaf-spki.bin'));

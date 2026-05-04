@@ -18,13 +18,13 @@ identical Groth16 verifier .sol while the real Phase 2 ceremony (§11,
 
 ## NOT committed (gitignored)
 
-- `qkb-v5-stub.zkey` (~600 MB - 1 GB) — the actual proving key. Available
+- `zkqes-v5-stub.zkey` (~600 MB - 1 GB) — the actual proving key. Available
   via R2 once lead pumps the artifact pump (see `urls.json` placeholder
   in this directory).
-- `build/qkb-presentation/powersOfTau28_hez_final_23.ptau` (~9.1 GB) —
+- `build/zkqes-presentation/powersOfTau28_hez_final_23.ptau` (~9.1 GB) —
   Hermez final pot23 input. Re-fetched on demand from
   `https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_23.ptau`.
-- `build/v5-stub/QKBPresentationV5.r1cs` (~870 MB) — circom R1CS output;
+- `build/v5-stub/ZkqesPresentationV5.r1cs` (~870 MB) — circom R1CS output;
   reproducible via `circom --r1cs` or by reusing `build/test-cache/`.
 
 ## Reproducing the ceremony
@@ -44,7 +44,7 @@ Expected resource use:
 Re-running is idempotent for cached artifacts. The script:
 1. Re-uses `pot23.ptau` if present (skips ~9 GB download).
 2. Re-uses `R1CS` + `wasm` from `build/v5-stub/` if present (skips ~3 min cold compile).
-3. Re-uses `qkb-v5-stub_0000.zkey` (initial Groth16 setup) if present.
+3. Re-uses `zkqes-v5-stub_0000.zkey` (initial Groth16 setup) if present.
 4. Always re-runs the dev contribution + verification-key export (cheap).
 
 ## Soundness disclaimer

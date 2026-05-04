@@ -9,7 +9,7 @@
  */
 // @ts-expect-error — snarkjs ships no .d.ts of its own; consumer installs it.
 import { groth16 } from 'snarkjs';
-import { QkbError } from '../errors/index.js';
+import { ZkqesError } from '../errors/index.js';
 import type {
   IProver,
   ProofStage,
@@ -39,7 +39,7 @@ export class SnarkjsProver implements IProver {
     };
 
     if (opts.signal?.aborted) {
-      throw new QkbError('prover.cancelled');
+      throw new ZkqesError('prover.cancelled');
     }
 
     tick('witness', 10);
@@ -48,7 +48,7 @@ export class SnarkjsProver implements IProver {
     const zkey = await this.resolve(opts.zkeyUrl);
 
     if (opts.signal?.aborted) {
-      throw new QkbError('prover.cancelled');
+      throw new ZkqesError('prover.cancelled');
     }
 
     tick('prove', 20);
@@ -74,13 +74,13 @@ export class SnarkjsProver implements IProver {
     } catch (cause) {
       if (heartbeatTimer) clearInterval(heartbeatTimer);
       const msg = cause instanceof Error ? cause.message : String(cause);
-      throw new QkbError('prover.wasmOOM', { message: msg });
+      throw new ZkqesError('prover.wasmOOM', { message: msg });
     } finally {
       if (heartbeatTimer) clearInterval(heartbeatTimer);
     }
 
     if (opts.signal?.aborted) {
-      throw new QkbError('prover.cancelled');
+      throw new ZkqesError('prover.cancelled');
     }
 
     tick('finalize', 100);
@@ -101,7 +101,7 @@ export class SnarkjsProver implements IProver {
 async function defaultFetch(url: string): Promise<ArrayBuffer> {
   const r = await fetch(url);
   if (!r.ok) {
-    throw new QkbError('prover.artifactMismatch', {
+    throw new ZkqesError('prover.artifactMismatch', {
       reason: `HTTP ${r.status} fetching ${url}`,
     });
   }

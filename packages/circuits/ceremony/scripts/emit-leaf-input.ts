@@ -1,4 +1,4 @@
-// Serialize the QKBPresentationEcdsaLeaf witness inputs (subset — chain-side
+// Serialize the ZkqesPresentationEcdsaLeaf witness inputs (subset — chain-side
 // fields excluded) from the real Diia admin fixture to a snarkjs-compatible
 // input.json. BigInts are stringified to preserve precision.
 import { writeFileSync } from 'node:fs';

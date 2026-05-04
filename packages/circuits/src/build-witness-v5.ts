@@ -6,7 +6,7 @@
 // `snarkjs.wtns.calculate` can hand directly to the V5.2 main circuit's
 // witness-calculator wasm.
 //
-// Output ordering matches QKBPresentationV5.circom's input declaration
+// Output ordering matches ZkqesPresentationV5.circom's input declaration
 // order — the 22 public inputs (timestamp → bindingPkYLo, V5.2 spec
 // §"Public-signal layout") followed by every private witness input the
 // circuit consumes (including the V5.1 `walletSecret`).

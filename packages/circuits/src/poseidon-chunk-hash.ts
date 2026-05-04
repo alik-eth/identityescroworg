@@ -1,9 +1,9 @@
 // Off-circuit reference for `PoseidonChunkHashVar(MAX_BYTES)` — must be
 // byte-identical to the in-circuit template (commit
-// QKBPresentationV5 §6.6 wiring + the standalone primitive at
+// ZkqesPresentationV5 §6.6 wiring + the standalone primitive at
 // circuits/primitives/PoseidonChunkHashVar.circom).
 //
-// Construction (per spec § / canonicalize.ts in @qkb/lotl-flattener):
+// Construction (per spec § / canonicalize.ts in @zkqes/lotl-flattener):
 //   chunks = bytes-grouped-into-31-byte-BE-packed-field-elements
 //   fe     = [ chunks[0..nChunks-1], length ]
 //   sponge = Poseidon(16) over [ state_0=0, fe[0..14] ] then [ state_1, fe[15..29] ] ...

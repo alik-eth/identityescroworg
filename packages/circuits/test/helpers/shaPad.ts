@@ -5,7 +5,7 @@
  * message length in bits encoded big-endian over the final 8 bytes.
  * The output length is a multiple of 64 bytes.
  *
- * Used by tests to pre-pad inputs the way @qkb/web's witness builder will
+ * Used by tests to pre-pad inputs the way @zkqes/web's witness builder will
  * eventually pre-pad them in production.
  */
 export function shaPad(msg: Uint8Array): Uint8Array {

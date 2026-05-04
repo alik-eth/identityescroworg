@@ -4,8 +4,8 @@ pragma solidity 0.8.24;
 import { Test } from "forge-std/Test.sol";
 import { AuthorityArbitrator } from "../src/arbitrators/AuthorityArbitrator.sol";
 import { IArbitrator } from "../src/arbitrators/IArbitrator.sol";
-import { QKBRegistry } from "../src/QKBRegistry.sol";
-import { QKBVerifierV2, IGroth16VerifierV2 } from "../src/QKBVerifierV2.sol";
+import { ZkqesRegistry } from "../src/ZkqesRegistry.sol";
+import { ZkqesVerifierV2, IGroth16VerifierV2 } from "../src/ZkqesVerifierV2.sol";
 import { DeclarationHashes } from "../src/constants/DeclarationHashes.sol";
 import { StubGroth16Verifier } from "../src/verifier/StubGroth16Verifier.sol";
 
@@ -16,7 +16,7 @@ import { StubGroth16Verifier } from "../src/verifier/StubGroth16Verifier.sol";
 ///         tampered-field rejection.
 contract AuthorityArbitratorTest is Test {
     AuthorityArbitrator internal arb;
-    QKBRegistry internal registry;
+    ZkqesRegistry internal registry;
     StubGroth16Verifier internal rsa;
     StubGroth16Verifier internal ecdsa;
 
@@ -51,7 +51,7 @@ contract AuthorityArbitratorTest is Test {
         authority = vm.addr(AUTHORITY_SK);
         rsa = new StubGroth16Verifier();
         ecdsa = new StubGroth16Verifier();
-        registry = new QKBRegistry(
+        registry = new ZkqesRegistry(
             IGroth16VerifierV2(address(rsa)),
             IGroth16VerifierV2(address(ecdsa)),
             INITIAL_ROOT,
@@ -78,7 +78,7 @@ contract AuthorityArbitratorTest is Test {
         out[3] = (v >> 192) & type(uint64).max;
     }
 
-    function _inputs(bytes32 nullifier) internal view returns (QKBVerifierV2.Inputs memory i) {
+    function _inputs(bytes32 nullifier) internal view returns (ZkqesVerifierV2.Inputs memory i) {
         i.pkX = _splitToLimbsLE(GX);
         i.pkY = _splitToLimbsLE(GY);
         i.ctxHash = CTX_HASH;
@@ -89,7 +89,7 @@ contract AuthorityArbitratorTest is Test {
         i.nullifier = nullifier;
     }
 
-    function _proof() internal pure returns (QKBVerifierV2.Proof memory p) {}
+    function _proof() internal pure returns (ZkqesVerifierV2.Proof memory p) {}
 
     function _pkAddr() internal pure returns (address) {
         return vm.addr(1);
@@ -151,8 +151,8 @@ contract AuthorityArbitratorTest is Test {
         emit EscrowReleasePendingRequested(ESCROW_ID, address(arb), uint64(block.timestamp));
         arb.requestUnlock(ESCROW_ID, recipientPk, EVIDENCE_HASH, KIND_HASH, REFERENCE, issuedAt, sig);
 
-        (,,, uint64 pendingAt, QKBRegistry.EscrowState state) = registry.escrows(_pkAddr());
-        assertEq(uint8(state), uint8(QKBRegistry.EscrowState.RELEASE_PENDING));
+        (,,, uint64 pendingAt, ZkqesRegistry.EscrowState state) = registry.escrows(_pkAddr());
+        assertEq(uint8(state), uint8(ZkqesRegistry.EscrowState.RELEASE_PENDING));
         assertEq(pendingAt, uint64(block.timestamp));
     }
 
@@ -200,7 +200,7 @@ contract AuthorityArbitratorTest is Test {
         AuthorityArbitrator rogue = new AuthorityArbitrator(authority, address(registry));
         uint64 issuedAt = uint64(block.timestamp - 3600);
         bytes memory sig = _sign(AUTHORITY_SK, ESCROW_ID, recipientPk, EVIDENCE_HASH, KIND_HASH, REFERENCE, issuedAt);
-        vm.expectRevert(QKBRegistry.NotArbitrator.selector);
+        vm.expectRevert(ZkqesRegistry.NotArbitrator.selector);
         rogue.requestUnlock(ESCROW_ID, recipientPk, EVIDENCE_HASH, KIND_HASH, REFERENCE, issuedAt, sig);
     }
 }

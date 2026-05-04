@@ -2,7 +2,7 @@
 pragma solidity 0.8.24;
 
 import { Test, console2 } from "forge-std/Test.sol";
-import { QKBRegistryV5, IGroth16VerifierV5_1 } from "../../src/QKBRegistryV5.sol";
+import { ZkqesRegistryV5, IGroth16VerifierV5_1 } from "../../src/ZkqesRegistryV5.sol";
 import { Groth16VerifierV5_1Stub } from "../../src/Groth16VerifierV5_1Stub.sol";
 import { P256Verify } from "../../src/libs/P256Verify.sol";
 import { Poseidon } from "../../src/libs/Poseidon.sol";
@@ -49,7 +49,7 @@ import { Poseidon } from "../../src/libs/Poseidon.sol";
 ///         Mock's gas cost is comparable to a successful precompile call —
 ///         the gas snapshot here is the load-bearing measurement.
 contract RealTupleGasSnapshotTest is Test {
-    QKBRegistryV5 internal registry;
+    ZkqesRegistryV5 internal registry;
     Groth16VerifierV5_1Stub internal verifier;
 
     address internal admin = address(0xA1);
@@ -160,7 +160,7 @@ contract RealTupleGasSnapshotTest is Test {
         // proof is "1 second old" — fresh, well within the 1-hour window.
         vm.warp(pubInputs[1] + 1);
 
-        registry = new QKBRegistryV5(
+        registry = new ZkqesRegistryV5(
             IGroth16VerifierV5_1(address(verifier)),
             admin,
             bytes32(uint256(0)), // overwritten below
@@ -213,8 +213,8 @@ contract RealTupleGasSnapshotTest is Test {
     ///         storage writes (~80K).
     function test_real_tuple_full_register_gas() public {
         if (SKIP_PENDING_V51_FIXTURES) { vm.skip(true); return; }
-        QKBRegistryV5.PublicSignals memory sig = _publicSignalsStruct();
-        QKBRegistryV5.Groth16Proof memory proof = QKBRegistryV5.Groth16Proof({
+        ZkqesRegistryV5.PublicSignals memory sig = _publicSignalsStruct();
+        ZkqesRegistryV5.Groth16Proof memory proof = ZkqesRegistryV5.Groth16Proof({
             a: pA,
             b: pB,
             c: pC
@@ -262,7 +262,7 @@ contract RealTupleGasSnapshotTest is Test {
     ///         contracts, and reports gas. We don't isolate Gates 1/2b/5
     ///         (Groth16 verify, P256 calls, timing+sender+replay) because
     ///         those are already measured by tests 1 + the existing
-    ///         `QKBRegistryV5.register.t.sol` suite + `P256PrecompileSmoke.t.sol`.
+    ///         `ZkqesRegistryV5.register.t.sol` suite + `P256PrecompileSmoke.t.sol`.
     function test_register_gas_bisection_by_gate() public {
         if (SKIP_PENDING_V51_FIXTURES) { vm.skip(true); return; }
         address t3 = registry.poseidonT3();
@@ -317,7 +317,7 @@ contract RealTupleGasSnapshotTest is Test {
 
     /* ------------ Helpers ------------ */
 
-    function _publicSignalsStruct() internal view returns (QKBRegistryV5.PublicSignals memory sig) {
+    function _publicSignalsStruct() internal view returns (ZkqesRegistryV5.PublicSignals memory sig) {
         // V5.1 19-field shape. All slots read from the V5.1 ceremony
         // public-sample.json — slots 14-18 are the wallet-bound nullifier
         // additions per orchestration §1.1.
@@ -358,7 +358,7 @@ contract RealTupleGasSnapshotTest is Test {
         }
     }
 
-    /// Mirror of QKBRegistryV5.register.t.sol's _readEmptySubtreeRoots,
+    /// Mirror of ZkqesRegistryV5.register.t.sol's _readEmptySubtreeRoots,
     /// kept private so this test stays self-contained without bleeding
     /// internal helpers across files.
     function _readEmptySubtreeRoots() internal view returns (bytes32[16] memory out) {

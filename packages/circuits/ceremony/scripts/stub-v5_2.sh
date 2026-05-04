@@ -6,7 +6,7 @@
 # further work).  Produces:
 #
 #   ceremony/v5_2/Groth16VerifierV5_2Stub.sol
-#   ceremony/v5_2/qkb-v5_2-stub.zkey            (gitignored — *.zkey)
+#   ceremony/v5_2/zkqes-v5_2-stub.zkey            (gitignored — *.zkey)
 #   ceremony/v5_2/verification_key.json
 #   ceremony/v5_2/zkey.sha256
 #   ceremony/v5_2/proof-sample.json             # sample proof for sanity
@@ -37,7 +37,7 @@
 set -euo pipefail
 
 PKG_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
-PTAU_PATH="$PKG_DIR/build/qkb-presentation/powersOfTau28_hez_final_22.ptau"
+PTAU_PATH="$PKG_DIR/build/zkqes-presentation/powersOfTau28_hez_final_22.ptau"
 PTAU_URL="https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_22.ptau"
 # Canonical Hermez pot22 sha256, measured 2026-05-03 against the Polygon
 # zkEVM mirror.  Pinned so a corrupted or replaced ptau cannot silently
@@ -51,16 +51,16 @@ PTAU_URL="https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_22.p
 PTAU_SHA256="68a21bef870d5d4a9de39c8f35ebcf04e18ef97e14b2cd3f4c3e39876821d362"
 CIRCOMLIB="$PKG_DIR/node_modules"
 
-CIRCUIT_SRC="$PKG_DIR/circuits/QKBPresentationV5.circom"
+CIRCUIT_SRC="$PKG_DIR/circuits/ZkqesPresentationV5.circom"
 BUILD_DIR="$PKG_DIR/build/v5_2-stub"
 OUT_DIR="$PKG_DIR/ceremony/v5_2"
 
-R1CS="$BUILD_DIR/QKBPresentationV5.r1cs"
-WASM_DIR="$BUILD_DIR/QKBPresentationV5_js"
-WASM="$WASM_DIR/QKBPresentationV5.wasm"
+R1CS="$BUILD_DIR/ZkqesPresentationV5.r1cs"
+WASM_DIR="$BUILD_DIR/ZkqesPresentationV5_js"
+WASM="$WASM_DIR/ZkqesPresentationV5.wasm"
 
-ZKEY0="$BUILD_DIR/qkb-v5_2-stub_0000.zkey"
-ZKEY="$OUT_DIR/qkb-v5_2-stub.zkey"
+ZKEY0="$BUILD_DIR/zkqes-v5_2-stub_0000.zkey"
+ZKEY="$OUT_DIR/zkqes-v5_2-stub.zkey"
 VKEY="$OUT_DIR/verification_key.json"
 VERIFIER="$OUT_DIR/Groth16VerifierV5_2Stub.sol"
 HASH_FILE="$OUT_DIR/zkey.sha256"
@@ -170,7 +170,7 @@ if [[ ! -f "$ZKEY" ]]; then
   ENTROPY="$(head -c 64 /dev/urandom | base64 | tr -d '\n')"
   NODE_OPTIONS='--max-old-space-size=46080' \
     pnpm exec snarkjs zkey contribute "$ZKEY0" "$ZKEY" \
-      --name="qkb-v5_2-stub-dev-1" -v -e="$ENTROPY"
+      --name="zkqes-v5_2-stub-dev-1" -v -e="$ENTROPY"
 fi
 
 # ---------- 5. Export verification key + Solidity verifier ----------
@@ -205,7 +205,7 @@ if [[ ! -f "$INPUT_SAMPLE" ]]; then
       const { buildWitnessV5 } = require("'"$PKG_DIR"'/src/build-witness-v5");
       const { buildSynthCades } = require("'"$PKG_DIR"'/test/helpers/build-synth-cades");
       const fixtureDir = resolve("'"$PKG_DIR"'/fixtures/integration/admin-ecdsa");
-      const bindingBytes = readFileSync(resolve(fixtureDir, "binding.qkb2.json"));
+      const bindingBytes = readFileSync(resolve(fixtureDir, "binding.zkqes2.json"));
       const leafCertDer  = readFileSync(resolve(fixtureDir, "leaf.der"));
       const intCertDer   = readFileSync(resolve(fixtureDir, "synth-intermediate.der"));
       const leafSpki     = readFileSync(resolve(fixtureDir, "leaf-spki.bin"));
@@ -276,10 +276,10 @@ trap 'rm -f "$HASH_TMP"' EXIT
 (
   cd "$PKG_DIR"
   sha256sum \
-    "ceremony/v5_2/qkb-v5_2-stub.zkey" \
+    "ceremony/v5_2/zkqes-v5_2-stub.zkey" \
     "ceremony/v5_2/verification_key.json" \
     "ceremony/v5_2/Groth16VerifierV5_2Stub.sol" \
-    "build/v5_2-stub/QKBPresentationV5.r1cs" \
+    "build/v5_2-stub/ZkqesPresentationV5.r1cs" \
     "ceremony/v5_2/proof-sample.json" \
     "ceremony/v5_2/public-sample.json" \
     "ceremony/v5_2/witness-input-sample.json"

@@ -1,5 +1,7 @@
 # V5 Architecture — circuits-eng Implementation Plan
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build `QKBPresentationV5.circom` (~4.0M-constraint empirical projection / 4.5M cap envelope, single-circuit ZK proof) replacing the V4 leaf+chain split, plus all supporting primitives, the local Phase 2 ceremony, and the TS reference implementations needed for cross-package parity.
@@ -173,7 +175,7 @@ describe('parseP256Spki', () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm -F @qkb/circuits exec vitest run test/SpkiCommit.test.ts`
+Run: `pnpm -F @zkqes/circuits exec vitest run test/SpkiCommit.test.ts`
 Expected: FAIL with `Cannot find module '../scripts/spki-commit-ref.js'`.
 
 - [ ] **Step 3: Stub the module**
@@ -200,7 +202,7 @@ export function spkiCommit(spki: Buffer): bigint {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm -F @qkb/circuits exec vitest run test/SpkiCommit.test.ts -t "rejects non-91-byte"`
+Run: `pnpm -F @zkqes/circuits exec vitest run test/SpkiCommit.test.ts -t "rejects non-91-byte"`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -289,7 +291,7 @@ NOTE: The actual bytes for `REAL_DIIA_LEAF_SPKI_HEX` come from `fixtures/integra
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `pnpm -F @qkb/circuits exec vitest run test/SpkiCommit.test.ts -t "DER walk"`
+Run: `pnpm -F @zkqes/circuits exec vitest run test/SpkiCommit.test.ts -t "DER walk"`
 Expected: FAIL — `not implemented` thrown.
 
 - [ ] **Step 3: Implement `parseP256Spki` with hardcoded prefix verification**
@@ -319,7 +321,7 @@ export function parseP256Spki(spki: Buffer): ParsedSpki {
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `pnpm -F @qkb/circuits exec vitest run test/SpkiCommit.test.ts -t "DER walk"`
+Run: `pnpm -F @zkqes/circuits exec vitest run test/SpkiCommit.test.ts -t "DER walk"`
 Expected: PASS (4/4 in this group).
 
 - [ ] **Step 5: Commit**
@@ -378,7 +380,7 @@ describe('decomposeTo643Limbs', () => {
 
 - [ ] **Step 2: Run test to verify failure**
 
-Run: `pnpm -F @qkb/circuits exec vitest run test/SpkiCommit.test.ts -t "decomposeTo643Limbs"`
+Run: `pnpm -F @zkqes/circuits exec vitest run test/SpkiCommit.test.ts -t "decomposeTo643Limbs"`
 Expected: FAIL — function not exported.
 
 - [ ] **Step 3: Implement**
@@ -400,7 +402,7 @@ export function decomposeTo643Limbs(value: Buffer): bigint[] {
 
 - [ ] **Step 4: Run tests**
 
-Run: `pnpm -F @qkb/circuits exec vitest run test/SpkiCommit.test.ts -t "decomposeTo643Limbs"`
+Run: `pnpm -F @zkqes/circuits exec vitest run test/SpkiCommit.test.ts -t "decomposeTo643Limbs"`
 Expected: PASS (4/4).
 
 - [ ] **Step 5: Commit**
@@ -416,10 +418,10 @@ git -C /data/Develop/qkb-wt-v5/arch-circuits commit -m "feat(circuits): 6x43-bit
 
 ```bash
 cd /data/Develop/qkb-wt-v5/arch-circuits
-pnpm -F @qkb/circuits add circomlibjs@^0.1.7
+pnpm -F @zkqes/circuits add circomlibjs@^0.1.7
 ```
 
-Verify: `pnpm -F @qkb/circuits list circomlibjs` shows v0.1.7+.
+Verify: `pnpm -F @zkqes/circuits list circomlibjs` shows v0.1.7+.
 
 - [ ] **Step 2: Write failing test**
 
@@ -457,7 +459,7 @@ describe('spkiCommit — end-to-end', () => {
 
 - [ ] **Step 3: Run test to verify failure**
 
-Run: `pnpm -F @qkb/circuits exec vitest run test/SpkiCommit.test.ts -t "spkiCommit — end-to-end"`
+Run: `pnpm -F @zkqes/circuits exec vitest run test/SpkiCommit.test.ts -t "spkiCommit — end-to-end"`
 Expected: FAIL — `spkiCommit` returns 'not implemented'.
 
 - [ ] **Step 4: Implement `spkiCommit` using circomlibjs**
@@ -487,12 +489,12 @@ export async function spkiCommit(spki: Buffer): Promise<bigint> {
 
 - [ ] **Step 5: Run tests; if first run fails on snapshot, accept the snapshot**
 
-Run: `pnpm -F @qkb/circuits exec vitest run test/SpkiCommit.test.ts -t "spkiCommit — end-to-end"`
+Run: `pnpm -F @zkqes/circuits exec vitest run test/SpkiCommit.test.ts -t "spkiCommit — end-to-end"`
 
 Expected (first run): one snapshot test fails because no baseline exists. Re-run with `-u` to accept:
 
 ```bash
-pnpm -F @qkb/circuits exec vitest run test/SpkiCommit.test.ts -t "spkiCommit — end-to-end" -u
+pnpm -F @zkqes/circuits exec vitest run test/SpkiCommit.test.ts -t "spkiCommit — end-to-end" -u
 ```
 
 Expected (second run): PASS (3/3). Snapshot file `test/__snapshots__/SpkiCommit.test.ts.snap` committed alongside.
@@ -523,7 +525,7 @@ import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 
 describe('SpkiCommit parity fixture', () => {
-  const fixturePath = '/data/Develop/identityescroworg/fixtures/spki-commit/v5-parity.json';
+  const fixturePath = '/data/Develop/zkqes/fixtures/spki-commit/v5-parity.json';
 
   it('exists and parses', () => {
     expect(existsSync(fixturePath)).toBe(true);
@@ -548,7 +550,7 @@ describe('SpkiCommit parity fixture', () => {
 
 - [ ] **Step 2: Run test to verify failure**
 
-Run: `pnpm -F @qkb/circuits exec vitest run test/SpkiCommit.test.ts -t "parity fixture"`
+Run: `pnpm -F @zkqes/circuits exec vitest run test/SpkiCommit.test.ts -t "parity fixture"`
 Expected: FAIL — fixture file doesn't exist.
 
 - [ ] **Step 3: Write the emitter script**
@@ -559,7 +561,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { spkiCommit } from './spki-commit-ref.js';
 
-const REPO_ROOT = '/data/Develop/identityescroworg';
+const REPO_ROOT = '/data/Develop/zkqes';
 const FIXTURE_DIR = `${REPO_ROOT}/fixtures/spki-commit`;
 const OUT_PATH = `${FIXTURE_DIR}/v5-parity.json`;
 
@@ -617,16 +619,16 @@ Edit `packages/circuits/package.json` `scripts`:
 "parity:v5": "tsx scripts/emit-spki-parity-fixture.ts"
 ```
 
-Run: `pnpm -F @qkb/circuits parity:v5`
+Run: `pnpm -F @zkqes/circuits parity:v5`
 
 Expected output:
 ```
-Wrote 2 cases to /data/Develop/identityescroworg/fixtures/spki-commit/v5-parity.json
+Wrote 2 cases to /data/Develop/zkqes/fixtures/spki-commit/v5-parity.json
 ```
 
 - [ ] **Step 5: Run parity-fixture test**
 
-Run: `pnpm -F @qkb/circuits exec vitest run test/SpkiCommit.test.ts -t "parity fixture"`
+Run: `pnpm -F @zkqes/circuits exec vitest run test/SpkiCommit.test.ts -t "parity fixture"`
 Expected: PASS (2/2).
 
 - [ ] **Step 6: Commit (in main checkout — fixture is lead-owned)**
@@ -635,8 +637,8 @@ The fixture lives outside the worktree. Lead pumps via:
 
 ```bash
 # In main checkout:
-git -C /data/Develop/identityescroworg add fixtures/spki-commit/v5-parity.json
-git -C /data/Develop/identityescroworg commit -m "fixture: v5-parity.json from circuits-eng spki-commit-ref.ts
+git -C /data/Develop/zkqes add fixtures/spki-commit/v5-parity.json
+git -C /data/Develop/zkqes commit -m "fixture: v5-parity.json from circuits-eng spki-commit-ref.ts
 
 Reference parity fixture for V5 SpkiCommit byte-equivalence
 across circuits-eng (this commit), contracts-eng
@@ -766,7 +768,7 @@ describe('Bytes32ToHiLo', () => {
 
 - [ ] **Step 3: Run tests; expect compilation cache miss + fail**
 
-Run: `pnpm -F @qkb/circuits exec vitest run test/Bytes32ToHiLo.test.ts`
+Run: `pnpm -F @zkqes/circuits exec vitest run test/Bytes32ToHiLo.test.ts`
 Expected: First run compiles the circuit (~30s); tests then PASS (5/5). If any fail, debug the constraint algebra.
 
 - [ ] **Step 4: Commit**
@@ -794,7 +796,7 @@ CAdES `signedAttrs` is a DER-encoded SET OF Attribute. Each Attribute is `{ type
 - [ ] **Step 1: Inventory existing fixtures**
 
 ```bash
-ls /data/Develop/identityescroworg/packages/circuits/fixtures/integration/admin-ecdsa/ | grep -i 'signedattrs\|sa\.bin'
+ls /data/Develop/zkqes/packages/circuits/fixtures/integration/admin-ecdsa/ | grep -i 'signedattrs\|sa\.bin'
 ```
 
 Expected: at least `signedAttrs.bin` from the existing V4 fixtures. If the file isn't named that, search via `find . -name '*signed*'`.
@@ -808,8 +810,8 @@ import { readFileSync } from 'node:fs';
 import { compileCircuit } from './helpers/compile.js';
 import { createHash } from 'node:crypto';
 
-const SA_PATH = '/data/Develop/identityescroworg/packages/circuits/fixtures/integration/admin-ecdsa/signedAttrs.bin';
-const BINDING_PATH = '/data/Develop/identityescroworg/packages/circuits/fixtures/integration/admin-ecdsa/binding.bin';
+const SA_PATH = '/data/Develop/zkqes/packages/circuits/fixtures/integration/admin-ecdsa/signedAttrs.bin';
+const BINDING_PATH = '/data/Develop/zkqes/packages/circuits/fixtures/integration/admin-ecdsa/binding.bin';
 const MAX_SA = 1536;
 
 describe('SignedAttrsParser', () => {
@@ -872,7 +874,7 @@ describe('SignedAttrsParser', () => {
 
 - [ ] **Step 3: Run test to verify failure**
 
-Run: `pnpm -F @qkb/circuits exec vitest run test/SignedAttrsParser.test.ts`
+Run: `pnpm -F @zkqes/circuits exec vitest run test/SignedAttrsParser.test.ts`
 Expected: FAIL — circuit file doesn't exist yet.
 
 - [ ] **Step 4: Implement `SignedAttrsParser`**
@@ -923,7 +925,7 @@ The full implementation is the worker's task; the tests above define correctness
 
 - [ ] **Step 5: Run all tests until green**
 
-Run: `pnpm -F @qkb/circuits exec vitest run test/SignedAttrsParser.test.ts`
+Run: `pnpm -F @zkqes/circuits exec vitest run test/SignedAttrsParser.test.ts`
 Expected (after implementation): PASS (3/3).
 
 - [ ] **Step 6: Commit**
@@ -971,7 +973,7 @@ describe('SpkiCommit circom template', () => {
   });
 
   it('matches the TS reference impl on real Diia leaf SPKI', async () => {
-    const spki = readFileSync('/data/Develop/identityescroworg/packages/circuits/fixtures/integration/admin-ecdsa/leaf-spki.bin');
+    const spki = readFileSync('/data/Develop/zkqes/packages/circuits/fixtures/integration/admin-ecdsa/leaf-spki.bin');
     const expected = await spkiCommitTs(spki);
     const { x, y } = parseP256Spki(spki);
     const xLimbs = decomposeTo643Limbs(x);
@@ -988,7 +990,7 @@ describe('SpkiCommit circom template', () => {
 
 - [ ] **Step 2: Run test to verify failure**
 
-Run: `pnpm -F @qkb/circuits exec vitest run test/SpkiCommit.test.ts -t "circom template"`
+Run: `pnpm -F @zkqes/circuits exec vitest run test/SpkiCommit.test.ts -t "circom template"`
 Expected: FAIL — template doesn't exist.
 
 - [ ] **Step 3: Implement template**

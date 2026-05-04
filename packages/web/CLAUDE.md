@@ -1,4 +1,4 @@
-# `@qkb/web` — Maintainer Notes
+# `@zkqes/web` — Maintainer Notes
 
 ## Purpose
 
@@ -15,7 +15,7 @@ the user's browser end-to-end:
    witness, and generate a Groth16 proof — in a Web Worker, with a
    swappable `IProver` so mocks / rapidsnark-wasm can plug in later.
 4. **Register** on-chain via the user's EIP-1193 wallet by calling
-   `QKBRegistry.register(proof, inputs)` on Sepolia.
+   `ZkqesRegistry.register(proof, inputs)` on Sepolia.
 
 Every crypto operation runs client-side. No server, no backend, no
 telemetry. The built `dist/` loads from `file://` with no subpath fetches,
@@ -28,19 +28,19 @@ All commands assume repo root, pnpm 9.x, Node 20.
 
 ```bash
 # Unit tests (~3 s, 99 tests across lib/*)
-pnpm --filter @qkb/web test
+pnpm --filter @zkqes/web test
 
 # TypeScript check
-pnpm --filter @qkb/web typecheck
+pnpm --filter @zkqes/web typecheck
 
 # Production build → dist/
-pnpm --filter @qkb/web build
+pnpm --filter @zkqes/web build
 
 # Local dev server (vite, hot reload)
-pnpm --filter @qkb/web dev
+pnpm --filter @zkqes/web dev
 
 # Local preview of the built bundle (port 4173)
-pnpm --filter @qkb/web preview
+pnpm --filter @zkqes/web preview
 
 # Playwright e2e suites
 cd packages/web
@@ -165,7 +165,7 @@ Fields written per route:
    in `src/lib/walletSecret.ts` and must stay in lock-step with
    `arch-circuits/.../wallet-secret.ts` — the SDK has a vendored copy
    under `packages/sdk/src/witness/v5/wallet-secret.ts`. If you touch
-   either side, run the full `@qkb/sdk` + `@qkb/web` test suite and have
+   either side, run the full `@zkqes/sdk` + `@zkqes/web` test suite and have
    the lead cross-check before commit.
 
 10. **`/account/rotate` flow: newWalletAddress is LOCKED at the connect
@@ -183,8 +183,8 @@ Fields written per route:
 
 11. **V5.1 ABI is `qkbRegistryV5_1Abi` only.** The hand-patched V5 ABI was
    deleted in `15f2064`; the canonical pump from contracts-eng lives at
-   `packages/sdk/src/abi/QKBRegistryV5_1.ts`. Do not re-create a
-   `qkbRegistryV5Abi` symbol or add a parallel V5 ABI file.
+   `packages/sdk/src/abi/ZkqesRegistryV5_1.ts`. Do not re-create a
+   `zkqesRegistryV5Abi` symbol or add a parallel V5 ABI file.
 
 12. **Async strength gates need input-score parity proofs.** Any
    client-side strength gate against an async oracle (zxcvbn, server
@@ -217,7 +217,7 @@ Fields written per route:
    emits four 128-bit big-endian limbs (`bindingPkXHi/Lo +
    bindingPkYHi/Lo`) carrying the binding's claimed wallet pubkey
    (`pkBytes[1..65]` split 16-byte BE), and the on-chain
-   `QKBRegistryV5_2.register()` reconstructs `address(uint160(uint256(
+   `ZkqesRegistryV5_2.register()` reconstructs `address(uint160(uint256(
    keccak256(abi.encodePacked(pkXHi, pkXLo, pkYHi, pkYLo)))))` and
    compares to `msg.sender`. Re-introducing `msgSender` to the witness
    shape will fail the V5.2 verifier (extra/missing input). The
@@ -250,10 +250,10 @@ Fields written per route:
 
 17. **Origin-pinned `localhost:9080` is the only CLI integration
    channel.** No other ports, no other origins. Both `detectCli`
-   (`@qkb/sdk` `cli/detectCli.ts`) and `proveViaCli`
+   (`@zkqes/sdk` `cli/detectCli.ts`) and `proveViaCli`
    (`cli/proveViaCli.ts`) hardcode `http://127.0.0.1:9080`; the CLI
    server side enforces `Access-Control-Allow-Origin:
-   https://identityescrow.org` (configurable via
+   https://app.zkqes.org` (configurable via
    `--allowed-origin` for tests only). Adding a fallback port,
    accepting another origin, or moving the integration off
    localhost is a design change requiring lead sign-off — Chrome
@@ -262,7 +262,7 @@ Fields written per route:
 18. **CLI 4xx errors do NOT trigger fallback. 5xx and network errors
    DO.** Per orchestration §1.6, encoded by
    `CliProveError.shouldFallback` in
-   `@qkb/sdk` `cli/proveViaCli.ts`. 4xx → witness invalid or config
+   `@zkqes/sdk` `cli/proveViaCli.ts`. 4xx → witness invalid or config
    error; browser would also fail — surface verbatim instead of
    wasting ~90 s on a doomed browser prove. 429 specifically is
    bucketed with 5xx (transient busy; browser succeeds against the
@@ -296,7 +296,7 @@ Fields written per route:
     ASN.1 frame.
 
     The witness builder
-    (`@qkb/sdk` `src/witness/v5/build-witness-v5_2.ts`) computes
+    (`@zkqes/sdk` `src/witness/v5/build-witness-v5_2.ts`) computes
     `oidOffsetInTbs = subjectSerialValueOffsetInTbs - 7` (5 OID
     bytes + 1 string-tag + 1 length-byte) and emits it as a decimal
     string alongside the V5.2 fields. The circuit's §6.9b block
@@ -355,7 +355,7 @@ Fields written per route:
     go in `appOnlyRoutes`; new public-content routes go in
     `sharedRoutes`. Cross-cutting routes (rare) need lead sign-off.
 
-    **Reach test:** `VITE_TARGET=landing pnpm -F @qkb/web build`
+    **Reach test:** `VITE_TARGET=landing pnpm -F @zkqes/web build`
     must succeed AND the entry chunk must NOT contain
     `RegisterV5Screen` component bytes (route-name string is OK
     — the type-machinery routes their string identifier into the
@@ -405,7 +405,7 @@ Fields written per route:
     population fully cycles out.
 
     **Reach test.** `VITE_TARGET=landing VITE_BASE=/ pnpm -F
-    @qkb/web build` produces `dist/index.html` only — confirm
+    @zkqes/web build` produces `dist/index.html` only — confirm
     `dist/404.html` is absent post-build, then verify the
     workflow's `cp` step would produce a byte-identical copy:
     `cp dist/index.html dist/404.html && diff dist/index.html
@@ -508,7 +508,7 @@ The Phase 2 routes land in this worktree. Conventions locked by the
     `(escrowId, recipientHybridPk, evidenceHash, kindHash, referenceHash, issuedAt, authoritySig)`
     and constructor is `(authority, registry)`.
   - `UnlockEvidence` event field name is `referenceHash` (NOT `reference`).
-  - `QKBRegistry` release-pending event is
+  - `ZkqesRegistry` release-pending event is
     `EscrowReleasePendingRequested(bytes32 indexed escrowId, address indexed arbitrator, uint64 at)`;
     `EscrowReleasePending` is the revert error, not an event.
 
@@ -530,7 +530,7 @@ The Phase 2 routes land in this worktree. Conventions locked by the
 
 The SPA doubles as a demo harness: Holder, Custodian, and Recipient
 roles all live inside one origin. The Custodian section folds the
-qie-agent business logic into the browser via `@qkb/qie-agent/browser`.
+qie-agent business logic into the browser via `@zkqes/qie-agent/browser`.
 
 ### Role palette and `<RoleShell>`
 
@@ -585,7 +585,7 @@ and copies the resulting `/shared/local.json` into
 
 ### Invariant — do not lose the existing Node fleet
 
-The `@qkb/qie-agent` Node server, Dockerfiles, docker-compose, and the
+The `@zkqes/qie-agent` Node server, Dockerfiles, docker-compose, and the
 per-agent `deploy/mock-qtsps/agents/*.keys.pub.json` files STAY. The
 in-browser demo is additive; removing them breaks integration tests
 that the MVP acceptance suite depends on.
@@ -594,7 +594,7 @@ that the MVP acceptance suite depends on.
 
 - **Phase 1 QKB:** leaf-only Groth16 proof; chain constraint enforced
   off-circuit. Target deploy: Sepolia + a static host at
-  `identityescrow.org` (host TBD).
+  `zkqes.org` (landing) + `app.zkqes.org` (app).
 - **Phase 2 QIE:** introduces escrow commitments (non-empty `context`
   field in the binding, Poseidon-hashed to `ctxHash`), arbitrator UI,
   revoke-binding flow, split chain-proof verification. The

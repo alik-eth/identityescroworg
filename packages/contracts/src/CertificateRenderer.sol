@@ -24,7 +24,7 @@ library CertificateRenderer {
         bytes memory json = abi.encodePacked(
             '{"name":"Verified Identity Certificate ',
             unicode"№", tokenId.toString(),
-            '","description":"On-chain attestation of verified Ukrainian identity, issued by QKBRegistryV4.",',
+            '","description":"On-chain attestation of verified Ukrainian identity, issued by ZkqesRegistryV4.",',
             '"image":"data:image/svg+xml;base64,', Base64.encode(bytes(svg)), '",',
             '"attributes":[',
               '{"trait_type":"Network","value":"', chainLabel, '"},',

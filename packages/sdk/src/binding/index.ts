@@ -1,7 +1,7 @@
 /**
- * QKB Binding V2 — forward-looking structured binding format.
+ * zkqes Binding V2 — forward-looking structured binding format.
  *
- * This module is intentionally NOT wired into the live QKB/1.0 flow yet.
+ * This module is intentionally NOT wired into the live zkqes/1.0 flow yet.
  * It exists to lock down the intended successor surface:
  *   - stable machine-readable binding core
  *   - contract-managed policy acceptance via policyRoot
@@ -13,10 +13,13 @@
 import canonicalize from 'canonicalize';
 import { sha256 } from '@noble/hashes/sha256';
 import * as secp from '@noble/secp256k1';
-import { QkbError } from '../errors/index.js';
+import { ZkqesError } from '../errors/index.js';
 
+// frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
 export const BINDING_V2_VERSION = 'QKB/2.0' as const;
+// frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
 export const BINDING_V2_SCHEMA = 'qkb-binding-core/v1' as const;
+// frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
 export const POLICY_LEAF_V1_SCHEMA = 'qkb-policy-leaf/v1' as const;
 export const BINDING_V2_SCHEME = 'secp256k1' as const;
 export const POLICY_ID_RE = /^[a-z0-9][a-z0-9._/-]*$/;
@@ -117,7 +120,7 @@ export function buildPolicyLeafV1(input: BuildPolicyLeafV1Input): PolicyLeafV1 {
     input.activeTo !== undefined &&
     input.activeTo < input.activeFrom
   ) {
-    throw new QkbError('binding.field', { field: 'activeTo', reason: 'before-activeFrom' });
+    throw new ZkqesError('binding.field', { field: 'activeTo', reason: 'before-activeFrom' });
   }
   return {
     leafSchema: POLICY_LEAF_V1_SCHEMA,
@@ -151,7 +154,7 @@ export function policyLeafHashV1(leaf: PolicyLeafV1): `0x${string}` {
 export function buildBindingV2(input: BuildBindingV2Input): BindingV2 {
   validatePk(input.pk);
   if (input.nonce.length !== NONCE_LENGTH) {
-    throw new QkbError('binding.field', { field: 'nonce', got: input.nonce.length });
+    throw new ZkqesError('binding.field', { field: 'nonce', got: input.nonce.length });
   }
   assertUint(input.timestamp, 'timestamp');
   assertPolicyRef(input.policy);
@@ -215,22 +218,22 @@ export function bindingCoreHashV2(binding: BindingV2): Uint8Array {
 function encodeJcs(v: unknown): Uint8Array {
   const json = canonicalize(v);
   if (json === undefined) {
-    throw new QkbError('binding.jcs', { reason: 'canonicalize-undefined' });
+    throw new ZkqesError('binding.jcs', { reason: 'canonicalize-undefined' });
   }
   return new TextEncoder().encode(json);
 }
 
 function validatePk(pk: Uint8Array): void {
   if (pk.length !== PK_UNCOMPRESSED_LENGTH) {
-    throw new QkbError('binding.field', { field: 'pk', reason: 'length', got: pk.length });
+    throw new ZkqesError('binding.field', { field: 'pk', reason: 'length', got: pk.length });
   }
   if (pk[0] !== 0x04) {
-    throw new QkbError('binding.field', { field: 'pk', reason: 'prefix' });
+    throw new ZkqesError('binding.field', { field: 'pk', reason: 'prefix' });
   }
   try {
     secp.ProjectivePoint.fromHex(pk).assertValidity();
   } catch (cause) {
-    throw new QkbError('binding.field', {
+    throw new ZkqesError('binding.field', {
       field: 'pk',
       reason: 'not-on-curve',
       cause: String(cause),
@@ -243,7 +246,7 @@ function assertPolicyRef(policy: BindingV2PolicyRef): void {
   assertPolicyId(policy.policyId);
   assertUint(policy.policyVersion, 'policy.policyVersion', 1);
   if (policy.bindingSchema !== BINDING_V2_SCHEMA) {
-    throw new QkbError('binding.field', {
+    throw new ZkqesError('binding.field', {
       field: 'policy.bindingSchema',
       got: policy.bindingSchema,
     });
@@ -252,28 +255,28 @@ function assertPolicyRef(policy: BindingV2PolicyRef): void {
 
 function validateDisplay(display: BindingV2Display): void {
   if (display.lang.length === 0) {
-    throw new QkbError('binding.field', { field: 'display.lang' });
+    throw new ZkqesError('binding.field', { field: 'display.lang' });
   }
   if (display.template.length === 0) {
-    throw new QkbError('binding.field', { field: 'display.template' });
+    throw new ZkqesError('binding.field', { field: 'display.template' });
   }
 }
 
 function assertPolicyId(v: string): void {
   if (!POLICY_ID_RE.test(v)) {
-    throw new QkbError('binding.field', { field: 'policyId', got: v });
+    throw new ZkqesError('binding.field', { field: 'policyId', got: v });
   }
 }
 
 function assertHex32(v: string, field: string): void {
   if (!/^0x[0-9a-fA-F]{64}$/.test(v)) {
-    throw new QkbError('binding.field', { field, got: v });
+    throw new ZkqesError('binding.field', { field, got: v });
   }
 }
 
 function assertUint(v: number, field: string, min = 0): void {
   if (!Number.isInteger(v) || v < min) {
-    throw new QkbError('binding.field', { field, got: v });
+    throw new ZkqesError('binding.field', { field, got: v });
   }
 }
 

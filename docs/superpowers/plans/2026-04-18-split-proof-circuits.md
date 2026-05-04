@@ -1,5 +1,7 @@
 # Split-Proof Pivot — `circuits-eng` Plan
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans. Steps use checkbox syntax.
 
 **Goal:** Revert the unified `QKBPresentationEcdsa.circom` (10.85 M constraints, impossible to setup) back to Phase-1 §5.4 split: leaf + chain circuits, glued by `leafSpkiCommit` equality on-chain. Add the person-nullifier to the leaf. Run both ceremonies on a 16 GB local host. Upload to R2.

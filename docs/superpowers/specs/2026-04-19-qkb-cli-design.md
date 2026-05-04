@@ -1,5 +1,7 @@
 # @qkb/cli — offline Groth16 proving CLI design
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **Status:** draft 2026-04-19 — pending review
 
 ## Problem

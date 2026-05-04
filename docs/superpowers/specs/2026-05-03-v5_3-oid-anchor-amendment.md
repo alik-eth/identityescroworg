@@ -1,5 +1,7 @@
 # V5.3 — Subject-serial OID-anchor + rotationNewWallet range-check (V5.2 codex follow-ups)
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **Status:** v0.2 — implementation in flight (T1+T2+T3 committed; tests + ceremony stub + doc invariants pending). v0.2 amends v0.1's cost projections, witness-builder framing, F2 contract-side scope, and adds the circom -O1 optimizer footgun discovered during T2.
 >
 > **Date:** 2026-05-03 (v0.1) → 2026-05-03 (v0.2 same-day amendment from T1/T2 measurements).
@@ -415,7 +417,7 @@ The +20,052 delta stays above the 4% safety floor (V5 §spec amendment 9c866ad).
 
 - [ ] Copy `ceremony/scripts/stub-v5_2.sh` → `ceremony/scripts/stub-v5_3.sh`.
 - [ ] Update paths (`v5_2/` → `v5_3/`, `qkb-v5_2-stub.zkey` → `qkb-v5_3-stub.zkey`, etc.).
-- [ ] Run cold ceremony: `pnpm -F @qkb/circuits ceremony:v5_3:stub`.
+- [ ] Run cold ceremony: `pnpm -F @zkqes/circuits ceremony:v5_3:stub`.
 - [ ] Verify pot22 sha256 cache hit (no re-download).
 - [ ] Confirm ~3.89-3.90M constraint count.
 - [ ] Generate stub artifacts at `ceremony/v5_3/`.

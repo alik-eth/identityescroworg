@@ -2,9 +2,9 @@
 pragma solidity 0.8.24;
 
 import "forge-std/Script.sol";
-import { IdentityEscrowNFT, IQKBRegistry } from "../src/IdentityEscrowNFT.sol";
+import { ZkqesCertificate, IZkqesRegistry } from "../src/ZkqesCertificate.sol";
 
-contract MockReg is IQKBRegistry {
+contract MockReg is IZkqesRegistry {
     mapping(address => bytes32) private _n;
     function set(address h, bytes32 v) external { _n[h] = v; }
     function isVerified(address h) external view returns (bool) { return _n[h] != bytes32(0); }
@@ -15,7 +15,7 @@ contract MockReg is IQKBRegistry {
 contract SnapshotCertURI is Script {
     function run() external {
         MockReg r = new MockReg();
-        IdentityEscrowNFT nft = new IdentityEscrowNFT(IQKBRegistry(address(r)), 2_000_000_000, "Sepolia");
+        ZkqesCertificate nft = new ZkqesCertificate(IZkqesRegistry(address(r)), 2_000_000_000, "Sepolia");
         r.set(address(0xA11CE), bytes32(uint256(0xDEADBEEF)));
         vm.warp(1735689600);
         vm.prank(address(0xA11CE));

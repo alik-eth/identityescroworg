@@ -6,7 +6,7 @@
  *     with canned output after emitting witness/prove/finalize progress
  *     events. Use this in CI so you don't ship a multi-GB zkey to every run.
  *   - `SnarkjsProver` — production prover (subpath import — see
- *     `@qkb/sdk/prover/snarkjs`), runs `snarkjs.groth16.fullProve` in
+ *     `@zkqes/sdk/prover/snarkjs`), runs `snarkjs.groth16.fullProve` in
  *     process. Adds snarkjs as a runtime dependency.
  *
  * For browser use we recommend pinning a Web Worker around `SnarkjsProver`
@@ -21,7 +21,7 @@
  * a browser tab cannot hold both zkeys resident simultaneously without
  * OOM, so `proveSplit` drives them SERIALLY.
  */
-import { QkbError } from '../errors/index.js';
+import { ZkqesError } from '../errors/index.js';
 import type {
   ChainWitnessInput,
   Groth16Proof,
@@ -66,7 +66,7 @@ export interface IProver {
 // ===========================================================================
 // Artifact URL types — pin (wasm, zkey, sha256) tuples per circuit, optionally
 // per algorithm. Consumers read these from a JSON manifest committed to their
-// repo (see @qkb/sdk's circuitArtifacts module for the validated loader).
+// repo (see @zkqes/sdk's circuitArtifacts module for the validated loader).
 // ===========================================================================
 
 export interface CircuitArtifactUrls {
@@ -202,7 +202,7 @@ export async function proveV5(
       result.publicSignals.length,
     )
   ) {
-    throw new QkbError('witness.fieldTooLong', {
+    throw new ZkqesError('witness.fieldTooLong', {
       reason: 'v5-public-signals-length',
       got: result.publicSignals.length,
       want: [...ALLOWED_PUBLIC_SIGNAL_LENGTHS],
@@ -303,7 +303,7 @@ async function runSide(
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     if (signal?.aborted) {
-      reject(new QkbError('prover.cancelled'));
+      reject(new ZkqesError('prover.cancelled'));
       return;
     }
     const timer = setTimeout(() => {
@@ -312,14 +312,14 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     }, ms);
     const onAbort = () => {
       clearTimeout(timer);
-      reject(new QkbError('prover.cancelled'));
+      reject(new ZkqesError('prover.cancelled'));
     };
     signal?.addEventListener('abort', onAbort, { once: true });
   });
 }
 
 function checkAborted(signal?: AbortSignal): void {
-  if (signal?.aborted) throw new QkbError('prover.cancelled');
+  if (signal?.aborted) throw new ZkqesError('prover.cancelled');
 }
 
 /**

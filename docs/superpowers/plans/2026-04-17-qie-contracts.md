@@ -1,5 +1,7 @@
 # QIE Phase 2 — contracts-eng Plan
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **For agentic workers:** long-lived agent in worktree `/data/Develop/qie-wt/contracts`, branch `feat/qie-contracts`. Commit per task. Go idle between tasks; lead wakes you with next task via SendMessage.
 
 **Goal:** (1) Close Phase-1 registry debt — restore dual verifiers, add nullifier mapping, enforce rTL on-chain (Sprint 0); then (2) extend with escrow registration + revocation + arbitrators + Sepolia deploy (Sprint 1+).

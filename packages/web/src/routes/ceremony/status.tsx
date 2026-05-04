@@ -3,7 +3,7 @@
 // Polls the published `status.json` every 30 s and renders the
 // contributor chain + tri-state progress (planned / in-progress / complete).
 //
-// Production feed: https://prove.identityescrow.org/ceremony/status.json
+// Production feed: https://prove.zkqes.org/ceremony/status.json
 // Dev fixture:     /ceremony/status.json (committed in this repo)
 // Test override:   VITE_CEREMONY_STATUS_URL env var
 import { Link } from '@tanstack/react-router';

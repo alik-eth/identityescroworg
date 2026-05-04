@@ -1,5 +1,7 @@
 # V5.2 in-browser `snarkjs.groth16.fullProve` benchmark — A6.4 (V5.2 re-run)
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **TL;DR (updated 2026-05-03 with native rapidsnark data)**:
 >
 > Browser-only direct prove against V5.2 stub: Chrome 147 OOMs at zkey

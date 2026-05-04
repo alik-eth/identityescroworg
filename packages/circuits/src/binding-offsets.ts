@@ -1,8 +1,9 @@
-// Production-grade offset extractor for JCS-canonicalized QKB/2.0 binding
-// bytes. Walks the byte stream once, locating each field that
-// BindingParseV2CoreFast's 17 input signals require.
+// Production-grade offset extractor for JCS-canonicalized zkqes binding
+// bytes (binding "version" field value "QKB/2.0" — frozen protocol byte string;
+// see specs/2026-05-03-zkqes-rename-design.md §3). Walks the byte stream once,
+// locating each field that BindingParseV2CoreFast's 17 input signals require.
 //
-// Same logic as scripts/emit-qkb2-fixture.ts (the test-fixture generator),
+// Same logic as scripts/emit-zkqes2-fixture.ts (the test-fixture generator),
 // lifted into a stable production module so web-eng's witness builder and
 // the integration tests pull from one source.
 

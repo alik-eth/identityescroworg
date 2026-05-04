@@ -16,7 +16,7 @@ To regenerate:
 ```bash
 openssl req -x509 -newkey rsa:2048 \
   -keyout key.pem -out leaf.pem -nodes \
-  -subj "/CN=QKB Test Leaf/O=Test QTSP/C=UA" -sha256 \
+  -subj "/CN=Zkqes Test Leaf/O=Test QTSP/C=UA" -sha256 \
   -not_before "20510101000000Z" -not_after "20690101000000Z"
 openssl x509 -in leaf.pem -outform DER -out leaf.der
 rm key.pem        # private key is intentionally NOT committed

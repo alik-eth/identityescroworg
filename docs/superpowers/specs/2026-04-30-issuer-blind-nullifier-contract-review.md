@@ -1,5 +1,7 @@
 # Issuer-Blind Nullifier Amendment — Independent Contract-Side Review
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 **Date:** 2026-04-30
 **Reviewer:** contracts-eng
 **Reviews:** circuits-eng's spec at `docs/superpowers/specs/2026-04-30-issuer-blind-nullifier-amendment.md` (v0.2, commit `b2fc660` on `feat/v5arch-circuits`).

@@ -1,4 +1,4 @@
-// Thin re-export façade over @qkb/sdk's cades module.
+// Thin re-export façade over @zkqes/sdk's cades module.
 export {
   ALGORITHM_TAG_ECDSA,
   ALGORITHM_TAG_RSA,
@@ -7,4 +7,4 @@ export {
   type AlgorithmTag,
   type LeafAlg,
   type ParsedCades,
-} from '@qkb/sdk';
+} from '@zkqes/sdk';

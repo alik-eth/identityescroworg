@@ -13,8 +13,8 @@
 //   - 4xx re-throws verbatim (browser would also fail; surface to user)
 //   - 403 (origin pin) treated like 4xx (config issue, not transient)
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { CliProveError } from '@qkb/sdk';
-import type { WitnessV5_2 } from '@qkb/sdk';
+import { CliProveError } from '@zkqes/sdk';
+import type { WitnessV5_2 } from '@zkqes/sdk';
 import { runCliFirstProver } from '../../src/lib/cliFallbackProver';
 
 // Opaque stub — runCliFirstProver only forwards to proveViaCli, which

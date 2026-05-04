@@ -1,4 +1,0 @@
-# Secret-key bearing files — NEVER committed.
-# Run `node keygen.mjs` in this directory to regenerate locally.
-*.keys.json
-!*.keys.pub.json

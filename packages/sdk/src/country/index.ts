@@ -11,7 +11,7 @@
  * (rather than fetched at runtime) so the SDK works in offline /
  * file:// /  build-time-only environments.
  */
-import { QkbError } from '../errors/index.js';
+import { ZkqesError } from '../errors/index.js';
 
 export const SUPPORTED_COUNTRIES = ['UA'] as const;
 export type SupportedCountry = (typeof SUPPORTED_COUNTRIES)[number];
@@ -126,7 +126,7 @@ const BUILTIN_COUNTRIES: Readonly<Record<SupportedCountry, CountryConfig>> = {
 
 /**
  * Return the full runtime config for a supported country. Throws
- * `QkbError('qkb.countryUnsupported')` for unknown countries.
+ * `ZkqesError('qkb.countryUnsupported')` for unknown countries.
  *
  * Pass `overrides` to substitute (e.g.) test addresses or staging
  * verifiers without forking the SDK. The override is shallow-merged
@@ -139,7 +139,7 @@ export function getCountryConfig(
 ): CountryConfig {
   const base = BUILTIN_COUNTRIES[country];
   if (!base) {
-    throw new QkbError('qkb.countryUnsupported', { country });
+    throw new ZkqesError('qkb.countryUnsupported', { country });
   }
   if (!overrides) return base;
   return { ...base, ...overrides };

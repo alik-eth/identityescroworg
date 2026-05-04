@@ -6,7 +6,7 @@ If the coordinator has already published the launcher script, one command is
 enough:
 
 ```
-curl -sSL https://prove.identityescrow.org/ceremony/fly-launch.sh -o fly-launch.sh
+curl -sSL https://prove.zkqes.org/ceremony/fly-launch.sh -o fly-launch.sh
 bash fly-launch.sh
 ```
 
@@ -117,10 +117,10 @@ Opens a browser window. Log in once per session.
 **2. Create the app and scratch volume**
 
 ```
-flyctl apps create qkb-ceremony-<your-handle>
+flyctl apps create zkqes-ceremony-<your-handle>
 
 flyctl volumes create ceremony_scratch \
-  --app    qkb-ceremony-<your-handle> \
+  --app    zkqes-ceremony-<your-handle> \
   --region fra \
   --size   60 \
   --yes
@@ -128,7 +128,7 @@ flyctl volumes create ceremony_scratch \
 
 Your handle is a short identifier — any combination of lowercase letters,
 numbers, and hyphens. It becomes part of the app name, which appears in Fly's
-logs but not in any ceremony artefact. Example: `qkb-ceremony-vitalik`.
+logs but not in any ceremony artefact. Example: `zkqes-ceremony-vitalik`.
 
 The volume must be created before the machine runs; `fly machine run` cannot
 auto-create volumes. Frankfurt (`fra`) is the default region; change it if
@@ -137,8 +137,8 @@ you prefer a different data centre.
 **3. Start the ceremony machine**
 
 ```
-fly machine run ghcr.io/identityescroworg/qkb-ceremony:v1 \
-  --app       qkb-ceremony-<your-handle> \
+fly machine run ghcr.io/alik-eth/zkqes-ceremony:v1 \
+  --app       zkqes-ceremony-<your-handle> \
   --region    fra \
   --vm-size   performance-cpu-4x \
   --vm-memory 32768 \
@@ -161,12 +161,12 @@ exits. `--restart no` ensures it does not restart after the run completes.
 security reasoning.
 
 `CONTRIBUTOR_NAME` is the name that will appear in the public contribution log
-at `prove.identityescrow.org/ceremony/status.json`.
+at `prove.zkqes.org/ceremony/status.json`.
 
 **4. Watch the logs**
 
 ```
-flyctl logs -a qkb-ceremony-<your-handle> --follow
+flyctl logs -a zkqes-ceremony-<your-handle> --follow
 ```
 
 The full machine run takes ~45-60 minutes (downloads ~5 min, `snarkjs zkey
@@ -194,7 +194,7 @@ independently and publishes your entry to the public status feed.
 After you have saved the attestation hash, destroy the app:
 
 ```
-flyctl apps destroy qkb-ceremony-<your-handle> --yes
+flyctl apps destroy zkqes-ceremony-<your-handle> --yes
 ```
 
 This deletes the Fly app, the scratch volume, and all secrets. No copy of any
@@ -254,7 +254,7 @@ infrastructure beyond the lifetime of a single job run.
 **Image is digest-pinned, not tag-pinned**
 
 The launcher pins the GHCR ceremony image by SHA-256 digest
-(`ghcr.io/identityescroworg/qkb-ceremony@sha256:<digest>`), not by mutable
+(`ghcr.io/alik-eth/zkqes-ceremony@sha256:<digest>`), not by mutable
 tag (`:v1`). This closes a real supply-chain hole: even with push access to
 the GHCR namespace, an attacker cannot replace the image bytes that
 contributors actually pull, because Docker/Fly will refuse to use anything
@@ -268,7 +268,7 @@ compare the value in the launcher script (or in the pre-launch confirmation
 block) against the digest published at:
 
 ```
-https://prove.identityescrow.org/ceremony/image-digest.txt
+https://prove.zkqes.org/ceremony/image-digest.txt
 ```
 
 The launcher prints the resolved image reference in both the pre-launch
@@ -299,7 +299,7 @@ volume does ($0.15/GB/month). Destroy promptly.
 The entrypoint exits non-zero without uploading. This is a rare snarkjs edge
 case unrelated to your entropy. Tear down and re-run with fresh entropy:
 
-1. Destroy the failed app: `flyctl apps destroy qkb-ceremony-<your-handle> --yes`
+1. Destroy the failed app: `flyctl apps destroy zkqes-ceremony-<your-handle> --yes`
 2. Re-run the launcher (`bash fly-launch.sh`) — it will auto-generate fresh
    entropy or accept new entropy you paste.
 
@@ -323,13 +323,13 @@ The entrypoint prints the HTTP status and exits non-zero. Two common causes:
 Check whether the entrypoint exited with an error:
 
 ```
-flyctl machine list -a qkb-ceremony-<your-handle>
+flyctl machine list -a zkqes-ceremony-<your-handle>
 ```
 
 Then retrieve full logs:
 
 ```
-flyctl logs -a qkb-ceremony-<your-handle> --no-tail
+flyctl logs -a zkqes-ceremony-<your-handle> --no-tail
 ```
 
 If the error is a download failure (network timeout on a large file), destroy
@@ -345,7 +345,7 @@ the app and re-run the launcher. The downloads start from scratch each run
 Download and run `fly-launch.sh` from the coordinator's R2 host:
 
 ```
-curl -sSL https://prove.identityescrow.org/ceremony/fly-launch.sh -o fly-launch.sh
+curl -sSL https://prove.zkqes.org/ceremony/fly-launch.sh -o fly-launch.sh
 bash fly-launch.sh
 ```
 
@@ -375,14 +375,15 @@ if anything goes wrong with the scripts.
 
 ## 9. For the team-lead: publishing the image
 
-Contributors use the pre-built image `ghcr.io/identityescroworg/qkb-ceremony:v1`
+Contributors use the pre-built image `ghcr.io/alik-eth/zkqes-ceremony:v1`
 so they do not need Docker locally. This section documents how the team-lead
 builds and publishes that image. Contributors do not need to read this.
 
-The GHCR namespace `identityescroworg` is a placeholder pending the founder's
-branding decision (#21). Once the organisation name is confirmed, update the
-image tag in `launcher.sh` (line `GHCR_IMAGE=`), this README, and the
-Dockerfile `LABEL` in a single commit.
+The image is published under `ghcr.io/alik-eth/zkqes-ceremony` per the
+2026-05-03 zkqes rename (spec §1.Q6). The founder must build and push the
+image under the new name before the next ceremony run (out-of-band action).
+The digest pin in `launcher.sh` is intentionally empty until that push
+completes.
 
 **One-time setup**
 
@@ -395,7 +396,7 @@ Run from the `scripts/ceremony-coord/cookbooks/fly/` directory:
 
 ```
 docker build \
-  -t ghcr.io/identityescroworg/qkb-ceremony:v1 \
+  -t ghcr.io/alik-eth/zkqes-ceremony:v1 \
   .
 ```
 
@@ -403,10 +404,10 @@ docker build \
 
 ```
 echo $GITHUB_PAT | docker login ghcr.io -u <github-username> --password-stdin
-docker push ghcr.io/identityescroworg/qkb-ceremony:v1
-docker tag  ghcr.io/identityescroworg/qkb-ceremony:v1 \
-            ghcr.io/identityescroworg/qkb-ceremony:latest
-docker push ghcr.io/identityescroworg/qkb-ceremony:latest
+docker push ghcr.io/alik-eth/zkqes-ceremony:v1
+docker tag  ghcr.io/alik-eth/zkqes-ceremony:v1 \
+            ghcr.io/alik-eth/zkqes-ceremony:latest
+docker push ghcr.io/alik-eth/zkqes-ceremony:latest
 ```
 
 **Capture and pin the image digest (CRITICAL — do not skip)**
@@ -418,7 +419,7 @@ After `docker push`, capture the digest:
 
 ```
 DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' \
-  ghcr.io/identityescroworg/qkb-ceremony:v1 | awk -F@ '{print $2}')
+  ghcr.io/alik-eth/zkqes-ceremony:v1 | awk -F@ '{print $2}')
 echo "$DIGEST"   # sha256:<64-hex>
 ```
 
@@ -432,7 +433,7 @@ Then:
 
    ```
    echo "$DIGEST" > /tmp/image-digest.txt
-   wrangler r2 object put prove-identityescrow-org/ceremony/image-digest.txt \
+   wrangler r2 object put prove-zkqes-org/ceremony/image-digest.txt \
      --file /tmp/image-digest.txt \
      --content-type "text/plain; charset=utf-8"
    ```
@@ -445,10 +446,10 @@ Then:
 GitHub Container Registry packages are private by default. For contributors to
 pull without authenticating, set visibility to Public:
 
-1. Go to `github.com/orgs/identityescroworg/packages` → `qkb-ceremony`.
+1. Go to `github.com/users/alik-eth/packages` → `zkqes-ceremony`.
 2. Package settings → Danger Zone → Change visibility → Public.
 
-Once public, `flyctl deploy --image ghcr.io/identityescroworg/qkb-ceremony:v1`
+Once public, `flyctl deploy --image ghcr.io/alik-eth/zkqes-ceremony:v1` (or by digest)
 works for any contributor with no additional auth step.
 
 **Hosting `launcher.sh` on R2**
@@ -458,12 +459,12 @@ R2 admin scripts — do it after R2 creds land. Manual command for reference:
 
 ```
 # From scripts/ceremony-coord/
-wrangler r2 object put prove-identityescrow-org/ceremony/fly-launch.sh \
+wrangler r2 object put prove-zkqes-org/ceremony/fly-launch.sh \
   --file cookbooks/fly/launcher.sh \
   --content-type "text/plain; charset=utf-8"
 ```
 
-The object must be public-read at `prove.identityescrow.org/ceremony/fly-launch.sh`.
+The object must be public-read at `prove.zkqes.org/ceremony/fly-launch.sh`.
 
 **Future work: GitHub Actions automation**
 

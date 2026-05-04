@@ -1,5 +1,7 @@
 # V5.3 Orchestration Plan — OID-anchor + range-check + doc
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **For agentic workers**: REQUIRED SUB-SKILL: `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans`. Steps use checkbox `- [ ]` syntax for tracking.
 
 **Goal**: Ship V5.3 amendment closing the F1 OID-anchor Sybil vector, F2 rotationNewWallet range-check, F3 walletSecret↔msgSender doc — all in-place on the V5.2 main circuit with the public-signal layout UNCHANGED.
@@ -158,9 +160,9 @@ Before tagging `v0.5.3-pre-ceremony`:
   - All V5.2 tamper tests still green (no regression).
 - [x] **circuits-eng T3 — V5.3 stub ceremony script** at `ceremony/scripts/stub-v5_3.sh`. Cold ceremony run pending (Phase B coordination by lead).
 - [x] **CLAUDE.md V5.31-V5.34 invariants** documented in circuits package.
-- [ ] `pnpm -F @qkb/circuits test` full suite (vitest + remaining mocha) — gated on T2 commit.
+- [ ] `pnpm -F @zkqes/circuits test` full suite (vitest + remaining mocha) — gated on T2 commit.
 - [ ] `cd packages/contracts && forge test -vv` green (with new `InvalidNewWallet` cases on `rotateWallet`) — contracts-eng T4.
-- [ ] `pnpm -F @qkb/web test` + `pnpm -F @qkb/web exec playwright test` green — web-eng T5.
-- [ ] V5.3 stub ceremony reproducible: `pnpm -F @qkb/circuits ceremony:v5_3:stub`
+- [ ] `pnpm -F @zkqes/web test` + `pnpm -F @zkqes/web exec playwright test` green — web-eng T5.
+- [ ] V5.3 stub ceremony reproducible: `pnpm -F @zkqes/circuits ceremony:v5_3:stub`
 - [ ] Sample proof bytewise-stable across re-runs (manifest sha256s match)
 - [x] **Spec v0.2** amendments committed (cost projection corrected, optimizer footgun documented, F2 contract scope narrowed, ETSI string-tag scope, F1.5 SDK derivation, founder F1.2 minimal decision recorded).

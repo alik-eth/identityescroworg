@@ -13,35 +13,34 @@ There is **one** `Agent` tool with two usage patterns. The `subagent_type` param
 - `Agent({subagent_type: "general-purpose", prompt: "..."})` — **ephemeral subagent**. Runs, returns a result, terminates. Context is gone. Use for one-shot research/exploration only.
 - `Agent({subagent_type: "general-purpose", name: "web-eng", prompt: "..."})` — **named persistent agent**. Stays addressable after returning, resumable with full prior context.
 
-The worker team (flattener-eng, circuits-eng, contracts-eng, web-eng, qie-eng) is **always** the second form. **Call `Agent` with `name` exactly once per worker role, at the very first dispatch.** Every subsequent interaction — next task, greenlight, question, phase transition — goes through `SendMessage({to: "<name>", ...})`. Calling `Agent` a second time with the same `name` (or without a name for a role that already exists) spawns a *new* ephemeral agent alongside, losing the original's context and splitting the team.
+The worker team (flattener-eng, circuits-eng, contracts-eng, web-eng, fly-eng) is **always** the second form. **Call `Agent` with `name` exactly once per worker role, at the very first dispatch.** Every subsequent interaction — next task, greenlight, question, phase transition — goes through `SendMessage({to: "<name>", ...})`. Calling `Agent` a second time with the same `name` (or without a name for a role that already exists) spawns a *new* ephemeral agent alongside, losing the original's context and splitting the team.
 
 Verification pattern: to probe whether a worker is still addressable, just `SendMessage({to: "<name>", ...})`. A live agent replies; a never-spawned name errors. No need to re-`Agent` "just to be safe" — doing so alongside an already-named agent spawns a second instance and splits the role.
 
 Red flag — if you find yourself writing a multi-paragraph "Phase N summary" into a dispatch prompt, you're probably about to re-`Agent` a worker that's already alive. Stop and `SendMessage` instead; the context is still there.
 
-| Agent           | Owns                                         | Phase 1 branch              | Phase 2 branch        |
-|-----------------|----------------------------------------------|-----------------------------|-----------------------|
-| `flattener-eng` | `packages/lotl-flattener`                    | `feat/flattener`            | `feat/qie-flattener`  |
-| `circuits-eng`  | `packages/circuits`                          | `feat/circuits`             | *(no Phase 2 work)*   |
-| `contracts-eng` | `packages/contracts`                         | `feat/contracts`            | `feat/qie-contracts`  |
-| `web-eng`       | `packages/web`                               | `feat/web`                  | `feat/qie-web`        |
-| `qie-eng`       | `packages/qie-{core,agent,cli}`, `deploy/mock-qtsps` | *(new in Phase 2)* | `feat/qie-qie`        |
+| Agent           | Owns                                          | Typical branch          |
+|-----------------|-----------------------------------------------|-------------------------|
+| `flattener-eng` | `packages/lotl-flattener`                     | `feat/flattener` family |
+| `circuits-eng`  | `packages/circuits`                           | `feat/circuits` family  |
+| `contracts-eng` | `packages/contracts`, `packages/contracts-sdk`| `feat/contracts` family |
+| `web-eng`       | `packages/web`, `packages/sdk`, `packages/zkqes-cli` | `feat/web` family    |
+| `fly-eng`       | `scripts/ceremony-coord/cookbooks/fly`, related cookbooks | `feat/v5arch-fly` family |
+
+The pre-2026-05-03 worker layout also included a `qie-eng` row owning `packages/qie-{core,agent,cli}` + `deploy/mock-qtsps`. That track was parked, then deleted, in the zkqes structural rename (see `docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`). Workers reading older spec/plan corpora may see references; treat them as historical.
 
 ## Worktrees
 
-**Always dispatch workers to isolated worktrees** — shared CWD causes branch-switch races that corrupt everyone's work simultaneously. Learned the hard way early in Phase 1.
+**Always dispatch workers to isolated worktrees** — shared CWD causes branch-switch races that corrupt everyone's work simultaneously. Learned the hard way early in V5.
 
 ```bash
-# Phase 1 layout
-/data/Develop/qkb-wt/{flattener,circuits,contracts,web}
-
-# Phase 2 layout
-/data/Develop/qie-wt/{flattener,circuits,contracts,web,qie}
+# Typical layout
+/data/Develop/qkb-wt-v5/{flattener,circuits,contracts,web,fly}     # legacy directory name preserved across the rename to avoid breaking running worker context
 
 # Create
 cd /data/Develop/identityescroworg
 for pkg in flattener circuits contracts web; do
-  git worktree add /data/Develop/qkb-wt/$pkg -b feat/$pkg main
+  git worktree add /data/Develop/qkb-wt-v5/$pkg -b feat/$pkg main
 done
 ```
 
@@ -80,19 +79,19 @@ Interface contracts in the orchestration plan are **frozen early**. Changes requ
 
 Cross-package outputs don't flow automatically — lead moves them between worktrees. Table of expected pumps lives in each orchestration plan (§7). Examples:
 
-- `trusted-cas.json` / `qie-agents.json`: flattener worktree → web + qie worktrees.
-- Arbitrator ABIs + bytecode: contracts worktree → qie + web worktrees.
-- Sepolia deployment addresses: contracts (after live deploy) → web + qie worktrees.
+- `trusted-cas.json`: flattener worktree → web worktree.
+- Contract ABIs + bytecode: contracts worktree → web worktree.
+- Sepolia deployment addresses: contracts (after live deploy) → web worktree.
 - R2 prover URLs: circuits (after ceremony) → web worktree.
 
 Standard pump:
 
 ```bash
 # Example: copy a fixture from producer to consumer worktree
-cp /data/Develop/qkb-wt/flattener/dist/output/trusted-cas.json \
-   /data/Develop/qkb-wt/web/fixtures/
-git -C /data/Develop/qkb-wt/web add fixtures/trusted-cas.json
-git -C /data/Develop/qkb-wt/web commit -m "chore(web): pump trusted-cas.json from flattener"
+cp /data/Develop/qkb-wt-v5/flattener/dist/output/trusted-cas.json \
+   /data/Develop/qkb-wt-v5/web/fixtures/
+git -C /data/Develop/qkb-wt-v5/web add fixtures/trusted-cas.json
+git -C /data/Develop/qkb-wt-v5/web commit -m "chore(web): pump trusted-cas.json from flattener"
 ```
 
 ## Merging
@@ -105,14 +104,13 @@ Milestone merge order (typical):
 3. `feat/circuits` (unlocks artifact URLs).
 4. `feat/web` (last, depends on all three).
 
-Merge commits use `--no-ff` with a summary. Tag releases at phase boundaries (`v0.1.0-phase1`, `v0.2.0-phase2`).
+Merge commits use `--no-ff` with a summary. Tag releases at phase boundaries (`v0.5.x-pre-ceremony`, `v0.6.0-zkqes-rename`, etc.).
 
 ## Secrets hygiene
 
 **Never commit:**
 - `.env` (gitignored; root has admin key + R2 secrets).
 - `.p7s` files (globally gitignored; detached CAdES signatures carry a natural person's legal identity).
-- Generated agent secret-keys (`fixtures/qie/agents/agent-*.keys.json` — only `.keys.pub.json` is committed).
 
 If a secret enters git, `git reset --soft` + `git gc --prune=now --aggressive` while it's still only in local history. Pushed secrets require credential rotation, not git surgery.
 
@@ -132,9 +130,9 @@ Secrets that are NEVER messaged to workers:
 Per-package verification (lead runs after each worker commit):
 
 ```bash
-pnpm -F @qkb/<pkg> test
-pnpm -F @qkb/<pkg> typecheck
-pnpm -F @qkb/<pkg> build
+pnpm -F @zkqes/<pkg> test
+pnpm -F @zkqes/<pkg> typecheck
+pnpm -F @zkqes/<pkg> build
 ```
 
 For contracts:
@@ -143,10 +141,12 @@ For contracts:
 cd packages/contracts && forge test -vv
 ```
 
+(Note: `forge test` from main checkout currently fails on a pre-existing `remappings.txt` / OZ-submodule layout drift — see task #65. Until fixed, `forge test` is canonical from the contracts worktree.)
+
 For circuits (slow — 10+ min full run):
 
 ```bash
-pnpm -F @qkb/circuits test
+pnpm -F @zkqes/circuits test
 ```
 
 Inspect the commit diff manually for:
@@ -156,14 +156,8 @@ Inspect the commit diff manually for:
 
 ## Deployment
 
-Phase 1:
 - **Sepolia**: `forge script script/Deploy.s.sol --rpc-url $SEPOLIA_RPC_URL --broadcast --verify --etherscan-api-key $ETHERSCAN_KEY`. Admin key from root `.env`.
-- **Web hosting**: deployment target is out of scope for the orchestration playbook. The static SPA build (`pnpm -F @qkb/web build`) is host-agnostic; pick a static host as a separate decision.
-
-Phase 2:
-- Fresh `QKBRegistryV2` deploy (not upgrade — contract is non-upgradeable).
-- Arbitrator deploys (`DeployArbitrators.s.sol`).
-- Mock QTSPs via `deploy/mock-qtsps/docker-compose.yml` for E2E testing (not production).
+- **Web hosting**: GH Pages for the landing target at `zkqes.org` root (workflow `pages.yml`). The app target at `app.zkqes.org` is a separate deploy gated on Sepolia E2E §9.4 — host TBD (likely Cloudflare Pages or Vercel for SPA-friendly redirects).
 
 Pre-deploy checklist:
 - [ ] All CI green (`pnpm test` + `forge test` + e2e).
@@ -172,7 +166,7 @@ Pre-deploy checklist:
 - [ ] Tag the release commit.
 
 Post-deploy:
-- [ ] Update `fixtures/{contracts,qie/arbitrators}/sepolia.json` with new addresses.
+- [ ] Update `fixtures/contracts/sepolia.json` with new addresses.
 - [ ] Pump to consumer worktrees.
 - [ ] Verify contracts on Etherscan.
 
@@ -201,14 +195,18 @@ Post-deploy:
 ## When the user asks ambiguous orchestration questions
 
 Default answers that have been validated in session:
-- "Deploy first, then dispatch next phase" — sequential gates protect against half-finished Phase-1 state entering Phase-2 assumptions.
+- "Deploy first, then dispatch next phase" — sequential gates protect against half-finished state entering downstream assumptions.
 - "Compact before next phase if context > 100k" — codified in orchestration §S6b.
 - "Plan before implementation" — every phase goes through brainstorming → spec → plans → dispatch, even "simple" ones.
 - "Real fixtures over synthetic whenever possible" — the real Diia .p7s caught leaf-only-CMS shape divergence that synthetic fixtures hid.
+
+## ProtocolBytes invariant (V6.1)
+
+A small set of string literals in the codebase begin with `qkb-` and are NOT branding — they are protocol-internal byte strings hashed (keccak256 / SHA-256 / Poseidon) into circuit publics, contract storage, or off-chain deterministically-derived values. The full list is in `docs/superpowers/specs/2026-05-03-zkqes-rename-design.md` §3. Each occurrence in code carries a `// frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3` comment. **Do not rename these in any future amendment**; new domain-separation tags in new amendments use the `zkqes-` prefix from the start.
 
 ## Phase status snapshot
 
 Keep a one-line summary current here:
 
-- **Phase 1 QKB** — in flight. Circuits on T9a (split into 9a.1–9a.4). Contracts + flattener + web done through their respective plans minus T10/T11 ceremony and web deployment. Real-QES validation passes end-to-end against Diia.
-- **Phase 2 QIE** — design + plans frozen and amended for full E2E (PRIVACY, revoke, arbitrator UIs, v2 registry migration). Dispatch gated on Phase 1 deploy.
+- **V5 protocol** — shipped through V5.4 rollup at tag `v0.5.5-pre-ceremony`. Real-QES validation passes end-to-end against Diia. Phase B trusted setup ceremony recruiting; Sepolia + mainnet gated on ceremony.
+- **zkqes structural rename** — in flight on `chore/zkqes-rename-train` per spec `2026-05-03-zkqes-rename-design.md` + plan `2026-05-03-zkqes-rename-orchestration.md`. Full QKB/QIE/Identity-Escrow → zkqes. Tag baseline: `v0.6.0-zkqes-rename`.

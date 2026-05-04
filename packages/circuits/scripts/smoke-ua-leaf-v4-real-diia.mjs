@@ -1,14 +1,15 @@
-// Real-Diia V4 UA-leaf E2E smoke — parses a live Diia `.p7s` + QKB/2.0
-// binding, builds the 16-signal leaf witness, and runs snarkjs.groth16.fullProve
+// Real-Diia V4 UA-leaf E2E smoke — parses a live Diia `.p7s` + zkqes binding
+// (version "QKB/2.0" — frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3),
+// builds the 16-signal leaf witness, and runs snarkjs.groth16.fullProve
 // against the ceremonied zkey. If `verified: true`, task #24 closes.
 //
 // Usage:
 //   node scripts/smoke-ua-leaf-v4-real-diia.mjs \
-//     --binding '/home/alikvovk/Downloads/binding.qkb(5).json' \
-//     --p7s     '/home/alikvovk/Downloads/binding.qkb(5).json.p7s'
+//     --binding '/home/alikvovk/Downloads/binding.zkqes.json' \
+//     --p7s     '/home/alikvovk/Downloads/binding.zkqes.json.p7s'
 //
 // Or with env vars:
-//   QKB_BINDING=... QKB_P7S=... node scripts/smoke-ua-leaf-v4-real-diia.mjs
+//   ZKQES_BINDING=... ZKQES_P7S=... node scripts/smoke-ua-leaf-v4-real-diia.mjs
 
 import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
@@ -25,7 +26,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = resolve(__dirname, '..');
 const WASM = join(
   PKG_ROOT,
-  'build/ua-leaf/QKBPresentationEcdsaLeafV4_UA_js/QKBPresentationEcdsaLeafV4_UA.wasm',
+  'build/ua-leaf/ZkqesPresentationEcdsaLeafV4_UA_js/ZkqesPresentationEcdsaLeafV4_UA.wasm',
 );
 const ZKEY = join(PKG_ROOT, 'build/ua-leaf/ua_leaf_final.zkey');
 const VKEY = join(PKG_ROOT, 'build/ua-leaf/vkey.json');
@@ -45,16 +46,16 @@ function argVal(flag, fallbackEnv) {
   if (fallbackEnv && process.env[fallbackEnv]) return process.env[fallbackEnv];
   return null;
 }
-const BINDING_PATH = argVal('--binding', 'QKB_BINDING');
-const P7S_PATH = argVal('--p7s', 'QKB_P7S');
-const RS_BIN = argVal('--rapidsnark-bin', 'QKB_RAPIDSNARK_BIN')
+const BINDING_PATH = argVal('--binding', 'ZKQES_BINDING');
+const P7S_PATH = argVal('--p7s', 'ZKQES_P7S');
+const RS_BIN = argVal('--rapidsnark-bin', 'ZKQES_RAPIDSNARK_BIN')
   ?? '/tmp/rapidsnark-bin/rapidsnark-linux-x86_64-v0.0.8/bin/prover';
 if (!BINDING_PATH || !P7S_PATH) {
   console.error('usage: node smoke-ua-leaf-v4-real-diia.mjs --binding <path> --p7s <path> [--rapidsnark-bin <path>]');
   process.exit(2);
 }
 if (!existsSync(RS_BIN)) {
-  console.error(`rapidsnark binary not found at ${RS_BIN}. pass --rapidsnark-bin <path> or set QKB_RAPIDSNARK_BIN.`);
+  console.error(`rapidsnark binary not found at ${RS_BIN}. pass --rapidsnark-bin <path> or set ZKQES_RAPIDSNARK_BIN.`);
   process.exit(2);
 }
 
@@ -391,15 +392,15 @@ async function main() {
 
   // Parse binding JSON (for pk + policy.leafHash + timestamp)
   const bindingObj = JSON.parse(bindingBytes.toString('utf8'));
-  if (bindingObj.version !== 'QKB/2.0') {
-    throw new Error(`binding.version must be QKB/2.0 (got ${bindingObj.version})`);
+  if (bindingObj.version !== 'QKB/2.0') { // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
+    throw new Error(`binding.version must be QKB/2.0 (got ${bindingObj.version})`); // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
   }
   const { X: secpX, Y: secpY } = extractBindingPkXY(bindingObj.pk);
   const policyLeafHashHex = bindingObj.policy.leafHash.replace(/^0x/, '');
   const policyLeafHashBytes = Buffer.from(policyLeafHashHex, 'hex');
   const policyLeafHashField = digestToField(policyLeafHashBytes);
   const timestamp = bindingObj.timestamp;
-  console.log('binding ok: version QKB/2.0, policyId=' + bindingObj.policy.policyId);
+  console.log('binding ok: version QKB/2.0, policyId=' + bindingObj.policy.policyId); // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
 
   // Parse CAdES
   const { leaf, leafDer, signedAttrs, signatureValue } = parseCades(p7sBytes);
@@ -531,7 +532,7 @@ async function main() {
   //   step 2: spawn rapidsnark prover binary with (zkey, wtns, proof, public)
   //           — ~30–60 s for 6.38M constraints, peak RAM ~3–4 GB
   //   step 3: snarkjs.groth16.verify(vkey, public, proof) — verify locally
-  const work = mkdtempSync(join(tmpdir(), 'qkb-real-diia-'));
+  const work = mkdtempSync(join(tmpdir(), 'zkqes-real-diia-'));
   const wtnsPath = join(work, 'leaf.wtns');
   const rsProofPath = join(work, 'leaf.proof.json');
   const rsPublicPath = join(work, 'leaf.public.json');
@@ -576,7 +577,7 @@ async function main() {
   // proof; the chain side is validated separately via V3 byte-identical reuse).
   // leafSpkiCommit must glue: chainSignals[2] === leafSignals[13].
   const bundle = {
-    schema: 'qkb-v4-leaf-proof-bundle/v1',
+    schema: 'zkqes-v4-leaf-proof-bundle/v1',
     country: 'UA',
     trustedListRoot: '0x25ce7bfa7693e391a7e1d5df666caa5b622bf709cc6797289a74bfc272462b3e',
     policyRoot: '0x' + BigInt(tree.root).toString(16).padStart(64, '0'),

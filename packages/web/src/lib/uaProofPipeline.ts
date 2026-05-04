@@ -11,7 +11,7 @@
  * from the circuits worktree.
  */
 import { buildPoseidon } from 'circomlibjs';
-import { QkbError } from './errors';
+import { ZkqesError } from './errors';
 import { extractDobFromDiiaUA } from './dob';
 import type { BindingV2 } from './bindingV2';
 import type { Phase2Witness } from './witness';
@@ -129,7 +129,7 @@ export async function buildUaLeafPublicSignalsV4(
     dobSupported.toString(),
   ];
   if (publicLeafV4.length !== 16) {
-    throw new QkbError('qkb.leafPublicSignals', {
+    throw new ZkqesError('qkb.leafPublicSignals', {
       reason: 'expected 16 signals in UA V4 public-leaf output',
       got: publicLeafV4.length,
     });

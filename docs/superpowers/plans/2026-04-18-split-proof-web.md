@@ -1,5 +1,7 @@
 # Split-Proof Pivot — `web-eng` Plan
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans.
 
 **Goal:** Rewrite witness-building + registry-submission paths so the SPA generates two Groth16 proofs (leaf + chain) per QES presentation and submits them together to `QKBRegistryV3`. Update unit tests + Playwright E2E.

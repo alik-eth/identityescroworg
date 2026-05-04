@@ -2,14 +2,14 @@ import { expect } from 'chai';
 import { buildPoseidon } from 'circomlibjs';
 import { compile, type CompiledCircuit } from '../helpers/compile';
 
-describe('QKBPresentationAgeV4', function () {
+describe('ZkqesPresentationAgeV4', function () {
   this.timeout(600000);
 
   let circuit: CompiledCircuit;
   let poseidonDobCommit: (dobYmd: bigint, sourceTag: bigint) => bigint;
 
   before(async () => {
-    circuit = await compile('QKBPresentationAgeV4.circom');
+    circuit = await compile('ZkqesPresentationAgeV4.circom');
     const poseidon = await buildPoseidon();
     const F = poseidon.F;
     poseidonDobCommit = (dobYmd, sourceTag) =>

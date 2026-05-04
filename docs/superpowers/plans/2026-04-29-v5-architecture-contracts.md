@@ -1,5 +1,7 @@
 # V5 Architecture — contracts-eng Implementation Plan
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Deliver `QKBRegistryV5.sol` (the V5 verification gateway) plus the two supporting libraries (`P256Verify.sol` wrapping EIP-7212, `PoseidonMerkle.sol` for trust-list and policy-list verification), Foundry tests, Base Sepolia deploy script, and a cross-package fixture pump path. ABI-stable `IQKBRegistry` interface preserved across V4↔V5; `IdentityEscrowNFT` constructor swap only.
@@ -102,7 +104,7 @@ interface IQKBRegistry {
 }
 ```
 
-Don't extend this interface — third-party SDK consumers (`Verified` modifier in `@qkb/contracts-sdk`) work unchanged.
+Don't extend this interface — third-party SDK consumers (`Verified` modifier in `@zkqes/contracts-sdk`) work unchanged.
 
 ### §0.5 — Trust-list and policy-list Merkle leaves
 
@@ -238,7 +240,7 @@ The plan's `HASH/R/S/X/Y` placeholders need real values. Generate via:
 cd /data/Develop/qkb-wt-v5/arch-contracts/packages/contracts
 
 # Use Foundry's `cast` to extract from a known signature.
-# If circuits-eng has shipped /data/Develop/identityescroworg/fixtures/spki-commit/v5-parity.json,
+# If circuits-eng has shipped /data/Develop/zkqes/fixtures/spki-commit/v5-parity.json,
 # you can derive X, Y from that fixture's leaf SPKI bytes (the hi/lo 32-byte coords are
 # bytes [27..58] and [59..90] of the 91-byte SPKI).
 

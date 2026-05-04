@@ -1,13 +1,13 @@
 /**
- * Witness bundle serialization for offline proving via @qkb/cli.
+ * Witness bundle serialization for offline proving via @zkqes/cli.
  *
  * Called from /upload when the user chooses "offline proving" — instead of
  * invoking the in-browser snarkjs worker (which OOMs on the 4.5 GB leaf
  * zkey), we write a single JSON bundle the user downloads and feeds to
- * `qkb prove` on their host.
+ * `zkqes prove` on their host.
  *
- * The bundle mirrors the CLI-side schema in packages/qkb-cli/src/witness-io.ts
- * (`qkb-witness/v1`). Keep the two in sync — schema evolution needs a bump in
+ * The bundle mirrors the CLI-side schema in packages/zkqes-cli/src/witness-io.ts
+ * (`zkqes-witness/v1`). Keep the two in sync — schema evolution needs a bump in
  * both files.
  */
 import type { Phase2Witness } from './witness';
@@ -21,7 +21,7 @@ export interface WitnessArtifactSide {
 }
 
 export interface WitnessBundle {
-  readonly schema: 'qkb-witness/v1';
+  readonly schema: 'zkqes-witness/v1';
   readonly circuitVersion: string;
   readonly algorithmTag: 0 | 1;
   readonly artifacts: {
@@ -33,7 +33,7 @@ export interface WitnessBundle {
 }
 
 export interface ProofBundle {
-  readonly schema: 'qkb-proof-bundle/v1';
+  readonly schema: 'zkqes-proof-bundle/v1';
   readonly circuitVersion: string;
   readonly algorithmTag: 0 | 1;
   readonly proofLeaf: Record<string, unknown>;
@@ -52,7 +52,7 @@ export function buildWitnessBundle(args: {
     chain: WitnessArtifactSide;
   };
   return {
-    schema: 'qkb-witness/v1',
+    schema: 'zkqes-witness/v1',
     circuitVersion: args.circuitVersion,
     algorithmTag: args.algorithmTag,
     artifacts: {
@@ -85,9 +85,9 @@ export function parseProofBundle(raw: string): ProofBundle {
     throw new Error('Proof bundle must be a JSON object');
   }
   const o = parsed as Record<string, unknown>;
-  if (o.schema !== 'qkb-proof-bundle/v1') {
+  if (o.schema !== 'zkqes-proof-bundle/v1') {
     throw new Error(
-      `Proof bundle schema must be "qkb-proof-bundle/v1" (got ${JSON.stringify(o.schema)})`,
+      `Proof bundle schema must be "zkqes-proof-bundle/v1" (got ${JSON.stringify(o.schema)})`,
     );
   }
   if (o.algorithmTag !== 0 && o.algorithmTag !== 1) {

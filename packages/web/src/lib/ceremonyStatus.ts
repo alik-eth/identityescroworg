@@ -5,7 +5,7 @@
 // Frontend polls every 30 s and renders progress + contributor chain.
 //
 // Production URL (post-§9.4):
-//   https://prove.identityescrow.org/ceremony/status.json
+//   https://prove.zkqes.org/ceremony/status.json
 //
 // Dev fixture (this repo):
 //   public/ceremony/status.json

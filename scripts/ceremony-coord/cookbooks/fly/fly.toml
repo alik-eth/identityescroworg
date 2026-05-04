@@ -6,11 +6,11 @@
 # There is no [http_service].  The machine runs, contributes, exits.
 # After your round completes, destroy the app:
 #
-#   flyctl apps destroy qkb-ceremony-<your-handle> --yes
+#   flyctl apps destroy zkqes-ceremony-<your-handle> --yes
 #
 # See README.md for the full contributor workflow.
 
-app = "qkb-ceremony-your-handle"
+app = "zkqes-ceremony-your-handle"
 primary_region = "fra"
 
 # One process group — the contribution job.

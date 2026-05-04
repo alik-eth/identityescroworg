@@ -2,7 +2,7 @@
 /**
  * `v5_2-prove` — V5.2 single-circuit Groth16 prove CLI with two backends.
  *
- * Replaces the V4-era `packages/qkb-cli/` (split-proof leaf+chain shape;
+ * Replaces the V4-era `packages/zkqes-cli/` (split-proof leaf+chain shape;
  * deprecated 2026-04-29).  V5.2 is a single circuit so the CLI shape is
  * one-zkey-one-wasm-one-witness, no bundle.
  *
@@ -17,12 +17,12 @@
  * Usage:
  *   node scripts/v5_2-prove.mjs \
  *     --witness ceremony/v5_2/witness-input-sample.json \
- *     --zkey    ceremony/v5_2/qkb-v5_2-stub.zkey \
- *     --wasm    build/v5_2-stub/QKBPresentationV5_js/QKBPresentationV5.wasm \
+ *     --zkey    ceremony/v5_2/zkqes-v5_2-stub.zkey \
+ *     --wasm    build/v5_2-stub/ZkqesPresentationV5_js/ZkqesPresentationV5.wasm \
  *     --vkey    ceremony/v5_2/verification_key.json \
  *     --out-dir /tmp/v5_2-prove-out \
  *     --backend rapidsnark \
- *     --rapidsnark-bin /home/alikvovk/.cache/qkb-bin/rapidsnark-linux-x86_64-v0.0.8/bin/prover
+ *     --rapidsnark-bin /home/alikvovk/.cache/zkqes-bin/rapidsnark-linux-x86_64-v0.0.8/bin/prover
  *
  * Emits to stderr:
  *   timing breakdown (witness calc, prove, verify) in seconds

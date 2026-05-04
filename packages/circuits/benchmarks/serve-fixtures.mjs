@@ -34,8 +34,8 @@
  *   GET /                   → benchmarks/v5_2-fullprove-harness.html
  *   GET /harness.html       → same
  *   GET /snarkjs.min.js     → node_modules/.pnpm/snarkjs@0.7.6/.../snarkjs.min.js
- *   GET /v5_2.wasm          → build/v5_2-stub/QKBPresentationV5_js/QKBPresentationV5.wasm
- *   GET /v5_2.zkey          → ceremony/v5_2/qkb-v5_2-stub.zkey   (Range-honoring)
+ *   GET /v5_2.wasm          → build/v5_2-stub/ZkqesPresentationV5_js/ZkqesPresentationV5.wasm
+ *   GET /v5_2.zkey          → ceremony/v5_2/zkqes-v5_2-stub.zkey   (Range-honoring)
  *   GET /witness-input.json → ceremony/v5_2/witness-input-sample.json
  *   GET /verification_key.json → ceremony/v5_2/verification_key.json
  *   GET /proof-sample.json  → ceremony/v5_2/proof-sample.json
@@ -71,11 +71,11 @@ const ROUTES = {
   '/snarkjs.min.js': SNARKJS_UMD,
   [`/${VERSION}.wasm`]: resolve(
     PKG_DIR,
-    `build/${VERSION}-stub/QKBPresentationV5_js/QKBPresentationV5.wasm`,
+    `build/${VERSION}-stub/ZkqesPresentationV5_js/ZkqesPresentationV5.wasm`,
   ),
   [`/${VERSION}.zkey`]: resolve(
     PKG_DIR,
-    `ceremony/${VERSION}/qkb-${VERSION}-stub.zkey`,
+    `ceremony/${VERSION}/zkqes-${VERSION}-stub.zkey`,
   ),
   '/witness-input.json': resolve(
     PKG_DIR,

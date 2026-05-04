@@ -8,7 +8,7 @@ import {
 } from 'wagmi';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { useTranslation } from 'react-i18next';
-import { deploymentForChainId, qkbRegistryV4Abi, identityEscrowNftAbi } from '@qkb/sdk';
+import { deploymentForChainId, zkqesRegistryV4Abi, zkqesCertificateAbi } from '@zkqes/sdk';
 import { CertificatePreview } from '../../components/CertificatePreview';
 import { StepIndicator } from '../../components/StepIndicator';
 import { DocumentFooter } from '../../components/DocumentFooter';
@@ -21,15 +21,15 @@ export function MintScreen() {
 
   const { data: nullifier } = useReadContract({
     address: dep?.registry,
-    abi: qkbRegistryV4Abi,
+    abi: zkqesRegistryV4Abi,
     functionName: 'nullifierOf',
     args: address ? [address] : undefined,
     query: { enabled: !!address && !!dep },
   });
 
   const { data: tokenIdByNullifier } = useReadContract({
-    address: dep?.identityEscrowNft,
-    abi: identityEscrowNftAbi,
+    address: dep?.zkqesCertificate,
+    abi: zkqesCertificateAbi,
     functionName: 'tokenIdByNullifier',
     args: nullifier ? [nullifier as `0x${string}`] : undefined,
     query: { enabled: !!nullifier && !!dep },
@@ -44,8 +44,8 @@ export function MintScreen() {
   const onMint = () => {
     if (!dep) return;
     writeContract({
-      address: dep.identityEscrowNft,
-      abi: identityEscrowNftAbi,
+      address: dep.zkqesCertificate,
+      abi: zkqesCertificateAbi,
       functionName: 'mint',
     });
   };
@@ -123,7 +123,7 @@ export function MintScreen() {
                     chainId === 8453
                       ? 'opensea.io/assets/base/'
                       : 'testnets.opensea.io/assets/sepolia/'
-                  }${dep?.identityEscrowNft}/${previewTokenId}`}
+                  }${dep?.zkqesCertificate}/${previewTokenId}`}
                   target="_blank"
                   rel="noreferrer"
                   className="px-6 py-3 underline"
@@ -131,7 +131,7 @@ export function MintScreen() {
                   {t('mint.opensea', 'View on OpenSea')}
                 </a>
                 <a
-                  href={`https://twitter.com/intent/tweet?text=I'm a verified Ukrainian. Certificate %E2%84%96${previewTokenId} on identityescrow.org`}
+                  href={`https://twitter.com/intent/tweet?text=I'm a verified Ukrainian. Certificate %E2%84%96${previewTokenId} on zkqes.org`}
                   target="_blank"
                   rel="noreferrer"
                   className="px-6 py-3 underline"

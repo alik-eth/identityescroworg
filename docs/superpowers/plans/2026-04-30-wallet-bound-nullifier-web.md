@@ -1,5 +1,7 @@
 # Wallet-Bound Nullifier — web-eng Implementation Plan
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **For web-eng:** Implement the spec at `docs/superpowers/specs/2026-04-30-wallet-bound-nullifier-amendment.md`. Follow superpowers:test-driven-development.
 
 **Goal:** Add `personal_sign`-based `walletSecret` derivation to the V5 register flow, integrate the new 19-field witness, expose `rotateWallet()` UX, gate SCW path with explicit opt-in. Update Playwright e2e for V5.1 happy path.
@@ -44,7 +46,7 @@
 
 - [ ] **Step 5: Run tests**:
 ```bash
-pnpm -F @qkb/web test src/lib/walletSecret.test.ts
+pnpm -F @zkqes/web test src/lib/walletSecret.test.ts
 ```
 
 - [ ] **Step 6: Commit**
@@ -64,7 +66,7 @@ git commit -m "web(v51): walletSecret derivation library (EOA HKDF + SCW Argon2i
 - Test: `packages/web/tests/unit/buildWitness.test.ts`
 - Reference: orchestration §1.1 + §1.2
 
-- [ ] **Step 1: Import @qkb/circuits**'s updated witness builder. The `buildWitnessV51()` function takes `walletSecret` as new private input.
+- [ ] **Step 1: Import @zkqes/circuits**'s updated witness builder. The `buildWitnessV51()` function takes `walletSecret` as new private input.
 
 - [ ] **Step 2: Thread walletSecret** through the existing register flow. After Step 1 (binding generation) and Step 2 (QES extract subjectSerial), call `deriveWalletSecretEoa(walletClient, subjectSerialPacked)`. Result feeds into witness build.
 
@@ -76,8 +78,8 @@ git commit -m "web(v51): walletSecret derivation library (EOA HKDF + SCW Argon2i
 
 - [ ] **Step 6: Run tests + typecheck**:
 ```bash
-pnpm -F @qkb/web test
-pnpm -F @qkb/web typecheck
+pnpm -F @zkqes/web test
+pnpm -F @zkqes/web typecheck
 ```
 
 - [ ] **Step 7: Commit**
@@ -98,7 +100,7 @@ git commit -m "web(v51): walletSecret derivation in register flow + 19-field wit
 - Modify: `packages/web/src/hooks/useRegister.ts` (or wherever the tx call lives)
 - Reference: orchestration §1.3
 
-- [ ] **Step 1: Import bumped ABI** from `@qkb/contracts-sdk` (the regen from contracts-eng's Task 4 + lead pump).
+- [ ] **Step 1: Import bumped ABI** from `@zkqes/contracts-sdk` (the regen from contracts-eng's Task 4 + lead pump).
 
 - [ ] **Step 2: Update register call** to take 19-field publicSignals.
 
@@ -108,7 +110,7 @@ git commit -m "web(v51): walletSecret derivation in register flow + 19-field wit
 
 - [ ] **Step 5: Run e2e**:
 ```bash
-pnpm -F @qkb/web exec playwright test --project=v5
+pnpm -F @zkqes/web exec playwright test --project=v5
 ```
 
 - [ ] **Step 6: Commit**
@@ -143,9 +145,9 @@ git commit -m "web(v51): register tx submission with 19-field publicSignals"
 
 - [ ] **Step 6: Run e2e + typecheck + build**:
 ```bash
-pnpm -F @qkb/web exec playwright test --project=v5
-pnpm -F @qkb/web typecheck
-pnpm -F @qkb/web build
+pnpm -F @zkqes/web exec playwright test --project=v5
+pnpm -F @zkqes/web typecheck
+pnpm -F @zkqes/web build
 ```
 
 - [ ] **Step 7: Commit**
@@ -214,10 +216,10 @@ git commit -m "web(v51): EN + UK i18n + civic-monumental polish for new flows"
 ## Verification (lead runs after each commit)
 
 ```bash
-pnpm -F @qkb/web test                        # unit + i18n coverage
-pnpm -F @qkb/web typecheck                   # clean
-pnpm -F @qkb/web build                       # production build succeeds
-pnpm -F @qkb/web exec playwright test        # all e2e suites green (v5, ceremony, route-coverage, regression)
+pnpm -F @zkqes/web test                        # unit + i18n coverage
+pnpm -F @zkqes/web typecheck                   # clean
+pnpm -F @zkqes/web build                       # production build succeeds
+pnpm -F @zkqes/web exec playwright test        # all e2e suites green (v5, ceremony, route-coverage, regression)
 ```
 
 Lead inspects diff for:
@@ -232,6 +234,6 @@ Lead pumps from circuits-eng + contracts-eng:
 
 - `verification_key.json` from circuits → `packages/web/packages/sdk/fixtures/v5_1/`
 - Sample (witness, public, proof) triple from circuits → web-eng's E2E test fixtures
-- Bumped ABI from contracts-sdk → web-eng's `@qkb/contracts-sdk` consumer
+- Bumped ABI from contracts-sdk → web-eng's `@zkqes/contracts-sdk` consumer
 
 These pumps land before Task 3 (which depends on the ABI) and Task 5 e2e (which needs sample-proof + zkey for stub flows).

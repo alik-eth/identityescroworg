@@ -2,12 +2,12 @@
 pragma solidity 0.8.24;
 
 import "forge-std/Test.sol";
-import { QKBRegistryV4 } from "../../src/QKBRegistryV4.sol";
+import { ZkqesRegistryV4 } from "../../src/ZkqesRegistryV4.sol";
 import {
     IGroth16LeafVerifierV4,
     IGroth16ChainVerifierV4,
     IGroth16AgeVerifierV4
-} from "../../src/QKBVerifierV4Draft.sol";
+} from "../../src/ZkqesVerifierV4Draft.sol";
 import { Groth16Verifier as LeafVerifierV4_UA } from "../../src/verifiers/LeafVerifierV4_UA.sol";
 import { Groth16Verifier as AgeVerifierV4 } from "../../src/verifiers/AgeVerifierV4.sol";
 
@@ -40,7 +40,7 @@ contract MockAgeVerifierAccepting is IGroth16AgeVerifierV4 {
 
 /// @notice Real-Diia E2E on-chain gate. Consumes the proof bundle written
 ///         by `scripts/smoke-ua-leaf-v4-real-diia.mjs` and submits it to
-///         a freshly deployed QKBRegistryV4[UA] with the REAL ceremonied
+///         a freshly deployed ZkqesRegistryV4[UA] with the REAL ceremonied
 ///         leaf verifier contract. If `register()` accepts the proof +
 ///         the nullifier is persisted + `BindingRegistered` event fires,
 ///         the real-Diia leaf circuit end-to-end path is proven.
@@ -83,7 +83,7 @@ contract RealDiiaE2ETest is Test {
         MockChainVerifierAccepting chainV = new MockChainVerifierAccepting();
         MockAgeVerifierAccepting ageV = new MockAgeVerifierAccepting();
 
-        QKBRegistryV4 registry = new QKBRegistryV4({
+        ZkqesRegistryV4 registry = new ZkqesRegistryV4({
             country_: "UA",
             trustedListRoot_: trustedListRoot,
             policyRoot_: policyRoot,
@@ -94,8 +94,8 @@ contract RealDiiaE2ETest is Test {
         });
 
         // Build ChainProof (mock-accepted; any A/B/C works).
-        QKBRegistryV4.ChainProof memory cp = QKBRegistryV4.ChainProof({
-            proof: QKBRegistryV4.G16Proof({
+        ZkqesRegistryV4.ChainProof memory cp = ZkqesRegistryV4.ChainProof({
+            proof: ZkqesRegistryV4.G16Proof({
                 a: [uint256(1), uint256(2)],
                 b: [[uint256(3), uint256(4)], [uint256(5), uint256(6)]],
                 c: [uint256(7), uint256(8)]
@@ -108,8 +108,8 @@ contract RealDiiaE2ETest is Test {
         // Build LeafProof from bundle. pi_b G2 pairs are swapped within each
         // row: snarkjs emits [x0, x1] / [y0, y1], Solidity verifier consumes
         // [x1, x0] / [y1, y0].
-        QKBRegistryV4.LeafProof memory lp = QKBRegistryV4.LeafProof({
-            proof: QKBRegistryV4.G16Proof({
+        ZkqesRegistryV4.LeafProof memory lp = ZkqesRegistryV4.LeafProof({
+            proof: ZkqesRegistryV4.G16Proof({
                 a: [aArr[0], aArr[1]],
                 b: [[b0[1], b0[0]], [b1[1], b1[0]]],
                 c: [cArr[0], cArr[1]]

@@ -3,7 +3,7 @@
 // Source-of-truth: cross-read from circuits-eng's `7d07536`
 // (`/data/Develop/qkb-wt-v5/arch-circuits/packages/circuits/src/types.ts`).
 // We keep a verbatim copy here so the V5 register flow has no runtime
-// dependency on @qkb/circuits (which is Node-flavoured: `node:buffer`,
+// dependency on @zkqes/circuits (which is Node-flavoured: `node:buffer`,
 // `node:crypto`). The cross-package "byte-identical witness" contract
 // still applies — every shape here MUST match circuits-eng's source.
 // If circuits-eng amends the schema, drift is caught by the integration

@@ -1,5 +1,7 @@
 # Landing Page + Demo-Route Split — Implementation Plan
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the current 2-line hero at `/` with a real landing page that explains QKB and QIE to a first-time visitor, and move the interactive demo (QKB 4-step flow + QIE escrow flows + custodian UI) under a `/demo` prefix so the landing is cleanly separated from the working prototype.

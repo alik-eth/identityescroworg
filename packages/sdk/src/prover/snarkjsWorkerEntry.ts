@@ -4,13 +4,13 @@
  * Consumer wires this in their Worker file:
  * ```ts
  * // packages/web/src/workers/snarkjsWorker.ts
- * import { startSnarkjsWorker } from '@qkb/sdk/prover/snarkjsWorkerEntry';
+ * import { startSnarkjsWorker } from '@zkqes/sdk/prover/snarkjsWorkerEntry';
  * startSnarkjsWorker();
  * ```
  *
  * Then on the main thread:
  * ```ts
- * import { SnarkjsWorkerProver } from '@qkb/sdk/prover/snarkjsWorker';
+ * import { SnarkjsWorkerProver } from '@zkqes/sdk/prover/snarkjsWorker';
  * const worker = new Worker(
  *   new URL('./workers/snarkjsWorker.ts', import.meta.url),
  *   { type: 'module' },

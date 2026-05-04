@@ -6,7 +6,7 @@ pragma circom 2.1.9;
 // (index bit = 0) puts the working node on the left of the hash; sibling-
 // on-the-left (index bit = 1) puts the working node on the right.
 //
-// Mirrors the tree-construction rule used by `@qkb/lotl-flattener`'s
+// Mirrors the tree-construction rule used by `@zkqes/lotl-flattener`'s
 // MerkleBuilder: at every level, two children are hashed pairwise; an
 // orphan node at a level is paired with itself. The witness builder
 // supplies the appropriate sibling (which may equal the working node when

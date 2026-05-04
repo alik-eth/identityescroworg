@@ -1,8 +1,8 @@
 {
-  "name": "@qkb/circuits",
+  "name": "@zkqes/circuits",
   "version": "0.0.0",
   "private": true,
-  "description": "QKB — Circom circuits for relation R_QKB (V5: ECDSA-on-chain, Poseidon nullifiers, single-circuit ZK proof)",
+  "description": "zkqes — Circom circuits for the V5 presentation proof (ECDSA-on-chain, Poseidon nullifiers, single-circuit ZK proof)",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "scripts": {
@@ -10,7 +10,7 @@
     "test:vitest": "vitest run",
     "test:v5": "mocha --reporter spec --exit --timeout 600000 -r ts-node/register 'test/integration/{qkb-presentation-v5,build-witness-v5,v5-e2e,v5-prove-verify}.test.ts'",
     "build": "bash ceremony/scripts/compile.sh",
-    "compile:v5": "mkdir -p build/qkb-presentation && circom circuits/QKBPresentationV5.circom --r1cs --wasm -l circuits -l node_modules -o build/qkb-presentation/ && pnpm exec snarkjs r1cs info build/qkb-presentation/QKBPresentationV5.r1cs",
+    "compile:v5": "mkdir -p build/zkqes-presentation && circom circuits/ZkqesPresentationV5.circom --r1cs --wasm -l circuits -l node_modules -o build/zkqes-presentation/ && pnpm exec snarkjs r1cs info build/zkqes-presentation/ZkqesPresentationV5.r1cs",
     "ceremony:v5:stub": "bash ceremony/scripts/stub-v5.sh",
     "ceremony:v5_1:stub": "bash ceremony/scripts/stub-v5_1.sh",
     "ceremony:v5_2:stub": "bash ceremony/scripts/stub-v5_2.sh",

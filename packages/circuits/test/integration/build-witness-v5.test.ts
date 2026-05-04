@@ -4,7 +4,7 @@
 //   (a) `buildWitnessV5` produces a witness JSON that satisfies all
 //       constraints when handed to the V5 main circuit (~ heavy compile,
 //       leverages the existing build/test-cache hash for warm replay).
-//   (b) Byte-identity vs `qkb-presentation-v5.test.ts`'s `buildV5SmokeWitness`
+//   (b) Byte-identity vs `zkqes-presentation-v5.test.ts`'s `buildV5SmokeWitness`
 //       — the production path and the test helper must produce the SAME
 //       witness for the SAME input fixtures, otherwise web-eng's
 //       browser-side path can't trust the test-helper-derived parity.
@@ -54,13 +54,13 @@ describe('buildWitnessV5 — production builder round-trip', function () {
   let circuit: CompiledCircuit;
 
   before(async () => {
-    circuit = await compile('QKBPresentationV5.circom');
+    circuit = await compile('ZkqesPresentationV5.circom');
   });
 
   it('produces a witness JSON the V5 main circuit accepts (admin-ecdsa fixture)', async () => {
     // Inputs: existing committed admin-ecdsa fixture artifacts + a
     // synthetic signedAttrs whose messageDigest equals sha256(binding).
-    const bindingBytes = readFileSync(resolve(FIXTURE_DIR, 'binding.qkb2.json'));
+    const bindingBytes = readFileSync(resolve(FIXTURE_DIR, 'binding.zkqes2.json'));
     const leafCertDer = readFileSync(resolve(FIXTURE_DIR, 'leaf.der'));
     const leafSpki = readFileSync(resolve(FIXTURE_DIR, 'leaf-spki.bin'));
     const intSpki = readFileSync(resolve(FIXTURE_DIR, 'intermediate-spki.bin'));
@@ -112,7 +112,7 @@ describe('buildWitnessV5 — production builder round-trip', function () {
     // admin-ecdsa fixture's pk (0x04 || 0x11×32 || 0x22×32) byte-for-byte
     // — this is the cross-package handshake with contracts-eng's keccak
     // gate.
-    const bindingBytes = readFileSync(resolve(FIXTURE_DIR, 'binding.qkb2.json'));
+    const bindingBytes = readFileSync(resolve(FIXTURE_DIR, 'binding.zkqes2.json'));
     const leafCertDer = readFileSync(resolve(FIXTURE_DIR, 'leaf.der'));
     const leafSpki = readFileSync(resolve(FIXTURE_DIR, 'leaf-spki.bin'));
     const intSpki = readFileSync(resolve(FIXTURE_DIR, 'intermediate-spki.bin'));
@@ -163,7 +163,7 @@ describe('buildWitnessV5 — production builder round-trip', function () {
   // Codex T2 review pass 1 [P2] flagged the symmetric-fixture coverage
   // gap; this test closes it.
   it('limb encoding extracts the correct 16-byte big-endian windows on an asymmetric pk', async () => {
-    const baseBindingBytes = readFileSync(resolve(FIXTURE_DIR, 'binding.qkb2.json'));
+    const baseBindingBytes = readFileSync(resolve(FIXTURE_DIR, 'binding.zkqes2.json'));
     const leafCertDer = readFileSync(resolve(FIXTURE_DIR, 'leaf.der'));
     const leafSpki = readFileSync(resolve(FIXTURE_DIR, 'leaf-spki.bin'));
     const intSpki = readFileSync(resolve(FIXTURE_DIR, 'intermediate-spki.bin'));

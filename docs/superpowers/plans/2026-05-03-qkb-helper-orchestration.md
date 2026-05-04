@@ -1,8 +1,10 @@
-# QKB Helper Orchestration Plan
+# zkqes Helper Orchestration Plan
+
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Coordinate the three-worker delivery of QKB Helper V1 — a small on-demand local prove accelerator that turns the V5.2 register flow's prove step from 90 s / 38 GiB (in-browser snarkjs) into 13.9 s / 3.7 GiB (native rapidsnark via deep-link helper), while keeping browser canonical for everything else.
+**Goal:** Coordinate the three-worker delivery of zkqes Helper V1 — a small on-demand local prove accelerator that turns the V5.2 register flow's prove step from 90 s / 38 GiB (in-browser snarkjs) into 13.9 s / 3.7 GiB (native rapidsnark via deep-link helper), while keeping browser canonical for everything else.
 
 **Architecture:** Three independently-mergeable tracks — circuits-eng owns the helper binary + per-OS installers, web-eng owns browser detection + `/download` landing, lead owns code-signing certs + brew/winget + R2 manifest. All three converge on a single `feat/qkb-helper` integration branch for E2E. Spec at `docs/superpowers/specs/2026-05-03-qkb-helper-design.md` (commit `74605b2`).
 
@@ -35,7 +37,7 @@ GET http://127.0.0.1:9080/status
     }
 
 POST http://127.0.0.1:9080/prove
-  Origin: https://identityescrow.org   (REQUIRED; 403 otherwise)
+  Origin: https://zkqes.org   (REQUIRED; 403 otherwise)
   Content-Type: application/json
   Body: <witness JSON from buildWitnessV5(...) — 22 public + 10518 private signals>
   Response 200 application/json:
@@ -50,16 +52,16 @@ POST http://127.0.0.1:9080/prove
         "totalSec": <number>
       }
     }
-  Response 403: { "error": "origin not allowed", "allowed": "https://identityescrow.org", "got": "<received>" }
+  Response 403: { "error": "origin not allowed", "allowed": "https://zkqes.org", "got": "<received>" }
   Response 429: { "error": "helper busy with another prove" }
   Response 5xx: { "error": "<human-readable message>" }
 
 OPTIONS http://127.0.0.1:9080/prove
-  Origin: https://identityescrow.org
+  Origin: https://zkqes.org
   Access-Control-Request-Method: POST
   Access-Control-Request-Private-Network: true
   Response 204:
-    Access-Control-Allow-Origin: https://identityescrow.org
+    Access-Control-Allow-Origin: https://zkqes.org
     Access-Control-Allow-Methods: GET, POST, OPTIONS
     Access-Control-Allow-Headers: Content-Type
     Access-Control-Allow-Private-Network: true
@@ -79,13 +81,13 @@ Scheme: `qkb://`
 V1 supports only `qkb://launch`. Future expansion (`qkb://prove?...`, `qkb://shutdown`) deferred.
 
 Per-OS registration:
-- macOS: `CFBundleURLTypes` in `QKB Helper.app/Contents/Info.plist`, scheme `qkb`.
-- Windows: registry `HKEY_CLASSES_ROOT\qkb` with `URL Protocol`, command `"%ProgramFiles%\QKB Helper\qkb-helper.exe" "%1"`.
+- macOS: `CFBundleURLTypes` in `zkqes Helper.app/Contents/Info.plist`, scheme `qkb`.
+- Windows: registry `HKEY_CLASSES_ROOT\qkb` with `URL Protocol`, command `"%ProgramFiles%\zkqes Helper\qkb-helper.exe" "%1"`.
 - Linux: `.desktop` file with `MimeType=x-scheme-handler/qkb;`, `xdg-mime default qkb-helper.desktop x-scheme-handler/qkb` post-install.
 
 ### §1.3 — Auto-update manifest
 
-URL: `https://identityescrow.org/helper-manifest.json` (CloudFront/CDN-cached, 5 min TTL).
+URL: `https://zkqes.org/helper-manifest.json` (CloudFront/CDN-cached, 5 min TTL).
 
 ```json
 {
@@ -95,11 +97,11 @@ URL: `https://identityescrow.org/helper-manifest.json` (CloudFront/CDN-cached, 5
   "minSupportedVersion": "1.0.0",
   "circuits": {
     "v5.2": {
-      "zkeyUrl":      "https://r2.identityescrow.org/qkb-v5_2-stub.zkey",
+      "zkeyUrl":      "https://r2.zkqes.org/qkb-v5_2-stub.zkey",
       "zkeySha256":   "b66bad1d27f2e0b00f2db7437a0fab365433165dccb2f11d09ee3eb475debce2",
-      "wasmUrl":      "https://r2.identityescrow.org/qkb-v5_2.wasm",
+      "wasmUrl":      "https://r2.zkqes.org/qkb-v5_2.wasm",
       "wasmSha256":   "<from circuits-eng's vendor build>",
-      "vkeyUrl":      "https://r2.identityescrow.org/qkb-v5_2-vkey.json",
+      "vkeyUrl":      "https://r2.zkqes.org/qkb-v5_2-vkey.json",
       "vkeySha256":   "<from circuits-eng's vendor build>"
     }
   }
@@ -114,8 +116,8 @@ Helper writes to a per-user data directory:
 
 | OS | Cache root |
 |---|---|
-| macOS | `~/Library/Application Support/QKB Helper/` |
-| Windows | `%APPDATA%\QKB Helper\` |
+| macOS | `~/Library/Application Support/zkqes Helper/` |
+| Windows | `%APPDATA%\zkqes Helper\` |
 | Linux | `~/.local/share/qkb-helper/` |
 
 Subdirectories under cache root:
@@ -134,7 +136,7 @@ Subdirectories under cache root:
 | Linux | `qkb-helper-{version}-x86_64.AppImage` | x64 |
 | Linux | `qkb-helper_{version}_amd64.deb` | x64 (Debian/Ubuntu) |
 
-All artifacts hosted at `https://identityescrow.org/download/{filename}` (lead owns hosting). Sha256 sidecar files (`{filename}.sha256`) published alongside.
+All artifacts hosted at `https://zkqes.org/download/{filename}` (lead owns hosting). Sha256 sidecar files (`{filename}.sha256`) published alongside.
 
 ### §1.6 — Web frontend props
 
@@ -307,7 +309,7 @@ Cross-package outputs that lead manually moves between worktrees:
 | Artifact | From | To | When |
 |---|---|---|---|
 | Unsigned dev helper binary | `qkb-helper-circuits/packages/qkb-helper/dist/qkb-helper-linux` | `qkb-helper-web/packages/web/test/fixtures/qkb-helper-dev-linux` | end of day 3 (web-eng's E2E test fixture) |
-| Helper installer artifacts (signed) | `qkb-helper-circuits/packages/qkb-helper/dist/installers/` | R2 + `identityescrow.org/download/` (lead-managed) | end of day 11 |
+| Helper installer artifacts (signed) | `qkb-helper-circuits/packages/qkb-helper/dist/installers/` | R2 + `zkqes.org/download/` (lead-managed) | end of day 11 |
 | Updated `helper-manifest.json.sig` | `lead's signing-key store` | R2 root | end of day 11 |
 
 ## §7 — Merge strategy
@@ -324,12 +326,12 @@ feat/qkb-helper-lead ──────┘
 
 Each branch merges via `git merge --no-ff` with a summary commit. After all three merge:
 ```bash
-git tag -a v5.2.0-helper-rc1 -m "QKB Helper V1 release candidate"
+git tag -a v5.2.0-helper-rc1 -m "zkqes Helper V1 release candidate"
 ```
 
 Final ship after E2E green across all 3 OSes:
 ```bash
-git tag -a v5.2.0-helper -m "QKB Helper V1 production"
+git tag -a v5.2.0-helper -m "zkqes Helper V1 production"
 ```
 
 ## §8 — CI / verification per worker
@@ -338,9 +340,9 @@ After each worker commit, lead runs:
 
 | Worker | Commands |
 |---|---|
-| circuits-eng | `pnpm -F @qkb/helper test && pnpm -F @qkb/helper typecheck && pnpm -F @qkb/helper build` |
+| circuits-eng | `pnpm -F @zkqes/helper test && pnpm -F @zkqes/helper typecheck && pnpm -F @zkqes/helper build` |
 | circuits-eng (Phase 3) | Per-OS smoke test on a clean VM (manual; no automated cross-OS CI in V1) |
-| web-eng | `pnpm -F @qkb/web test && pnpm -F @qkb/web typecheck && pnpm -F @qkb/web build && pnpm -F @qkb/web exec playwright test --grep helper-flow` |
+| web-eng | `pnpm -F @zkqes/web test && pnpm -F @zkqes/web typecheck && pnpm -F @zkqes/web build && pnpm -F @zkqes/web exec playwright test --grep helper-flow` |
 | lead | manifest signature roundtrip + brew formula syntax check |
 
 ## §9 — Risks & escalation triggers

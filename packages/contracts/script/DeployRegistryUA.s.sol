@@ -3,9 +3,9 @@ pragma solidity 0.8.24;
 
 import { Script } from "forge-std/Script.sol";
 import { console2 } from "forge-std/console2.sol";
-import { QKBRegistryV4 } from "../src/QKBRegistryV4.sol";
+import { ZkqesRegistryV4 } from "../src/ZkqesRegistryV4.sol";
 
-/// @notice Fresh deploy of `QKBRegistryV4` for the Ukraine (UA) country
+/// @notice Fresh deploy of `ZkqesRegistryV4` for the Ukraine (UA) country
 ///         configuration. The registry's `country` field is constructor-
 ///         frozen; admin can rotate trust roots and verifier addresses
 ///         later via the setters.
@@ -60,7 +60,7 @@ contract DeployRegistryUA is Script {
         address admin = vm.addr(adminPriv);
 
         vm.startBroadcast(adminPriv);
-        QKBRegistryV4 r = new QKBRegistryV4({
+        ZkqesRegistryV4 r = new ZkqesRegistryV4({
             country_: "UA",
             trustedListRoot_: trustedListRoot,
             policyRoot_: policyRoot,
@@ -72,7 +72,7 @@ contract DeployRegistryUA is Script {
         vm.stopBroadcast();
 
         registry = address(r);
-        console2.log("QKBRegistryV4[UA]:", registry);
+        console2.log("ZkqesRegistryV4[UA]:", registry);
         console2.log("  country       : UA");
         console2.log("  leafVerifier  :", leafV);
         console2.log("  chainVerifier :", chainV);

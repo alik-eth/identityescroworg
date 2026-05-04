@@ -3,7 +3,7 @@
 // (PublicSignals layout) and §0.2 (calldata struct order) drift.
 import { describe, expect, it } from 'vitest';
 import { decodeFunctionData } from 'viem';
-import { qkbRegistryV5_1Abi } from '../abi/QKBRegistryV5_1.js';
+import { zkqesRegistryV5_1Abi } from '../abi/ZkqesRegistryV5_1.js';
 import {
   PUBLIC_SIGNALS_V5_LENGTH,
   REGISTRY_V5_ERROR_SELECTORS,
@@ -104,7 +104,7 @@ describe('encodeV5RegisterCalldata (orchestration §0.2 struct order)', () => {
     // swaps them this test fails. Decoding via the same ABI round-trips
     // both struct positions, so we read them back and check positionally.
     const calldata = encodeV5RegisterCalldata(makeArgs());
-    const decoded = decodeFunctionData({ abi: qkbRegistryV5_1Abi, data: calldata });
+    const decoded = decodeFunctionData({ abi: zkqesRegistryV5_1Abi, data: calldata });
     expect(decoded.functionName).toBe('register');
     const args = decoded.args as readonly unknown[];
     // arg[0] is `proof` — Groth16Proof tuple { a, b, c }
@@ -116,7 +116,7 @@ describe('encodeV5RegisterCalldata (orchestration §0.2 struct order)', () => {
 
   it('places signedAttrs raw bytes at calldata position 4 (proof[0], sig[1], leafSpki[2], intSpki[3], signedAttrs[4])', () => {
     const calldata = encodeV5RegisterCalldata(makeArgs());
-    const decoded = decodeFunctionData({ abi: qkbRegistryV5_1Abi, data: calldata });
+    const decoded = decodeFunctionData({ abi: zkqesRegistryV5_1Abi, data: calldata });
     const args = decoded.args as readonly unknown[];
     expect(args[2]).toBe(`0x${'aa'.repeat(91)}`);   // leafSpki
     expect(args[3]).toBe(`0x${'bb'.repeat(91)}`);   // intSpki
@@ -125,7 +125,7 @@ describe('encodeV5RegisterCalldata (orchestration §0.2 struct order)', () => {
 
   it('encodes leafSig and intSig as bytes32[2] (r at 0, s at 1) — NOT flat 64-byte bytes', () => {
     const calldata = encodeV5RegisterCalldata(makeArgs());
-    const decoded = decodeFunctionData({ abi: qkbRegistryV5_1Abi, data: calldata });
+    const decoded = decodeFunctionData({ abi: zkqesRegistryV5_1Abi, data: calldata });
     const args = decoded.args as readonly unknown[];
     expect(args[5]).toEqual([`0x${'11'.repeat(32)}`, `0x${'22'.repeat(32)}`]);
     expect(args[6]).toEqual([`0x${'33'.repeat(32)}`, `0x${'44'.repeat(32)}`]);

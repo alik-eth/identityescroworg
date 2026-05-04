@@ -23,7 +23,7 @@ pragma circom 2.1.9;
 // 1. Identical input/output signal names + ordering as V2Core; the V5 main
 //    circuit's BindingParseV2CoreLegacy callsite swaps to ...Fast with no
 //    other edits. Parity test in test/binding/BindingParseV2CoreParity.test.ts
-//    asserts byte-equal outputs across both templates on the QKB/2.0 fixture.
+//    asserts byte-equal outputs across both templates on the zkqes binding fixture (version "QKB/2.0" frozen).
 //
 // 2. Direct Decoder usage instead of Multiplexer means soundness now
 //    depends on this template asserting `dec.success === 1` itself
@@ -389,7 +389,7 @@ template BindingParseV2CoreFast(MAX_B, MAX_CTX, MAX_TS_DIGITS) {
     assertSlice.offset <== assertionsValueOffset;
     for (var i = 0; i < 91; i++) assertSlice.out[i] === ASSERT_VAL[i];
 
-    // statementSchema = "qkb-binding-core/v1"
+    // statementSchema = "qkb-binding-core/v1"  // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
     var CORE_SCHEMA_VAL[20] = [
         0x71,0x6B,0x62,0x2D,0x62,0x69,0x6E,0x64,0x69,0x6E,0x67,0x2D,0x63,0x6F,0x72,0x65,0x2F,0x76,0x31,0x22
     ];
@@ -487,7 +487,7 @@ template BindingParseV2CoreFast(MAX_B, MAX_CTX, MAX_TS_DIGITS) {
     for (var i = 0; i < 256; i++) leafHashPack.digestBits[i] <== digestBits[i];
     policyLeafHash <== leafHashPack.packed;
 
-    // policy.bindingSchema = "qkb-binding-core/v1"
+    // policy.bindingSchema = "qkb-binding-core/v1"  // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
     component policySchemaSlice = BPFSliceFast(MAX_B, 20);
     for (var i = 0; i < MAX_B; i++) policySchemaSlice.bytes[i] <== bytes[i];
     policySchemaSlice.offset <== policyBindingSchemaValueOffset;
@@ -522,7 +522,7 @@ template BindingParseV2CoreFast(MAX_B, MAX_CTX, MAX_TS_DIGITS) {
     tsClose.sel <== tsValueOffset + tsDigitCount;
     tsClose.out[0] === 0x2C;
 
-    // version = "QKB/2.0"
+    // version = "QKB/2.0"  // frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
     var VER_VAL[8] = [0x51,0x4B,0x42,0x2F,0x32,0x2E,0x30,0x22];
     component verSlice = BPFSliceFast(MAX_B, 8);
     for (var i = 0; i < MAX_B; i++) verSlice.bytes[i] <== bytes[i];
