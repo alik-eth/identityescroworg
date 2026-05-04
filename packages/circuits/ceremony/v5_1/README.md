@@ -1,7 +1,7 @@
 # V5.1 stub ceremony artifacts
 
 Single-contributor Groth16 setup against the V5.1 main circuit
-(`circuits/QKBPresentationV5.circom` post-A6.1 amendment) + pot23.
+(`circuits/ZkqesPresentationV5.circom` post-A6.1 amendment) + pot23.
 **DEV-ONLY** — exists so contracts-eng + web-eng can integrate against a
 structurally-identical Groth16 verifier .sol and verification key while the
 real Phase B ceremony (§11, 20-30 contributors, transparency artifacts) is
@@ -36,13 +36,13 @@ pump lands.
 
 ## NOT committed (gitignored)
 
-- `qkb-v5_1-stub.zkey` (~2.1 GB) — the actual V5.1 proving key.
+- `zkqes-v5_1-stub.zkey` (~2.1 GB) — the actual V5.1 proving key.
   Available via R2 once lead pumps the artifact pump (see `urls.json`
   placeholder up one directory).
-- `build/qkb-presentation/powersOfTau28_hez_final_23.ptau` (~9.1 GB) —
+- `build/zkqes-presentation/powersOfTau28_hez_final_23.ptau` (~9.1 GB) —
   Hermez final pot23 input. Re-fetched on demand from
   `https://storage.googleapis.com/zkevm/ptau/powersOfTau28_hez_final_23.ptau`.
-- `build/v5_1-stub/QKBPresentationV5.r1cs` (~870 MB) — circom R1CS
+- `build/v5_1-stub/ZkqesPresentationV5.r1cs` (~870 MB) — circom R1CS
   output for the V5.1 amended circuit; reproducible via `circom --r1cs`.
 
 ## Reproducing the ceremony
@@ -62,13 +62,13 @@ Expected resource use:
 Re-running is idempotent for cached artifacts. The script:
 1. Re-uses `pot23.ptau` if present (skips ~9 GB download).
 2. Re-uses `R1CS` + `wasm` from `build/v5_1-stub/` if present (skips ~3 min cold compile).
-3. Re-uses `qkb-v5_1-stub_0000.zkey` (initial Groth16 setup) if present.
-4. Re-uses the contributed `qkb-v5_1-stub.zkey` if present, so the
+3. Re-uses `zkqes-v5_1-stub_0000.zkey` (initial Groth16 setup) if present.
+4. Re-uses the contributed `zkqes-v5_1-stub.zkey` if present, so the
    committed `verification_key.json` / `Groth16VerifierV5_1Stub.sol` /
    sample-proof bundle stays bytewise-stable on repeat invocations.
 
 To force a fresh contribution (e.g., believed-leaked entropy), delete
-`ceremony/v5_1/qkb-v5_1-stub.zkey` first; the cascade pre-wipe in the
+`ceremony/v5_1/zkqes-v5_1-stub.zkey` first; the cascade pre-wipe in the
 script will then regenerate every downstream artifact and the integrity
 manifest from scratch.  Each cascade layer wipes `zkey.sha256` BEFORE
 running the risky operation so that a mid-run failure cannot leave a

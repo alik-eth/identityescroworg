@@ -1,6 +1,6 @@
 pragma circom 2.1.9;
 
-// ZkqesPresentationEcdsaLeafV4 — unified successor leaf circuit for `QKB/2.0`.
+// ZkqesPresentationEcdsaLeafV4 — unified successor leaf circuit for zkqes bindings (version "QKB/2.0" frozen).
 //
 // Public signals (16 total):
 //   [0..3]  pkX[4]

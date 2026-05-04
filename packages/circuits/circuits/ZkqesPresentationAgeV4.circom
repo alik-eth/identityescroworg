@@ -3,7 +3,7 @@ pragma circom 2.1.9;
 include "circomlib/circuits/poseidon.circom";
 include "circomlib/circuits/comparators.circom";
 
-// ZkqesPresentationAgeV4 — age qualification proof for QKB/2 bindings.
+// ZkqesPresentationAgeV4 — age qualification proof for zkqes V2 bindings.
 // Public signals (3, in on-chain order):
 //   [0] dobCommit       = Poseidon(dobYmd, sourceTag)
 //   [1] ageCutoffDate   YYYYMMDD integer (public input)

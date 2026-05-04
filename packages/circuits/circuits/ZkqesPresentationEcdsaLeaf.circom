@@ -2,7 +2,7 @@ pragma circom 2.1.9;
 
 // ZkqesPresentationEcdsaLeaf — leaf-side ECDSA proof.
 //
-// Wires R_QKB constraints 1, 2, 5, 6 per spec §5.3 — the "binding proof"
+// Wires R_zkqes constraints 1, 2, 5, 6 per spec §5.3 — the "binding proof"
 // attesting that the user actually performed the QES over the binding
 // statement committed to `pk`/context/declaration/timestamp. Chain-side
 // constraints 3, 4 (intermediate signs leaf; intermediate in trusted list)

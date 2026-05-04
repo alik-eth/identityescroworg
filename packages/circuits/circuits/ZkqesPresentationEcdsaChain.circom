@@ -2,7 +2,7 @@ pragma circom 2.1.9;
 
 // ZkqesPresentationEcdsaChain — chain-side ECDSA proof (Phase-2 split-proof).
 //
-// Wires R_QKB constraints 3, 4 per spec §5.3: the intermediate CA signs the
+// Wires R_zkqes constraints 3, 4 per spec §5.3: the intermediate CA signs the
 // leaf TBS, and the intermediate is listed in the trusted-list Merkle root.
 // `leafSpkiCommit` is a public input (declared LAST in the public list so
 // snarkjs emits it at `publicSignals[2]` per orchestration §2.2 — snarkjs
@@ -10,7 +10,7 @@ pragma circom 2.1.9;
 // at index 0 and break contracts-eng's `chainArr[2]` packing). The circuit
 // constrains it to equal Poseidon2(Poseidon6(leafXLimbs), Poseidon6(leafYLimbs))
 // below; the on-chain verifier asserts equality with the leaf proof's
-// `leafSpkiCommit`, gluing the two Groth16 proofs into one R_QKB
+// `leafSpkiCommit`, gluing the two Groth16 proofs into one R_zkqes
 // attestation (spec §5.4, split-proof fallback).
 //
 // Public signals (5 — orchestration §2.2):
@@ -21,9 +21,9 @@ pragma circom 2.1.9;
 //                              equality check enforces binding between the
 //                              two Groth16 proofs.
 //
-// Companion circuit: ZkqesPresentationEcdsaLeaf (holds R_QKB constraints
+// Companion circuit: ZkqesPresentationEcdsaLeaf (holds R_zkqes constraints
 // 1, 2, 5, 6 + scoped credential nullifier). Both proofs are submitted
-// together to QKBRegistryV3.register(...).
+// together to ZkqesRegistryV3.register(...).
 //
 // NB on `leafTbsPaddedIn`: the Phase-1 gap documented in the unified
 // circuit's §4 carries over — the witness supplies leafTbsPaddedIn as a
