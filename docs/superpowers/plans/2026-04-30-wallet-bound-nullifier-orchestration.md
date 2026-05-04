@@ -1,5 +1,7 @@
 # Wallet-Bound Nullifier — Implementation Orchestration
 
+> **Renamed 2026-05-03** — see [`docs/superpowers/specs/2026-05-03-zkqes-rename-design.md`](2026-05-03-zkqes-rename-design.md) for the rename baseline. Historical references to QKB/QIE/Identity-Escrow in pre-2026-05-03 commits remain immutable in git history.
+
 > **Spec:** `docs/superpowers/specs/2026-04-30-wallet-bound-nullifier-amendment.md` (v0.6, user-approved 2026-04-30).
 > **Goal:** Implement the spec across four worktrees, integrate against stub ceremony artifacts, hand off to Phase B ceremony for production zkey.
 > **Wall estimate:** 11-13 days end-to-end (implementation + integration). Independent of Phase B ceremony coordination, which the founder runs in parallel.
@@ -180,7 +182,7 @@ Location: `fixtures/v51/witness-schema.json`. Documents the input field names + 
 
 ### S3. ABI version bump tag
 
-Bump `@qkb/contracts-sdk` and `@qkb/sdk` package.json versions to `0.5.1-pre`. Workers can publish to local registry during integration.
+Bump `@zkqes/contracts-sdk` and `@zkqes/sdk` package.json versions to `0.5.1-pre`. Workers can publish to local registry during integration.
 
 ### S4. Worker dispatch
 
