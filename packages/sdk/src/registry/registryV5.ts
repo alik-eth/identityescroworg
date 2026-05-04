@@ -314,6 +314,7 @@ export function encodeV5RegisterCalldata(args: RegisterArgsV5): `0x${string}` {
 //   - proof + sig carry a V5.1 proof with rotationMode === 1.
 //   - oldWalletAuthSig is 65-byte EIP-191 signature from the old wallet over
 //     keccak256(abi.encodePacked("qkb-rotate-auth-v1", chainId, registry, fp, newWallet)).
+//     frozen protocol byte string; see specs/2026-05-03-zkqes-rename-design.md §3
 //     Note: viem's signMessage auto-applies the EIP-191 prefix; web-eng constructs
 //     the inner hash directly and signs as raw bytes.
 // ===========================================================================
