@@ -3,7 +3,7 @@
 // The full byte-identity contract is asserted in arch-circuits' integration
 // test against `buildV5SmokeWitness`. Here we only verify:
 //   - the public API surface is exported as documented in the orchestration
-//     plan §0.4 (so a future re-shuffle in @qkb/circuits is caught at import
+//     plan §0.4 (so a future re-shuffle in @zkqes/circuits is caught at import
 //     time instead of in the prove-flow);
 //   - `parseP7s` rejects obviously malformed input with a descriptive error;
 //   - `buildWitnessV5` rejects oversize bindings with the named MAX_BCANON.

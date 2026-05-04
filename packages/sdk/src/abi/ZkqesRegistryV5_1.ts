@@ -1,44 +1,37 @@
 /* eslint-disable */
 /**
- * V5.2 keccak-on-chain registry ABI.
+ * V5.1 wallet-bound nullifier registry ABI.
  *
- * Auto-generated from `forge inspect QKBRegistryV5_2 abi --json` against
- * contracts commit on `feat/v5_2arch-contracts`. Do NOT hand-edit;
+ * Auto-generated from `forge inspect QKBRegistryV5 abi` against contracts
+ * commit `76ed4d6` (Task 3 — rotateWallet landed). Do NOT hand-edit;
  * regenerate via:
  *
- *   pnpm -F @qkb/contracts build
- *   forge inspect QKBRegistryV5_2 abi --json > /tmp/abi.json
- *   python3 -c 'import json,sys;a=json.load(open("/tmp/abi.json"));print("export const qkbRegistryV5_2Abi = " + json.dumps(a, indent=2) + " as const;")' \
- *     > packages/sdk/src/abi/QKBRegistryV5_2.ts.body
- *   # Then re-prepend this header.
+ *   pnpm -F @zkqes/contracts build
+ *   forge inspect ZkqesRegistryV5_1 abi --json > /tmp/abi.json
+ *   pnpm tsx scripts/generate-abi-export.ts /tmp/abi.json \
+ *     packages/sdk/src/abi/ZkqesRegistryV5_1.ts
  *
- * Notable shape changes vs V5.1 (qkbRegistryV5_1Abi):
- *   - register() takes uint256[22] publicSignals (was uint256[19]).
- *     Slot [0] msgSender DROPPED (now contract-derived via keccak over
- *     the 4 new bindingPkX/Y limbs). V5.1 slots 1-18 shift down to V5.2
- *     slots 0-17. New slots [18..21]: bindingPkXHi/Lo, bindingPkYHi/Lo
- *     (Bits2Num(128)-packed from parser.pkBytes[1..65]).
- *   - rotateWallet() unchanged in shape but consumes the same 22-field
- *     PublicSignals struct.
- *   - new V5.2 errors: WalletDerivationMismatch (msg.sender not derived
- *     from bindingPkX/Y), WrongRegisterModeNoOp (rotationNewWallet !=
- *     uint160(msg.sender) under register mode), BindingPkLimbOutOfRange
- *     (limb > 2^128 - 1, defense-in-depth).
- *   - V5.1's BadSender error REMOVED (folded into WalletDerivationMismatch).
+ * (Or by hand: replace the array body, keep the `as const` assertion.)
  *
- * Per V5.2 amendment §"Public-signal layout", the 22-slot vector is
- * FROZEN. Cross-worker drift between this ABI's struct shape and the
- * circuit's emitted public-signal order would break the verifier's IC
- * linear combination (Groth16 soundness).
+ * Notable shape changes vs V4 abi:
+ *   - register() takes uint256[19] publicSignals (was bespoke struct)
+ *   - new rotateWallet() entry point
+ *   - new V5.1 storage: identityCommitments / identityWallets / usedCtx
+ *   - new V5.1 errors: WrongMode, CommitmentMismatch, WalletNotBound,
+ *     CtxAlreadyUsed, UnknownIdentity, InvalidNewWallet, InvalidRotationAuth
+ *   - new event: WalletRotated(fp, oldWallet, newWallet, newCommitment)
+ *
+ * Per orchestration §1.3, the public-signal layout is FROZEN at 19 fields
+ * (slots [0..13] preserve V5 semantics; [14..18] are V5.1 amendment).
  */
-export const qkbRegistryV5_2Abi = [
+export const zkqesRegistryV5_1Abi = [
   {
     "type": "constructor",
     "inputs": [
       {
         "name": "_verifier",
         "type": "address",
-        "internalType": "contract IGroth16VerifierV5_2"
+        "internalType": "contract IGroth16VerifierV5_1"
       },
       {
         "name": "_admin",
@@ -92,7 +85,7 @@ export const qkbRegistryV5_2Abi = [
       {
         "name": "",
         "type": "address",
-        "internalType": "contract IGroth16VerifierV5_2"
+        "internalType": "contract IGroth16VerifierV5_1"
       }
     ],
     "stateMutability": "view"
@@ -219,7 +212,7 @@ export const qkbRegistryV5_2Abi = [
       {
         "name": "proof",
         "type": "tuple",
-        "internalType": "struct QKBRegistryV5_2.Groth16Proof",
+        "internalType": "struct QKBRegistryV5.Groth16Proof",
         "components": [
           {
             "name": "a",
@@ -241,8 +234,13 @@ export const qkbRegistryV5_2Abi = [
       {
         "name": "sig",
         "type": "tuple",
-        "internalType": "struct QKBRegistryV5_2.PublicSignals",
+        "internalType": "struct QKBRegistryV5.PublicSignals",
         "components": [
+          {
+            "name": "msgSender",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
           {
             "name": "timestamp",
             "type": "uint256",
@@ -330,26 +328,6 @@ export const qkbRegistryV5_2Abi = [
           },
           {
             "name": "rotationNewWallet",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "bindingPkXHi",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "bindingPkXLo",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "bindingPkYHi",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "bindingPkYLo",
             "type": "uint256",
             "internalType": "uint256"
           }
@@ -411,7 +389,7 @@ export const qkbRegistryV5_2Abi = [
       {
         "name": "proof",
         "type": "tuple",
-        "internalType": "struct QKBRegistryV5_2.Groth16Proof",
+        "internalType": "struct QKBRegistryV5.Groth16Proof",
         "components": [
           {
             "name": "a",
@@ -433,8 +411,13 @@ export const qkbRegistryV5_2Abi = [
       {
         "name": "sig",
         "type": "tuple",
-        "internalType": "struct QKBRegistryV5_2.PublicSignals",
+        "internalType": "struct QKBRegistryV5.PublicSignals",
         "components": [
+          {
+            "name": "msgSender",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
           {
             "name": "timestamp",
             "type": "uint256",
@@ -522,26 +505,6 @@ export const qkbRegistryV5_2Abi = [
           },
           {
             "name": "rotationNewWallet",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "bindingPkXHi",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "bindingPkXLo",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "bindingPkYHi",
-            "type": "uint256",
-            "internalType": "uint256"
-          },
-          {
-            "name": "bindingPkYLo",
             "type": "uint256",
             "internalType": "uint256"
           }
@@ -794,6 +757,11 @@ export const qkbRegistryV5_2Abi = [
   },
   {
     "type": "error",
+    "name": "BadSender",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "BadSignedAttrsHi",
     "inputs": []
   },
@@ -805,11 +773,6 @@ export const qkbRegistryV5_2Abi = [
   {
     "type": "error",
     "name": "BadTrustList",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "BindingPkLimbOutOfRange",
     "inputs": []
   },
   {
@@ -884,11 +847,6 @@ export const qkbRegistryV5_2Abi = [
   },
   {
     "type": "error",
-    "name": "WalletDerivationMismatch",
-    "inputs": []
-  },
-  {
-    "type": "error",
     "name": "WalletNotBound",
     "inputs": []
   },
@@ -899,12 +857,8 @@ export const qkbRegistryV5_2Abi = [
   },
   {
     "type": "error",
-    "name": "WrongRegisterModeNoOp",
-    "inputs": []
-  },
-  {
-    "type": "error",
     "name": "ZeroAddress",
     "inputs": []
   }
 ] as const;
+

@@ -14,7 +14,7 @@
 import type { BindingV2 } from '../binding/index.js';
 import { canonicalizeBindingCoreV2 } from '../binding/index.js';
 import type { PolicyInclusionProof } from '../policy/index.js';
-import { QkbError } from '../errors/index.js';
+import { ZkqesError } from '../errors/index.js';
 import {
   MAX_BCANON,
   MAX_CERT,
@@ -145,7 +145,7 @@ export function buildPhase2WitnessV4Draft(
   const { baseWitness, binding, policyProof } = input;
   const bindingCoreBytes = canonicalizeBindingCoreV2(binding);
   if (bindingCoreBytes.length > MAX_BCANON) {
-    throw new QkbError('witness.fieldTooLong', {
+    throw new ZkqesError('witness.fieldTooLong', {
       field: 'bindingCore',
       got: bindingCoreBytes.length,
       max: MAX_BCANON,
@@ -170,7 +170,7 @@ export function buildPhase2WitnessV4Draft(
   while (ctxEnd < bindingCoreBytes.length && bindingCoreBytes[ctxEnd] !== 0x22) ctxEnd++;
   const ctxHexLen = ctxEnd - ctxStart;
   if (ctxHexLen !== 0) {
-    throw new QkbError('witness.fieldTooLong', {
+    throw new ZkqesError('witness.fieldTooLong', {
       field: 'ctx',
       reason: 'non-empty-ctx-unsupported-v4-draft',
       got: ctxHexLen,
@@ -186,7 +186,7 @@ export function buildPhase2WitnessV4Draft(
     bindingCoreBytes[nonceStart + 1] !== 0x78 ||
     bindingCoreBytes[nonceEnd] !== 0x22
   ) {
-    throw new QkbError('witness.offsetNotFound', { field: 'nonce', reason: 'bad-shape' });
+    throw new ZkqesError('witness.offsetNotFound', { field: 'nonce', reason: 'bad-shape' });
   }
   const nonceBytes = hexToBytes(
     new TextDecoder().decode(bindingCoreBytes.subarray(nonceStart + 2, nonceEnd)),
@@ -195,7 +195,7 @@ export function buildPhase2WitnessV4Draft(
   const policyIdStart = policyIdKeyOff + POLICY_ID_KEY_LITERAL_LEN;
   const policyIdBytesRaw = sliceJsonString(bindingCoreBytes, policyIdStart, 'policyId');
   if (policyIdBytesRaw.length === 0 || policyIdBytesRaw.length > POLICY_ID_MAX) {
-    throw new QkbError('binding.field', {
+    throw new ZkqesError('binding.field', {
       field: 'policy.policyId',
       reason: 'length',
       got: policyIdBytesRaw.length,
@@ -212,7 +212,7 @@ export function buildPhase2WitnessV4Draft(
   }
   const policyVersionDigitCount = policyVersionEnd - policyVersionStart;
   if (policyVersionDigitCount === 0) {
-    throw new QkbError('witness.offsetNotFound', {
+    throw new ZkqesError('witness.offsetNotFound', {
       field: 'policy.policyVersion',
       reason: 'no-digits',
     });
@@ -221,12 +221,12 @@ export function buildPhase2WitnessV4Draft(
     new TextDecoder().decode(bindingCoreBytes.subarray(policyVersionStart, policyVersionEnd)),
   );
   if (!Number.isSafeInteger(policyVersion) || policyVersion < 1) {
-    throw new QkbError('binding.field', { field: 'policy.policyVersion', got: policyVersion });
+    throw new ZkqesError('binding.field', { field: 'policy.policyVersion', got: policyVersion });
   }
 
   const pkHex = binding.pk.slice(2);
   if (pkHex.length !== 130 || !pkHex.toLowerCase().startsWith('04')) {
-    throw new QkbError('binding.field', { field: 'pk', reason: 'expected-uncompressed' });
+    throw new ZkqesError('binding.field', { field: 'pk', reason: 'expected-uncompressed' });
   }
   const pkBytes = hexToBytes(pkHex);
   const pkX = pkCoordToLimbs(pkBytes.subarray(1, 33));
@@ -241,14 +241,14 @@ export function buildPhase2WitnessV4Draft(
   const tsStart = tsKeyOff + TS_KEY_LITERAL_LEN;
   const tsDigitCount = tsEnd - tsStart;
   if (tsDigitCount === 0) {
-    throw new QkbError('witness.offsetNotFound', { field: 'timestamp', reason: 'no-digits' });
+    throw new ZkqesError('witness.offsetNotFound', { field: 'timestamp', reason: 'no-digits' });
   }
   const timestamp = binding.timestamp.toString();
 
   const policyLeafHash = hexFieldToDecimal(binding.policy.leafHash);
   const policyRoot = hexFieldToDecimal(policyProof.rootHex);
   if (normalizeHex32(binding.policy.leafHash) !== normalizeHex32(policyProof.leafHex)) {
-    throw new QkbError('binding.field', {
+    throw new ZkqesError('binding.field', {
       field: 'policy.leafHash',
       reason: 'proof-leaf-mismatch',
       bindingLeafHash: binding.policy.leafHash,
@@ -256,7 +256,7 @@ export function buildPhase2WitnessV4Draft(
     });
   }
   if (policyProof.path.length !== MERKLE_DEPTH || policyProof.indices.length !== MERKLE_DEPTH) {
-    throw new QkbError('witness.fieldTooLong', {
+    throw new ZkqesError('witness.fieldTooLong', {
       reason: 'policy-merkle-shape',
       pathLen: policyProof.path.length,
       indicesLen: policyProof.indices.length,
@@ -331,7 +331,7 @@ export function buildPhase2WitnessV4Draft(
 
   const chain = baseWitness.chain;
   if (chain.leafSpkiCommit !== leaf.leafSpkiCommit) {
-    throw new QkbError('witness.fieldTooLong', {
+    throw new ZkqesError('witness.fieldTooLong', {
       reason: 'leaf-spki-commit-mismatch-v4-draft',
     });
   }
@@ -367,7 +367,7 @@ export interface LeafPublicSignals {
 
 export function parseLeafPublicSignals(raw: string[]): LeafPublicSignals {
   if (raw.length !== 16) {
-    throw new QkbError('qkb.leafPublicSignals', {
+    throw new ZkqesError('qkb.leafPublicSignals', {
       reason: 'leaf public signals must be length 16',
       got: raw.length,
     });
@@ -399,7 +399,7 @@ export function leafPublicSignalsV4(w: LeafWitnessInputV4): LeafPublicSignalsV4 
     w.leafSpkiCommit,
   ];
   if (signals.length !== 14) {
-    throw new QkbError('witness.fieldTooLong', {
+    throw new ZkqesError('witness.fieldTooLong', {
       reason: 'leaf-v4-signals-shape',
       got: signals.length,
     });
@@ -419,7 +419,7 @@ export function leafPublicSignalsV4(w: LeafWitnessInputV4): LeafPublicSignalsV4 
 
 function toBytes(values: number[], len: number, max: number, field: string): Uint8Array {
   if (len < 0 || len > max || values.length < len) {
-    throw new QkbError('witness.fieldTooLong', { field, got: len, max });
+    throw new ZkqesError('witness.fieldTooLong', { field, got: len, max });
   }
   const out = new Uint8Array(len);
   for (let i = 0; i < len; i++) out[i] = values[i]!;
@@ -436,7 +436,7 @@ function normalizeHex32(v: `0x${string}`): string {
 
 function hexToBytes(h: string): Uint8Array {
   if (h.length % 2 !== 0) {
-    throw new QkbError('binding.field', { field: 'hex', reason: 'odd-length', got: h.length });
+    throw new ZkqesError('binding.field', { field: 'hex', reason: 'odd-length', got: h.length });
   }
   const out = new Uint8Array(h.length / 2);
   for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
@@ -452,7 +452,7 @@ function sliceJsonString(bytes: Uint8Array, start: number, field: string): Uint8
       out.push(b);
       const next = bytes[i + 1];
       if (next === undefined) {
-        throw new QkbError('witness.offsetNotFound', { field, reason: 'trailing-backslash' });
+        throw new ZkqesError('witness.offsetNotFound', { field, reason: 'trailing-backslash' });
       }
       out.push(next);
       i += 2;
@@ -462,5 +462,5 @@ function sliceJsonString(bytes: Uint8Array, start: number, field: string): Uint8
     out.push(b);
     i++;
   }
-  throw new QkbError('witness.offsetNotFound', { field, reason: 'unterminated' });
+  throw new ZkqesError('witness.offsetNotFound', { field, reason: 'unterminated' });
 }

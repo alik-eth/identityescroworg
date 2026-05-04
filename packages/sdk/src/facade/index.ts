@@ -11,7 +11,7 @@
 import type { BindingV2 } from '../binding/index.js';
 import type { Binding } from '../binding/v1.js';
 import type { AlgorithmTag, ParsedCades } from '../cert/cades.js';
-import { QkbError } from '../errors/index.js';
+import { ZkqesError } from '../errors/index.js';
 import type { PolicyInclusionProof } from '../policy/index.js';
 import {
   buildPhase2Witness,
@@ -125,10 +125,10 @@ export function encodeRegisterFromSignals(
   input: EncodeRegisterFromSignalsInput,
 ): EncodedRegister {
   if (input.publicLeaf.length !== 14) {
-    throw new QkbError('qkb.leafPublicSignals', { reason: 'expected-14', got: input.publicLeaf.length });
+    throw new ZkqesError('qkb.leafPublicSignals', { reason: 'expected-14', got: input.publicLeaf.length });
   }
   if (input.publicChain.length !== 3) {
-    throw new QkbError('qkb.leafPublicSignals', { reason: 'expected-chain-3', got: input.publicChain.length });
+    throw new ZkqesError('qkb.leafPublicSignals', { reason: 'expected-chain-3', got: input.publicChain.length });
   }
   const args = buildRegisterArgsV4FromSignals(
     input.pk,
@@ -151,13 +151,13 @@ export function encodeRegisterFromSignalsAge(
 ): EncodedRegisterAge {
   void _ageInputs; // age tuple is fully derived from public signals; kept for API symmetry.
   if (input.publicLeaf.length !== 16) {
-    throw new QkbError('qkb.leafPublicSignals', { reason: 'expected-16', got: input.publicLeaf.length });
+    throw new ZkqesError('qkb.leafPublicSignals', { reason: 'expected-16', got: input.publicLeaf.length });
   }
   if (input.publicChain.length !== 3) {
-    throw new QkbError('qkb.leafPublicSignals', { reason: 'expected-chain-3', got: input.publicChain.length });
+    throw new ZkqesError('qkb.leafPublicSignals', { reason: 'expected-chain-3', got: input.publicChain.length });
   }
   if (input.publicAge.length !== 3) {
-    throw new QkbError('qkb.leafPublicSignals', { reason: 'expected-age-3', got: input.publicAge.length });
+    throw new ZkqesError('qkb.leafPublicSignals', { reason: 'expected-age-3', got: input.publicAge.length });
   }
   const args = buildRegisterArgsV4AgeFromSignals(
     input.pk,

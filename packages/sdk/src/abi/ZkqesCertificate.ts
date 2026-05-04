@@ -1,4 +1,4 @@
-export const identityEscrowNftAbi = [
+export const zkqesCertificateAbi = [
   {
     "type": "constructor",
     "inputs": [

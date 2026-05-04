@@ -1,7 +1,7 @@
 {
-  "name": "@qkb/sdk",
+  "name": "@zkqes/sdk",
   "version": "0.5.2-pre",
-  "description": "Qualified Key Binding (QKB) SDK — verify QES, build proofs, register on-chain.",
+  "description": "zkqes SDK — verify QES, build proofs, register on-chain.",
   "type": "module",
   "license": "GPL-3.0-or-later",
   "exports": {

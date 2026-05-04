@@ -36,7 +36,7 @@ export { isVerified, nullifierOf, trustedListRoot } from './reads.js';
  */
 import { encodeFunctionData } from 'viem';
 import { keccak_256 } from '@noble/hashes/sha3';
-import { QkbError } from '../errors/index.js';
+import { ZkqesError } from '../errors/index.js';
 import {
   packProof,
   type ChainInputs,
@@ -173,20 +173,20 @@ export function encodeLeafProofCalldata(
 
 export function assertRegisterArgsV4Shape(args: RegisterArgsV4): void {
   if (!args.pk.startsWith('0x04') || args.pk.length !== 132) {
-    throw new QkbError('binding.pkMismatch', { reason: 'register-args-v4-pk-shape' });
+    throw new ZkqesError('binding.pkMismatch', { reason: 'register-args-v4-pk-shape' });
   }
   assertProofShape(args.proofLeaf, 'leaf');
   assertProofShape(args.proofChain, 'chain');
   assertLeafInputsV4Shape(args.leafInputs);
   assertChainInputsShape(args.chainInputs);
   if (args.leafInputs.leafSpkiCommit.toLowerCase() !== args.chainInputs.leafSpkiCommit.toLowerCase()) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'leaf-spki-commit-mismatch-v4' });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'leaf-spki-commit-mismatch-v4' });
   }
 }
 
 export function assertRegisterArgsV4AgeShape(args: RegisterArgsV4Age): void {
   if (!args.pk.startsWith('0x04') || args.pk.length !== 132) {
-    throw new QkbError('binding.pkMismatch', { reason: 'register-args-v4-age-pk-shape' });
+    throw new ZkqesError('binding.pkMismatch', { reason: 'register-args-v4-age-pk-shape' });
   }
   assertProofShape(args.proofLeaf, 'leaf');
   assertProofShape(args.proofChain, 'chain');
@@ -195,24 +195,24 @@ export function assertRegisterArgsV4AgeShape(args: RegisterArgsV4Age): void {
   assertChainInputsShape(args.chainInputs);
   assertAgeInputsV4Shape(args.ageInputs);
   if (args.leafInputs.leafSpkiCommit.toLowerCase() !== args.chainInputs.leafSpkiCommit.toLowerCase()) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'leaf-spki-commit-mismatch-v4-age' });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'leaf-spki-commit-mismatch-v4-age' });
   }
   if (args.requireAgeQualification) {
     if (args.leafInputs.dobSupported !== 1) {
-      throw new QkbError('witness.fieldTooLong', { reason: 'dob-unsupported-v4-age' });
+      throw new ZkqesError('witness.fieldTooLong', { reason: 'dob-unsupported-v4-age' });
     }
     if (args.leafInputs.dobCommit.toLowerCase() !== args.ageInputs.dobCommit.toLowerCase()) {
-      throw new QkbError('witness.fieldTooLong', { reason: 'dob-commit-mismatch-v4-age' });
+      throw new ZkqesError('witness.fieldTooLong', { reason: 'dob-commit-mismatch-v4-age' });
     }
     if (args.ageInputs.ageQualified !== 1) {
-      throw new QkbError('witness.fieldTooLong', { reason: 'age-not-qualified-v4-age' });
+      throw new ZkqesError('witness.fieldTooLong', { reason: 'age-not-qualified-v4-age' });
     }
   }
 }
 
 export function assertLeafInputsV4Shape(l: LeafInputsV4): void {
   if (l.pkX.length !== 4 || l.pkY.length !== 4) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'leaf-v4-pk-limbs' });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'leaf-v4-pk-limbs' });
   }
   assertHex32(l.ctxHash, 'ctxHash');
   assertHex32(l.policyLeafHash, 'policyLeafHash');
@@ -245,17 +245,17 @@ function assertAgeCutoffDate(raw: string | number | bigint): void {
   if (typeof raw === 'bigint') n = raw;
   else if (typeof raw === 'number') {
     if (!Number.isInteger(raw)) {
-      throw new QkbError('binding.field', { field: 'ageCutoffDate', reason: 'not-integer', raw });
+      throw new ZkqesError('binding.field', { field: 'ageCutoffDate', reason: 'not-integer', raw });
     }
     n = BigInt(raw);
   } else {
     if (!/^\d{8}$/.test(raw)) {
-      throw new QkbError('binding.field', { field: 'ageCutoffDate', reason: 'format', raw });
+      throw new ZkqesError('binding.field', { field: 'ageCutoffDate', reason: 'format', raw });
     }
     n = BigInt(raw);
   }
   if (n < 19000101n || n > 29991231n) {
-    throw new QkbError('binding.field', { field: 'ageCutoffDate', reason: 'range', raw: String(raw) });
+    throw new ZkqesError('binding.field', { field: 'ageCutoffDate', reason: 'range', raw: String(raw) });
   }
   const ymd = Number(n);
   const year = Math.floor(ymd / 10000);
@@ -266,7 +266,7 @@ function assertAgeCutoffDate(raw: string | number | bigint): void {
 
 export function leafPublicSignalsV4(input: LeafPublicSignalFieldsV4): LeafPublicSignalsV4 {
   if (input.pkX.length !== 4 || input.pkY.length !== 4) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'leaf-v4-pk-limbs' });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'leaf-v4-pk-limbs' });
   }
   const signals: string[] = [
     ...input.pkX,
@@ -279,7 +279,7 @@ export function leafPublicSignalsV4(input: LeafPublicSignalFieldsV4): LeafPublic
     input.leafSpkiCommit,
   ];
   if (signals.length !== 14) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'leaf-v4-signals-shape', got: signals.length });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'leaf-v4-signals-shape', got: signals.length });
   }
   return { signals, ...input };
 }
@@ -288,7 +288,7 @@ export function leafPublicSignalsV4Age(
   input: LeafPublicSignalFieldsV4AgeCapable,
 ): LeafPublicSignalsV4AgeCapable {
   if (input.pkX.length !== 4 || input.pkY.length !== 4) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'leaf-v4-age-pk-limbs' });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'leaf-v4-age-pk-limbs' });
   }
   const dobSupported = toBinaryFlagString(input.dobSupported, 'dobSupported');
   const signals: string[] = [
@@ -304,7 +304,7 @@ export function leafPublicSignalsV4Age(
     dobSupported,
   ];
   if (signals.length !== 16) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'leaf-v4-age-signals-shape', got: signals.length });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'leaf-v4-age-signals-shape', got: signals.length });
   }
   return { signals, ...input, dobSupported };
 }
@@ -314,7 +314,7 @@ export function agePublicSignalsV4(input: AgePublicSignalFieldsV4): AgePublicSig
   const ageCutoffDate = toLimbString(input.ageCutoffDate);
   const signals: string[] = [input.dobCommit, ageCutoffDate, ageQualified];
   if (signals.length !== 3) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'age-v4-signals-shape', got: signals.length });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'age-v4-signals-shape', got: signals.length });
   }
   return {
     signals,
@@ -326,7 +326,7 @@ export function agePublicSignalsV4(input: AgePublicSignalFieldsV4): AgePublicSig
 
 export function leafInputsV4FromPublicSignals(publicLeaf: readonly string[]): LeafInputsV4 {
   if (publicLeaf.length !== 14) {
-    throw new QkbError('witness.fieldTooLong', {
+    throw new ZkqesError('witness.fieldTooLong', {
       reason: 'leaf-v4-signals-shape',
       got: publicLeaf.length,
     });
@@ -355,7 +355,7 @@ export function leafInputsV4FromPublicSignals(publicLeaf: readonly string[]): Le
 
 export function leafInputsV4AgeFromPublicSignals(publicLeaf: readonly string[]): LeafInputsV4AgeCapable {
   if (publicLeaf.length !== 16) {
-    throw new QkbError('witness.fieldTooLong', {
+    throw new ZkqesError('witness.fieldTooLong', {
       reason: 'leaf-v4-age-signals-shape',
       got: publicLeaf.length,
     });
@@ -386,14 +386,14 @@ export function leafInputsV4AgeFromPublicSignals(publicLeaf: readonly string[]):
 
 export function ageInputsV4FromPublicSignals(publicAge: readonly string[]): AgeInputsV4 {
   if (publicAge.length !== 3) {
-    throw new QkbError('witness.fieldTooLong', {
+    throw new ZkqesError('witness.fieldTooLong', {
       reason: 'age-v4-signals-shape',
       got: publicAge.length,
     });
   }
   // Validate the cutoff date at the public-signal boundary so downstream
   // callers can't bypass it by going through toLimbString (which would
-  // raise a generic SyntaxError instead of a typed QkbError on garbage).
+  // raise a generic SyntaxError instead of a typed ZkqesError on garbage).
   assertAgeCutoffDate(publicAge[1]!);
   return {
     dobCommit: toHex32(publicAge[0]!),
@@ -442,10 +442,10 @@ export function buildRegisterArgsV4AgeFromSignals(
 
 function assertProofShape(p: SolidityProof, side: 'leaf' | 'chain' | 'age'): void {
   if (p.a.length !== 2 || p.c.length !== 2) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'proof-ac', side });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'proof-ac', side });
   }
   if (p.b.length !== 2 || p.b[0]!.length !== 2 || p.b[1]!.length !== 2) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'proof-b', side });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'proof-b', side });
   }
 }
 
@@ -453,13 +453,13 @@ function assertChainInputsShape(c: ChainInputs): void {
   assertHex32(c.rTL, 'rTL');
   assertHex32(c.leafSpkiCommit, 'chain.leafSpkiCommit');
   if (c.algorithmTag !== 0 && c.algorithmTag !== 1) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'algorithm-tag', got: c.algorithmTag });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'algorithm-tag', got: c.algorithmTag });
   }
 }
 
 function chainInputsFromPublicSignals(publicChain: readonly string[]): ChainInputs {
   if (publicChain.length !== 3) {
-    throw new QkbError('witness.fieldTooLong', {
+    throw new ZkqesError('witness.fieldTooLong', {
       reason: 'chain-signals-shape',
       got: publicChain.length,
     });
@@ -470,7 +470,7 @@ function chainInputsFromPublicSignals(publicChain: readonly string[]): ChainInpu
   // contract hasn't been taught to dispatch.
   const tagStr = publicChain[1];
   if (tagStr !== '0' && tagStr !== '1') {
-    throw new QkbError('witness.fieldTooLong', {
+    throw new ZkqesError('witness.fieldTooLong', {
       reason: 'algorithm-tag-unknown',
       got: tagStr,
     });
@@ -484,14 +484,14 @@ function chainInputsFromPublicSignals(publicChain: readonly string[]): ChainInpu
 
 function assertHex32(v: string, field: string): void {
   if (!/^0x[0-9a-fA-F]{64}$/.test(v)) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'hex32', field });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'hex32', field });
   }
 }
 
 function assertBinaryFlag(v: string | number, field: string): void {
   const n = typeof v === 'number' ? v : Number(v);
   if (n !== 0 && n !== 1) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'binary-flag', field, got: v });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'binary-flag', field, got: v });
   }
 }
 
@@ -516,7 +516,7 @@ function toLimbString(v: string | bigint | number): string {
 function toBinaryFlag(v: string | number, field: string): 0 | 1 {
   const n = typeof v === 'number' ? v : Number(v);
   if (n === 0 || n === 1) return n;
-  throw new QkbError('witness.fieldTooLong', { reason: 'binary-flag', field, got: v });
+  throw new ZkqesError('witness.fieldTooLong', { reason: 'binary-flag', field, got: v });
 }
 
 function toBinaryFlagString(v: string | number, field: string): string {
@@ -692,41 +692,41 @@ export const REGISTRY_V4_ERROR_SELECTORS: Readonly<Record<string, `0x${string}`>
 
 /**
  * Map a V4 custom-error `data` (4-byte selector + optional args) to a typed
- * QkbError. Unknown selectors return null so callers can fall back to the
+ * ZkqesError. Unknown selectors return null so callers can fall back to the
  * raw wallet message.
  */
-export function classifyV4RegistryRevert(data: string | undefined): QkbError | null {
+export function classifyV4RegistryRevert(data: string | undefined): ZkqesError | null {
   if (!data || typeof data !== 'string') return null;
   const lower = data.toLowerCase();
   if (!lower.startsWith('0x')) return null;
   const s = lower.slice(0, 10);
 
   if (s === REGISTRY_V4_ERROR_SELECTORS.DuplicateNullifier) {
-    return new QkbError('registry.nullifierUsed');
+    return new ZkqesError('registry.nullifierUsed');
   }
   if (s === REGISTRY_V4_ERROR_SELECTORS.NotOnTrustedList) {
-    return new QkbError('registry.rootMismatch', { reason: 'trusted-list-root-stale' });
+    return new ZkqesError('registry.rootMismatch', { reason: 'trusted-list-root-stale' });
   }
   if (s === REGISTRY_V4_ERROR_SELECTORS.InvalidPolicyRoot) {
-    return new QkbError('registry.rootMismatch', { reason: 'policy-root-mismatch' });
+    return new ZkqesError('registry.rootMismatch', { reason: 'policy-root-mismatch' });
   }
   if (s === REGISTRY_V4_ERROR_SELECTORS.InvalidLeafSpkiCommit) {
-    return new QkbError('witness.fieldTooLong', { reason: 'leaf-spki-commit-mismatch-on-chain' });
+    return new ZkqesError('witness.fieldTooLong', { reason: 'leaf-spki-commit-mismatch-on-chain' });
   }
   if (s === REGISTRY_V4_ERROR_SELECTORS.AlgorithmNotSupported) {
-    return new QkbError('qes.wrongAlgorithm');
+    return new ZkqesError('qes.wrongAlgorithm');
   }
   if (s === REGISTRY_V4_ERROR_SELECTORS.InvalidProof) {
-    return new QkbError('qes.sigInvalid', { reason: 'groth16-invalid-on-chain' });
+    return new ZkqesError('qes.sigInvalid', { reason: 'groth16-invalid-on-chain' });
   }
   if (s === REGISTRY_V4_ERROR_SELECTORS.AgeProofMismatch) {
-    return new QkbError('registry.ageExceeded', { reason: 'age-proof-mismatch' });
+    return new ZkqesError('registry.ageExceeded', { reason: 'age-proof-mismatch' });
   }
   if (s === REGISTRY_V4_ERROR_SELECTORS.AgeNotQualified) {
-    return new QkbError('registry.ageExceeded', { reason: 'age-not-qualified' });
+    return new ZkqesError('registry.ageExceeded', { reason: 'age-not-qualified' });
   }
   if (s === REGISTRY_V4_ERROR_SELECTORS.DobNotAvailable) {
-    return new QkbError('registry.ageExceeded', { reason: 'dob-not-available' });
+    return new ZkqesError('registry.ageExceeded', { reason: 'dob-not-available' });
   }
   return null;
 }
@@ -736,25 +736,25 @@ export function classifyV4RegistryRevert(data: string | undefined): QkbError | n
  * bare error messages containing the error name. Mirrors registry.ts's
  * `classifyWalletRevert` for V3.
  */
-export function classifyV4WalletRevert(err: unknown): QkbError | null {
+export function classifyV4WalletRevert(err: unknown): ZkqesError | null {
   if (err instanceof Error && err.message) {
     const m = err.message;
-    if (/DuplicateNullifier/.test(m)) return new QkbError('registry.nullifierUsed');
+    if (/DuplicateNullifier/.test(m)) return new ZkqesError('registry.nullifierUsed');
     if (/NotOnTrustedList/.test(m)) {
-      return new QkbError('registry.rootMismatch', { reason: 'trusted-list-root-stale' });
+      return new ZkqesError('registry.rootMismatch', { reason: 'trusted-list-root-stale' });
     }
     if (/InvalidPolicyRoot/.test(m)) {
-      return new QkbError('registry.rootMismatch', { reason: 'policy-root-mismatch' });
+      return new ZkqesError('registry.rootMismatch', { reason: 'policy-root-mismatch' });
     }
     if (/InvalidLeafSpkiCommit/.test(m)) {
-      return new QkbError('witness.fieldTooLong', { reason: 'leaf-spki-commit-mismatch-on-chain' });
+      return new ZkqesError('witness.fieldTooLong', { reason: 'leaf-spki-commit-mismatch-on-chain' });
     }
-    if (/AlgorithmNotSupported/.test(m)) return new QkbError('qes.wrongAlgorithm');
+    if (/AlgorithmNotSupported/.test(m)) return new ZkqesError('qes.wrongAlgorithm');
     if (/InvalidProof/.test(m)) {
-      return new QkbError('qes.sigInvalid', { reason: 'groth16-invalid-on-chain' });
+      return new ZkqesError('qes.sigInvalid', { reason: 'groth16-invalid-on-chain' });
     }
     if (/AgeProofMismatch|AgeNotQualified|DobNotAvailable/.test(m)) {
-      return new QkbError('registry.ageExceeded', { reason: 'age-path' });
+      return new ZkqesError('registry.ageExceeded', { reason: 'age-path' });
     }
   }
   const data = extractV4RevertData(err);

@@ -1,4 +1,4 @@
-// Curated public API for @qkb/sdk.
+// Curated public API for @zkqes/sdk.
 //
 // Modules are extracted incrementally from packages/web/src/lib. Each
 // extraction lands as its own commit and exposes its surface here.
@@ -6,7 +6,7 @@
 export {
   ALL_ERROR_CODES,
   BundleError,
-  QkbError,
+  ZkqesError,
   localizeError,
   type ErrorCode,
   type I18nLike,
@@ -240,16 +240,16 @@ export {
 export { isVerified, nullifierOf, trustedListRoot } from './registry/index.js';
 
 export {
-  QKB_DEPLOYMENTS,
+  ZKQES_DEPLOYMENTS,
   deploymentForChainId,
-  type QkbDeployment,
-  type QkbNetwork,
+  type ZkqesDeployment,
+  type ZkqesNetwork,
 } from './deployments.js';
 
-export { qkbRegistryV4Abi } from './abi/QKBRegistryV4.js';
-export { qkbRegistryV5_1Abi } from './abi/QKBRegistryV5_1.js';
-export { qkbRegistryV5_2Abi } from './abi/QKBRegistryV5_2.js';
-export { identityEscrowNftAbi } from './abi/IdentityEscrowNFT.js';
+export { zkqesRegistryV4Abi } from './abi/ZkqesRegistryV4.js';
+export { zkqesRegistryV5_1Abi } from './abi/ZkqesRegistryV5_1.js';
+export { zkqesRegistryV5_2Abi } from './abi/ZkqesRegistryV5_2.js';
+export { zkqesCertificateAbi } from './abi/ZkqesCertificate.js';
 
 export {
   PUBLIC_SIGNALS_V5_LENGTH,

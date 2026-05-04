@@ -22,7 +22,7 @@ export type ErrorCode =
   | 'registry.ageExceeded'
   | 'registry.nullifierUsed';
 
-export class QkbError extends Error {
+export class ZkqesError extends Error {
   readonly code: ErrorCode;
   readonly messageKey: string;
   readonly details: Readonly<Record<string, unknown>> | undefined;
@@ -30,14 +30,14 @@ export class QkbError extends Error {
   constructor(code: ErrorCode, details?: Record<string, unknown>) {
     const reason = typeof details?.reason === 'string' ? details.reason : undefined;
     super(reason ? `${code}: ${reason}` : code);
-    this.name = 'QkbError';
+    this.name = 'ZkqesError';
     this.code = code;
     this.messageKey = `errors.${code}`;
     this.details = details;
   }
 }
 
-export class BundleError extends QkbError {
+export class BundleError extends ZkqesError {
   constructor(
     code: Extract<ErrorCode, `bundle.${string}`>,
     details?: Record<string, unknown>,
@@ -81,7 +81,7 @@ export function localizeError(
   i18n: I18nLike,
   fallback = 'Unknown error',
 ): string {
-  if (err instanceof QkbError) {
+  if (err instanceof ZkqesError) {
     const localized = i18n.t(err.messageKey);
     return localized && localized !== err.messageKey ? localized : err.code;
   }

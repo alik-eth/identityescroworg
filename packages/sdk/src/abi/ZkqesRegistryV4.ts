@@ -1,4 +1,4 @@
-export const qkbRegistryV4Abi = [
+export const zkqesRegistryV4Abi = [
   {
     "type": "constructor",
     "inputs": [

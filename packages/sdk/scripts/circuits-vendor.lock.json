@@ -1,5 +1,5 @@
 {
-  "note": "SHA-256 fingerprints of @qkb/circuits source files vendored under packages/sdk/src/witness/v5/. Update via `pnpm -F @qkb/sdk drift-check:update-lock`.",
+  "note": "SHA-256 fingerprints of @zkqes/circuits source files vendored under packages/sdk/src/witness/v5/. Update via `pnpm -F @zkqes/sdk drift-check:update-lock`.",
   "circuitsRoot": "/data/Develop/qkb-wt-v5/arch-circuits/packages/circuits",
   "patchesApplied": [
     "1. node:crypto.createHash(\"sha256\")  →  @noble/hashes/sha2.sha256",

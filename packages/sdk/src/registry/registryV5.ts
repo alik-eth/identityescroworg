@@ -12,8 +12,8 @@
 // public-signal order AND the proof-before-sig arg order so any future
 // reshuffle fails loudly at the SDK boundary.
 import { encodeFunctionData } from 'viem';
-import { qkbRegistryV5_1Abi } from '../abi/QKBRegistryV5_1.js';
-import { QkbError } from '../errors/index.js';
+import { zkqesRegistryV5_1Abi } from '../abi/ZkqesRegistryV5_1.js';
+import { ZkqesError } from '../errors/index.js';
 
 // ===========================================================================
 // PublicSignals — 19-element struct (V5.1). Order is FROZEN per orchestration
@@ -88,7 +88,7 @@ export function publicSignalsToArray(
  */
 export function publicSignalsFromArray(arr: readonly (string | bigint)[]): PublicSignalsV5 {
   if (arr.length !== PUBLIC_SIGNALS_V5_LENGTH) {
-    throw new QkbError('witness.fieldTooLong', {
+    throw new ZkqesError('witness.fieldTooLong', {
       reason: 'public-signals-v5-length',
       got: arr.length,
       want: PUBLIC_SIGNALS_V5_LENGTH,
@@ -190,7 +190,7 @@ export function assertRegisterArgsV5Shape(args: RegisterArgsV5): void {
   assertSpki(args.leafSpki, 'leafSpki');
   assertSpki(args.intSpki, 'intSpki');
   if (!HEX_RE.test(args.signedAttrs)) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'signedAttrs-hex' });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'signedAttrs-hex' });
   }
   assertBytes32Pair(args.leafSig, 'leafSig');
   assertBytes32Pair(args.intSig, 'intSig');
@@ -202,20 +202,20 @@ export function assertRegisterArgsV5Shape(args: RegisterArgsV5): void {
 
 function assertProofV5Shape(p: Groth16ProofV5): void {
   if (p.a.length !== 2 || p.c.length !== 2) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'proof-v5-ac' });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'proof-v5-ac' });
   }
   if (p.b.length !== 2 || p.b[0]!.length !== 2 || p.b[1]!.length !== 2) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'proof-v5-b' });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'proof-v5-b' });
   }
 }
 
 function assertPublicSignalsV5Shape(s: PublicSignalsV5): void {
   // msgSender ≤ 2^160, timestamp ≤ 2^64 — sanity caps from contract docs.
   if (s.msgSender < 0n || s.msgSender >= 1n << 160n) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'msgSender-range' });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'msgSender-range' });
   }
   if (s.timestamp < 0n || s.timestamp >= 1n << 64n) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'timestamp-range' });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'timestamp-range' });
   }
   // All other fields are uint256 — implicit cap by JS `bigint` and the
   // BN254 / SHA-256 primitives that produce them.
@@ -224,30 +224,30 @@ function assertPublicSignalsV5Shape(s: PublicSignalsV5): void {
 
 function assertSpki(hex: string, field: string): void {
   if (!HEX_RE.test(hex) || hex.length !== SPKI_HEX_LEN) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'spki-shape', field });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'spki-shape', field });
   }
 }
 
 function assertBytes32Pair(pair: readonly string[], field: string): void {
   if (pair.length !== 2 || !HEX32_RE.test(pair[0]!) || !HEX32_RE.test(pair[1]!)) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'bytes32-pair', field });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'bytes32-pair', field });
   }
 }
 
 function assertBytes32Path(path: readonly string[], field: string): void {
   if (path.length !== 16) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'merkle-path-depth', field });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'merkle-path-depth', field });
   }
   for (let i = 0; i < 16; i++) {
     if (!HEX32_RE.test(path[i]!)) {
-      throw new QkbError('witness.fieldTooLong', { reason: 'merkle-path-entry', field, i });
+      throw new ZkqesError('witness.fieldTooLong', { reason: 'merkle-path-entry', field, i });
     }
   }
 }
 
 function assertU256(v: bigint, field: string): void {
   if (v < 0n || v >= 1n << 256n) {
-    throw new QkbError('witness.fieldTooLong', { reason: 'uint256-range', field });
+    throw new ZkqesError('witness.fieldTooLong', { reason: 'uint256-range', field });
   }
 }
 
@@ -259,7 +259,7 @@ function assertU256(v: bigint, field: string): void {
  */
 export function encodeV5RegisterCalldata(args: RegisterArgsV5): `0x${string}` {
   return encodeFunctionData({
-    abi: qkbRegistryV5_1Abi,
+    abi: zkqesRegistryV5_1Abi,
     functionName: 'register',
     args: [
       // proof — Groth16Proof tuple
@@ -327,14 +327,14 @@ export interface RotateWalletArgsV5 {
 /**
  * Encode a `rotateWallet()` call as ABI-encoded calldata.
  *
- * The explicit generic `<typeof qkbRegistryV5_1Abi, 'rotateWallet'>` pins viem's
+ * The explicit generic `<typeof zkqesRegistryV5_1Abi, 'rotateWallet'>` pins viem's
  * TFunctionName so it doesn't union `register`'s 11-arg shape with
  * `rotateWallet`'s 3-arg shape, which would produce a TS2322 assignability
  * error against the wider union target.
  */
 export function encodeV5RotateWalletCalldata(args: RotateWalletArgsV5): `0x${string}` {
-  return encodeFunctionData<typeof qkbRegistryV5_1Abi, 'rotateWallet'>({
-    abi: qkbRegistryV5_1Abi,
+  return encodeFunctionData<typeof zkqesRegistryV5_1Abi, 'rotateWallet'>({
+    abi: zkqesRegistryV5_1Abi,
     functionName: 'rotateWallet',
     args: [
       {
@@ -420,10 +420,10 @@ export const REGISTRY_V5_ERROR_SELECTORS: Readonly<Record<string, `0x${string}`>
 } as const;
 
 /**
- * Map a V5 register-revert selector to a typed QkbError. Returns null for
+ * Map a V5 register-revert selector to a typed ZkqesError. Returns null for
  * unknown selectors so callers can fall back to the raw wallet message.
  */
-export function classifyV5RegistryRevert(data: string | undefined): QkbError | null {
+export function classifyV5RegistryRevert(data: string | undefined): ZkqesError | null {
   if (!data || typeof data !== 'string') return null;
   const lower = data.toLowerCase();
   if (!lower.startsWith('0x') || lower.length < 10) return null;
@@ -433,44 +433,44 @@ export function classifyV5RegistryRevert(data: string | undefined): QkbError | n
   // anti-Sybil constraint moved to `usedCtx` (per-(fp, ctxHash) replay
   // guard) and surfaces as `CtxAlreadyUsed` below.
   if (s === REGISTRY_V5_ERROR_SELECTORS.AlreadyRegistered)
-    return new QkbError('registry.nullifierUsed', { reason: 'already-registered-v5' });
+    return new ZkqesError('registry.nullifierUsed', { reason: 'already-registered-v5' });
   if (s === REGISTRY_V5_ERROR_SELECTORS.BadProof)
-    return new QkbError('qes.sigInvalid', { reason: 'groth16-invalid-on-chain-v5' });
+    return new ZkqesError('qes.sigInvalid', { reason: 'groth16-invalid-on-chain-v5' });
   if (s === REGISTRY_V5_ERROR_SELECTORS.BadSignedAttrsHi
       || s === REGISTRY_V5_ERROR_SELECTORS.BadSignedAttrsLo)
-    return new QkbError('witness.fieldTooLong', { reason: 'signedAttrs-hash-mismatch-v5' });
+    return new ZkqesError('witness.fieldTooLong', { reason: 'signedAttrs-hash-mismatch-v5' });
   if (s === REGISTRY_V5_ERROR_SELECTORS.BadLeafSpki)
-    return new QkbError('witness.fieldTooLong', { reason: 'leaf-spki-commit-mismatch-v5' });
+    return new ZkqesError('witness.fieldTooLong', { reason: 'leaf-spki-commit-mismatch-v5' });
   if (s === REGISTRY_V5_ERROR_SELECTORS.BadIntSpki)
-    return new QkbError('witness.fieldTooLong', { reason: 'int-spki-commit-mismatch-v5' });
+    return new ZkqesError('witness.fieldTooLong', { reason: 'int-spki-commit-mismatch-v5' });
   if (s === REGISTRY_V5_ERROR_SELECTORS.BadLeafSig)
-    return new QkbError('qes.sigInvalid', { reason: 'leaf-p256-fail-v5' });
+    return new ZkqesError('qes.sigInvalid', { reason: 'leaf-p256-fail-v5' });
   if (s === REGISTRY_V5_ERROR_SELECTORS.BadIntSig)
-    return new QkbError('qes.sigInvalid', { reason: 'int-p256-fail-v5' });
+    return new ZkqesError('qes.sigInvalid', { reason: 'int-p256-fail-v5' });
   if (s === REGISTRY_V5_ERROR_SELECTORS.BadTrustList)
-    return new QkbError('registry.rootMismatch', { reason: 'trusted-list-root-stale-v5' });
+    return new ZkqesError('registry.rootMismatch', { reason: 'trusted-list-root-stale-v5' });
   if (s === REGISTRY_V5_ERROR_SELECTORS.BadPolicy)
-    return new QkbError('registry.rootMismatch', { reason: 'policy-root-mismatch-v5' });
+    return new ZkqesError('registry.rootMismatch', { reason: 'policy-root-mismatch-v5' });
   if (s === REGISTRY_V5_ERROR_SELECTORS.StaleBinding)
-    return new QkbError('binding.field', { reason: 'stale-binding-v5' });
+    return new ZkqesError('binding.field', { reason: 'stale-binding-v5' });
   if (s === REGISTRY_V5_ERROR_SELECTORS.FutureBinding)
-    return new QkbError('binding.field', { reason: 'future-binding-v5' });
+    return new ZkqesError('binding.field', { reason: 'future-binding-v5' });
   if (s === REGISTRY_V5_ERROR_SELECTORS.BadSender)
-    return new QkbError('binding.pkMismatch', { reason: 'msg-sender-mismatch-v5' });
+    return new ZkqesError('binding.pkMismatch', { reason: 'msg-sender-mismatch-v5' });
   // V5.1 errors.
   if (s === REGISTRY_V5_ERROR_SELECTORS.WrongMode)
-    return new QkbError('witness.fieldTooLong', { reason: 'wrong-rotation-mode-v5' });
+    return new ZkqesError('witness.fieldTooLong', { reason: 'wrong-rotation-mode-v5' });
   if (s === REGISTRY_V5_ERROR_SELECTORS.CommitmentMismatch)
-    return new QkbError('registry.nullifierUsed', { reason: 'commitment-mismatch-v5' });
+    return new ZkqesError('registry.nullifierUsed', { reason: 'commitment-mismatch-v5' });
   if (s === REGISTRY_V5_ERROR_SELECTORS.WalletNotBound)
-    return new QkbError('registry.nullifierUsed', { reason: 'wallet-not-bound-v5' });
+    return new ZkqesError('registry.nullifierUsed', { reason: 'wallet-not-bound-v5' });
   if (s === REGISTRY_V5_ERROR_SELECTORS.CtxAlreadyUsed)
-    return new QkbError('registry.nullifierUsed', { reason: 'ctx-already-used-v5' });
+    return new ZkqesError('registry.nullifierUsed', { reason: 'ctx-already-used-v5' });
   if (s === REGISTRY_V5_ERROR_SELECTORS.UnknownIdentity)
-    return new QkbError('registry.nullifierUsed', { reason: 'unknown-identity-v5' });
+    return new ZkqesError('registry.nullifierUsed', { reason: 'unknown-identity-v5' });
   if (s === REGISTRY_V5_ERROR_SELECTORS.InvalidNewWallet)
-    return new QkbError('registry.nullifierUsed', { reason: 'invalid-new-wallet-v5' });
+    return new ZkqesError('registry.nullifierUsed', { reason: 'invalid-new-wallet-v5' });
   if (s === REGISTRY_V5_ERROR_SELECTORS.InvalidRotationAuth)
-    return new QkbError('registry.nullifierUsed', { reason: 'invalid-rotation-auth-v5' });
+    return new ZkqesError('registry.nullifierUsed', { reason: 'invalid-rotation-auth-v5' });
   return null;
 }
